@@ -9,12 +9,16 @@ export const TOP_DECAY = 0.998; // per frame, lets the remembered top height slo
 export const SMOOTH_FRAMES = 4; // moving-average window for the shoulder height
 export const MIN_VISIBILITY = 0.5; // a shoulder and a wrist must be at least this visible to count
 export const KNEE_LIFT = 0.2; // if a knee IS clearly visible at the top, it must be this high above the wrists (fraction of top height). Knees on the floor score ~0. A knee that can't be seen never blocks a rep
-// Hidden "are you in push-up position" check (rough on purpose, uses loosely tracked hips/legs).
-// Hips and an ankle or knee must be seen in the picture, or nothing counts (stops sitting/standing/close-up counts).
-// Both ratios are divided by how far the wrists are below the shoulders. Standing scores ~1, a plank ~0.
-export const POSITION_VISIBILITY = 0.3; // hips/ankles count for this check above this visibility (lower = works in the dark)
-export const HIP_DROP_MAX = 0.5; // hips may be at most this far below the shoulders
-export const ANKLE_DROP_MAX = 0.6; // ankles (or knees) may be at most this far below the wrists
+// "Are you in push-up position" gate (rough on purpose, uses loosely tracked hips/legs).
+// Once confirmed, counting only uses the shoulders until you clearly leave the position.
+// Ratios are divided by how far the wrists are below the shoulders: standing ~1, side plank ~0.3, front plank ~0.5.
+export const POSITION_VISIBILITY = 0.3; // hips/legs count as "seen" above this visibility (lower = works in the dark)
+export const HIP_DROP_MAX = 0.8; // to ENTER: hips at most this far below the shoulders
+export const LEG_DROP_MAX = 0.6; // to ENTER: ankle (or knee) at most this far below the wrists
+export const STAND_HIP = 1.0; // to LEAVE: hips this far below the shoulders = standing
+export const STAND_LEG = 1.0; // to LEAVE: ankle/knee this far below the wrists = standing
+export const EXIT_FRAMES = 10; // must look like standing this many frames in a row to leave the position
+export const LOST_MS = 1500; // or the body is lost for this long
 export const FRAME_MARGIN = 0.02; // shoulder/wrist must be this far inside the frame edge (0-1)
 export const REP_FLASH_MS = 350; // how long the screen border flashes bright green after a rep
 

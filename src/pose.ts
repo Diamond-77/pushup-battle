@@ -4,13 +4,15 @@ import {
   type NormalizedLandmark,
 } from "@mediapipe/tasks-vision";
 import {
-  ANKLE_DROP_MAX,
   FRAME_MARGIN,
   HIP_DROP_MAX,
+  LEG_DROP_MAX,
   MEDIAPIPE_WASM_URL,
   MIN_VISIBILITY,
   POSE_MODEL_URL,
   POSITION_VISIBILITY,
+  STAND_HIP,
+  STAND_LEG,
 } from "./config";
 
 let landmarkerPromise: Promise<PoseLandmarker> | null = null;
@@ -36,12 +38,14 @@ const HIPS = [23, 24];
 const ANKLES = [27, 28];
 
 // shoulderHeight: pixels the shoulders are above the wrists. kneeHeight: pixels the knee is
-// above the wrists, or null when no knee is clearly visible. inPosition: roughly in a push-up
-// (not standing): hips not far below the shoulders and ankles not far below the wrists.
+// above the wrists, or null when no knee is clearly visible.
+// enterPosition: hips and a leg point are seen and look like a plank (to start counting).
+// standing: hips or legs clearly far below (to stop counting).
 export type BodyReading = {
   visible: boolean;
   inFrame: boolean;
-  inPosition: boolean;
+  enterPosition: boolean;
+  standing: boolean;
   shoulderHeight: number;
   kneeHeight: number | null;
 };
@@ -71,20 +75,16 @@ export function readBody(lm: NormalizedLandmark[], height: number): BodyReading 
   const shoulderY = avgY(lm, SHOULDERS, height);
   const wristY = avgY(lm, WRISTS, height);
   if (shoulderY === null || wristY === null)
-    return { visible: false, inFrame: false, inPosition: false, shoulderHeight: 0, kneeHeight: null };
+    return { visible: false, inFrame: false, enterPosition: false, standing: false, shoulderHeight: 0, kneeHeight: null };
 
-  // Position check: hips AND a leg point (ankle, or knee if no ankle) must be seen inside the
-  // picture as confirmation, and be roughly level with the shoulders/wrists like in a plank.
-  // Loose visibility on purpose so it still works in the dark; it's a sanity check, not the counter.
+  // Position check, loose on purpose so it still works in the dark.
   const arm = wristY - shoulderY;
   const hipY = seenY(lm, HIPS, height);
   const legY = seenY(lm, ANKLES, height) ?? seenY(lm, KNEES, height);
-  const inPosition =
-    arm > 0 &&
-    hipY !== null &&
-    legY !== null &&
-    (hipY - shoulderY) / arm < HIP_DROP_MAX &&
-    (legY - wristY) / arm < ANKLE_DROP_MAX;
+  const hipDrop = hipY === null || arm <= 0 ? null : (hipY - shoulderY) / arm;
+  const legDrop = legY === null || arm <= 0 ? null : (legY - wristY) / arm;
+  const enterPosition = hipDrop !== null && legDrop !== null && hipDrop < HIP_DROP_MAX && legDrop < LEG_DROP_MAX;
+  const standing = arm <= 0 || (hipDrop !== null && hipDrop > STAND_HIP) || (legDrop !== null && legDrop > STAND_LEG);
 
   const kneeY = avgY(lm, KNEES, height);
   const inside = (p: NormalizedLandmark) =>
@@ -92,7 +92,8 @@ export function readBody(lm: NormalizedLandmark[], height: number): BodyReading 
     (p.x > FRAME_MARGIN && p.x < 1 - FRAME_MARGIN && p.y > FRAME_MARGIN && p.y < 1 - FRAME_MARGIN);
   return {
     visible: true,
-    inPosition,
+    enterPosition,
+    standing,
     inFrame: [...SHOULDERS, ...WRISTS].every((i) => inside(lm[i])),
     shoulderHeight: wristY - shoulderY,
     kneeHeight: kneeY === null ? null : wristY - kneeY,

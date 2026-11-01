@@ -3,7 +3,9 @@ import {
   CAMERA_HEIGHT,
   CAMERA_WIDTH,
   DEBUG_UPDATE_MS,
+  EXIT_FRAMES,
   KNEE_LIFT,
+  LOST_MS,
   METER_SEGMENTS,
   REP_FLASH_MS,
   SHOULDER_DOWN,
@@ -39,6 +41,10 @@ export default function PoseCounter({ counting, onRep, facing, children }: Props
   const topRef = useRef(0); // highest recent shoulder height (arms straight)
   const screenRef = useRef<HTMLDivElement>(null);
   const lastRepAtRef = useRef(0);
+  // Position gate: confirmed once (hips + legs look like a plank), then held until you clearly leave.
+  const inPositionRef = useRef(false);
+  const standingFramesRef = useRef(0);
+  const lostSinceRef = useRef<number | null>(null);
   // Latest props in refs so the frame loop (started once) always sees current values.
   const countingRef = useRef(counting);
   const onRepRef = useRef(onRep);
@@ -134,7 +140,24 @@ export default function PoseCounter({ counting, onRep, facing, children }: Props
           let kneeLift: number | null = null;
           let status: Status = "not_detected";
           const body = lm ? readBody(lm, h) : null;
-          if (body?.visible) status = !body.inFrame ? "too_close" : !body.inPosition ? "not_in_position" : "ok";
+          if (body?.visible && body.inFrame) {
+            lostSinceRef.current = null;
+            if (!inPositionRef.current && body.enterPosition) {
+              inPositionRef.current = true;
+              standingFramesRef.current = 0;
+              topRef.current = 0; // re-learn the "arms straight" height for this set
+              stateRef.current = "up";
+            }
+            if (inPositionRef.current) {
+              standingFramesRef.current = body.standing ? standingFramesRef.current + 1 : 0;
+              if (standingFramesRef.current >= EXIT_FRAMES) inPositionRef.current = false;
+            }
+            status = inPositionRef.current ? "ok" : "not_in_position";
+          } else {
+            if (body?.visible) status = "too_close";
+            lostSinceRef.current ??= now;
+            if (now - lostSinceRef.current > LOST_MS) inPositionRef.current = false;
+          }
 
           if (body && status === "ok") {
             const buf = heightsRef.current;
