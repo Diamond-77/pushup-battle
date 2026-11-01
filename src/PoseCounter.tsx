@@ -13,7 +13,7 @@ import {
 } from "./config";
 import { drawStickman, getPoseLandmarker, readBody } from "./pose";
 
-type Status = "ok" | "not_detected" | "too_close" | "knee_down";
+type Status = "ok" | "not_detected" | "too_close" | "not_in_position" | "knee_down";
 type Debug = { ratio: number | null; kneeLift: number | null; state: "up" | "down"; reps: number; fps: number; status: Status };
 
 type Props = {
@@ -134,7 +134,7 @@ export default function PoseCounter({ counting, onRep, facing, children }: Props
           let kneeLift: number | null = null;
           let status: Status = "not_detected";
           const body = lm ? readBody(lm, h) : null;
-          if (body?.visible) status = body.inFrame ? "ok" : "too_close";
+          if (body?.visible) status = !body.inFrame ? "too_close" : !body.inPosition ? "not_in_position" : "ok";
 
           if (body && status === "ok") {
             const buf = heightsRef.current;
@@ -161,6 +161,7 @@ export default function PoseCounter({ counting, onRep, facing, children }: Props
             }
           } else {
             heightsRef.current = []; // don't mix stale heights in when tracking comes back
+            if (status === "not_in_position") stateRef.current = "up"; // standing up cancels a half-done rep
           }
 
           // Screen border: green = tracking you, red = not tracking / knees down, bright flash = rep counted.
