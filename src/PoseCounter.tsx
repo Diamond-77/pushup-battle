@@ -5,10 +5,12 @@ import {
   DEBUG_UPDATE_MS,
   DOWN_ANGLE,
   KNEE_LIFT,
+  METER_SEGMENTS,
   MIN_VISIBILITY,
   SMOOTH_FRAMES,
   UP_ANGLE,
 } from "./config";
+import Hud from "./Hud";
 import { drawStickman, getPoseLandmarker, readBody, type Side } from "./pose";
 
 type Status = "ok" | "not_detected" | "too_close" | "knee_down";
@@ -17,8 +19,9 @@ type Debug = { angle: number | null; kneeLift: number | null; state: "up" | "dow
 export default function PoseCounter() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const meterFillRef = useRef<HTMLDivElement>(null);
+  const meterRef = useRef<HTMLDivElement>(null);
   const meterLabelRef = useRef<HTMLDivElement>(null);
+  const [showDebug, setShowDebug] = useState(true);
   const [facing, setFacing] = useState<"user" | "environment">("user");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -146,9 +149,12 @@ export default function PoseCounter() {
           // Depth meter: 0% at UP_ANGLE (arms straight), 100% at DOWN_ANGLE (deep enough to count).
           // Updated straight on the DOM every frame so it never lags behind the body.
           const depth = angle === null ? 0 : Math.min(1, Math.max(0, (UP_ANGLE - angle) / (UP_ANGLE - DOWN_ANGLE)));
-          if (meterFillRef.current) {
-            meterFillRef.current.style.height = `${depth * 100}%`;
-            meterFillRef.current.classList.toggle("reached", stateRef.current === "down");
+          if (meterRef.current) {
+            const lit = Math.round(depth * METER_SEGMENTS);
+            const blocks = meterRef.current.children;
+            // children are ordered top to bottom; light them from the bottom up
+            for (let i = 0; i < blocks.length; i++) blocks[i].classList.toggle("on", blocks.length - i <= lit);
+            meterRef.current.classList.toggle("reached", stateRef.current === "down");
           }
           if (meterLabelRef.current) meterLabelRef.current.textContent = `${Math.round(depth * 100)}%`;
 
@@ -174,50 +180,67 @@ export default function PoseCounter() {
     anglesRef.current = [];
   };
 
+  const live = !loading && !error;
+  let toast: string | null = null;
+  if (loading) toast = "Loading pose model…";
+  else if (live && debug.status === "not_detected") toast = "Body not detected";
+  else if (live && debug.status === "too_close") toast = "Too close, move the camera back";
+  else if (live && debug.status === "knee_down") toast = "Knees down, lift them off the floor";
+
   return (
-    <div className="counter">
-      <div className="stage">
-        <video ref={videoRef} playsInline muted className="hidden-video" />
-        <canvas ref={canvasRef} className="view" />
-        <div className="meter">
-          <div className="meter-label" ref={meterLabelRef}>0%</div>
-          <div className="meter-track">
-            <div className="meter-fill" ref={meterFillRef} />
-          </div>
+    <div className="screen">
+      <video ref={videoRef} playsInline muted className="hidden-video" />
+      <canvas ref={canvasRef} className="view" />
+      <div className="vignette" />
+
+      <Hud myReps={debug.reps} oppReps={0} />
+
+      <div className="meter-wrap">
+        <div className="meter" ref={meterRef}>
+          {Array.from({ length: METER_SEGMENTS }, (_, i) => (
+            <div key={i} className="block" />
+          ))}
         </div>
-        {loading && <div className="overlay">Loading pose model…</div>}
-        {!loading && !error && debug.status === "not_detected" && (
-          <div className="overlay warn">Body not detected</div>
-        )}
-        {!loading && !error && debug.status === "too_close" && (
-          <div className="overlay warn">Too close, move the camera back</div>
-        )}
-        {!loading && !error && debug.status === "knee_down" && (
-          <div className="overlay warn">Knee down, lift your knees off the floor</div>
-        )}
-        {!loading && !error && (debug.status === "not_detected" || debug.status === "too_close") && (
+        <div className="meter-label" ref={meterLabelRef}>0%</div>
+      </div>
+
+      <div className="center">
+        {toast && <div className={`toast ${loading ? "" : "warn"}`}>{toast}</div>}
+        {live && (debug.status === "not_detected" || debug.status === "too_close") && (
           <div className="guide">
-            Put the phone on the floor about 2 m away, side-on to you, so it sees your arm and knee.
-            <br />
-            Your whole body, head to feet, should fit in the picture.
+            Put the phone on the floor about 2 m away, side-on, so it sees your arm and knee.
+            Your whole body should fit in the picture.
           </div>
         )}
-        {error && <div className="overlay error">{error}</div>}
+        {error && <div className="toast error">{error}</div>}
       </div>
 
-      <div className="debug">
-        <div>Angle: <b>{debug.angle === null ? "–" : debug.angle.toFixed(0)}°</b></div>
-        <div>State: <b>{debug.state}</b></div>
-        <div>Reps: <b>{debug.reps}</b></div>
-        <div>FPS: <b>{debug.fps.toFixed(0)}</b></div>
-        <div>Knee lift: <b>{debug.kneeLift === null ? "–" : debug.kneeLift.toFixed(2)}</b></div>
-      </div>
+      {showDebug && (
+        <div className="debug">
+          <div>Angle <b>{debug.angle === null ? "–" : debug.angle.toFixed(0)}°</b></div>
+          <div>State <b>{debug.state}</b></div>
+          <div>Reps <b>{debug.reps}</b></div>
+          <div>FPS <b>{debug.fps.toFixed(0)}</b></div>
+          <div>Knee <b>{debug.kneeLift === null ? "–" : debug.kneeLift.toFixed(2)}</b></div>
+          <button className="mini" onClick={reset}>Reset</button>
+        </div>
+      )}
 
-      <div className="buttons">
-        <button onClick={() => setFacing((f) => (f === "user" ? "environment" : "user"))}>
-          Switch camera ({facing === "user" ? "front" : "back"})
+      <div className="dock">
+        <button className="dock-side" onClick={() => setShowDebug((v) => !v)}>
+          {showDebug ? "Hide debug" : "Debug"}
         </button>
-        <button onClick={reset}>Reset reps</button>
+        <button
+          className="dock-cam"
+          aria-label="Switch camera"
+          onClick={() => setFacing((f) => (f === "user" ? "environment" : "user"))}
+        >
+          <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
+            <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.6l1.6-2.2h6.6L16.9 7h2.6A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" />
+            <circle cx="12" cy="13" r="3.6" />
+          </svg>
+        </button>
+        <div className="dock-side right">{facing === "user" ? "Front" : "Back"}</div>
       </div>
     </div>
   );

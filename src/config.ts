@@ -14,6 +14,9 @@ export const CAMERA_WIDTH = 640;
 export const CAMERA_HEIGHT = 480;
 export const DEBUG_UPDATE_MS = 100; // how often the debug panel re-renders
 
+// UI
+export const METER_SEGMENTS = 7; // blocks in the depth meter on the right
+
 // Tug-of-war bar
 export const BAR_START = 50;
 export const BAR_STEP = 5;
