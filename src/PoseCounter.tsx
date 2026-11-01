@@ -13,6 +13,7 @@ import {
   SMOOTH_FRAMES,
   TOP_DECAY,
 } from "./config";
+import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 import { drawStickman, getPoseLandmarker, readBody } from "./pose";
 
 type Status = "ok" | "not_detected" | "too_close" | "not_in_position" | "knee_down";
@@ -103,120 +104,128 @@ export default function PoseCounter({ counting, onRep, facing, children }: Props
     let fps = 0;
     let lastDebug = 0;
 
+    // The camera picture is drawn immediately; pose tracking joins in once the model has loaded.
+    let landmarker: PoseLandmarker | null = null;
     getPoseLandmarker()
-      .then((landmarker) => {
+      .then((l) => {
+        landmarker = l;
         setLoading(false);
-        const loop = () => {
-          if (stopped) return;
-          raf = requestAnimationFrame(loop);
-          const video = videoRef.current;
-          const canvas = canvasRef.current;
-          if (!video || !canvas || video.readyState < 2 || video.currentTime === lastVideoTime) return;
-          lastVideoTime = video.currentTime;
-
-          const now = performance.now();
-          fps = fps * 0.9 + (1000 / Math.max(1, now - lastFrame)) * 0.1;
-          lastFrame = now;
-
-          const w = video.videoWidth, h = video.videoHeight;
-          if (canvas.width !== w) canvas.width = w;
-          if (canvas.height !== h) canvas.height = h;
-          const ctx = canvas.getContext("2d")!;
-          const result = landmarker.detectForVideo(video, now);
-
-          ctx.save();
-          if (facing === "user") {
-            ctx.translate(w, 0);
-            ctx.scale(-1, 1); // mirror the selfie view
-          }
-          ctx.drawImage(video, 0, 0, w, h);
-          const lm = result.landmarks[0];
-          if (lm) {
-            drawStickman(ctx, lm, w, h);
-          }
-          ctx.restore();
-
-          let ratio: number | null = null;
-          let kneeLift: number | null = null;
-          let status: Status = "not_detected";
-          const body = lm ? readBody(lm, h) : null;
-          if (body?.visible && body.inFrame) {
-            lostSinceRef.current = null;
-            if (!inPositionRef.current && body.enterPosition) {
-              inPositionRef.current = true;
-              standingFramesRef.current = 0;
-              topRef.current = 0; // re-learn the "arms straight" height for this set
-              stateRef.current = "up";
-            }
-            if (inPositionRef.current) {
-              standingFramesRef.current = body.standing ? standingFramesRef.current + 1 : 0;
-              if (standingFramesRef.current >= EXIT_FRAMES) inPositionRef.current = false;
-            }
-            status = inPositionRef.current ? "ok" : "not_in_position";
-          } else {
-            if (body?.visible) status = "too_close";
-            lostSinceRef.current ??= now;
-            if (now - lostSinceRef.current > LOST_MS) inPositionRef.current = false;
-          }
-
-          if (body && status === "ok") {
-            const buf = heightsRef.current;
-            buf.push(body.shoulderHeight);
-            if (buf.length > SMOOTH_FRAMES) buf.shift();
-            const height = buf.reduce((s, a) => s + a, 0) / buf.length;
-            topRef.current = Math.max(topRef.current * TOP_DECAY, height);
-            ratio = topRef.current > 0 ? height / topRef.current : 1;
-
-            // A knee that can't be seen never blocks a rep; a visible knee on the floor does.
-            kneeLift = body.kneeHeight === null || topRef.current <= 0 ? null : body.kneeHeight / topRef.current;
-            const kneeOk = kneeLift === null || kneeLift >= KNEE_LIFT;
-            if (!kneeOk) status = "knee_down";
-
-            if (stateRef.current === "up" && ratio < SHOULDER_DOWN) {
-              stateRef.current = "down";
-            } else if (stateRef.current === "down" && ratio > SHOULDER_UP) {
-              stateRef.current = "up";
-              if (kneeOk) {
-                repsRef.current += 1;
-                lastRepAtRef.current = now;
-                if (countingRef.current) onRepRef.current();
-              }
-            }
-          } else {
-            heightsRef.current = []; // don't mix stale heights in when tracking comes back
-            if (status === "not_in_position") stateRef.current = "up"; // standing up cancels a half-done rep
-          }
-
-          // Screen border: green = tracking you, red = not tracking / knees down, bright flash = rep counted.
-          const screen = screenRef.current;
-          if (screen) {
-            screen.classList.toggle("track-ok", status === "ok");
-            screen.classList.toggle("track-bad", status !== "ok");
-            screen.classList.toggle("rep-flash", now - lastRepAtRef.current < REP_FLASH_MS);
-          }
-
-          // Depth meter: 0% with arms straight, 100% once the shoulders are low enough to count.
-          // Updated straight on the DOM every frame so it never lags behind the body.
-          const depth =
-            ratio === null ? 0 : Math.min(1, Math.max(0, (SHOULDER_UP - ratio) / (SHOULDER_UP - SHOULDER_DOWN)));
-          if (meterRef.current) {
-            const lit = Math.round(depth * METER_SEGMENTS);
-            const blocks = meterRef.current.children;
-            // children are ordered top to bottom; light them from the bottom up
-            for (let i = 0; i < blocks.length; i++) blocks[i].classList.toggle("on", blocks.length - i <= lit);
-            meterRef.current.classList.toggle("reached", stateRef.current === "down");
-          }
-          if (meterLabelRef.current) meterLabelRef.current.textContent = `${Math.round(depth * 100)}%`;
-
-          // Re-render the debug panel at a limited rate so React doesn't steal frame time.
-          if (now - lastDebug > DEBUG_UPDATE_MS) {
-            lastDebug = now;
-            setDebug({ ratio, kneeLift, state: stateRef.current, reps: repsRef.current, fps, status });
-          }
-        };
-        loop();
       })
-      .catch((e) => { setLoading(false); setError(`Pose model error: ${(e as Error)?.message ?? String(e)}`); });
+      .catch((e) => {
+        setLoading(false);
+        setError(`Pose model error: ${(e as Error)?.message ?? String(e)}`);
+      });
+
+    const loop = () => {
+      if (stopped) return;
+      raf = requestAnimationFrame(loop);
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas || video.readyState < 2 || video.currentTime === lastVideoTime) return;
+      lastVideoTime = video.currentTime;
+
+      const now = performance.now();
+      fps = fps * 0.9 + (1000 / Math.max(1, now - lastFrame)) * 0.1;
+      lastFrame = now;
+
+      const w = video.videoWidth, h = video.videoHeight;
+      if (canvas.width !== w) canvas.width = w;
+      if (canvas.height !== h) canvas.height = h;
+      const ctx = canvas.getContext("2d")!;
+      const result = landmarker?.detectForVideo(video, now);
+
+      ctx.save();
+      if (facing === "user") {
+        ctx.translate(w, 0);
+        ctx.scale(-1, 1); // mirror the selfie view
+      }
+      ctx.drawImage(video, 0, 0, w, h);
+      const lm = result?.landmarks[0];
+      if (lm) {
+        drawStickman(ctx, lm, w, h);
+      }
+      ctx.restore();
+      if (!landmarker) return; // camera shows right away; tracking starts once the model is ready
+
+      let ratio: number | null = null;
+      let kneeLift: number | null = null;
+      let status: Status = "not_detected";
+      const body = lm ? readBody(lm, h) : null;
+      if (body?.visible && body.inFrame) {
+        lostSinceRef.current = null;
+        if (!inPositionRef.current && body.enterPosition) {
+          inPositionRef.current = true;
+          standingFramesRef.current = 0;
+          topRef.current = 0; // re-learn the "arms straight" height for this set
+          stateRef.current = "up";
+        }
+        if (inPositionRef.current) {
+          standingFramesRef.current = body.standing ? standingFramesRef.current + 1 : 0;
+          if (standingFramesRef.current >= EXIT_FRAMES) inPositionRef.current = false;
+        }
+        status = inPositionRef.current ? "ok" : "not_in_position";
+      } else {
+        if (body?.visible) status = "too_close";
+        lostSinceRef.current ??= now;
+        if (now - lostSinceRef.current > LOST_MS) inPositionRef.current = false;
+      }
+
+      if (body && status === "ok") {
+        const buf = heightsRef.current;
+        buf.push(body.shoulderHeight);
+        if (buf.length > SMOOTH_FRAMES) buf.shift();
+        const height = buf.reduce((s, a) => s + a, 0) / buf.length;
+        topRef.current = Math.max(topRef.current * TOP_DECAY, height);
+        ratio = topRef.current > 0 ? height / topRef.current : 1;
+
+        // A knee that can't be seen never blocks a rep; a visible knee on the floor does.
+        kneeLift = body.kneeHeight === null || topRef.current <= 0 ? null : body.kneeHeight / topRef.current;
+        const kneeOk = kneeLift === null || kneeLift >= KNEE_LIFT;
+        if (!kneeOk) status = "knee_down";
+
+        if (stateRef.current === "up" && ratio < SHOULDER_DOWN) {
+          stateRef.current = "down";
+        } else if (stateRef.current === "down" && ratio > SHOULDER_UP) {
+          stateRef.current = "up";
+          if (kneeOk) {
+            repsRef.current += 1;
+            lastRepAtRef.current = now;
+            if (countingRef.current) onRepRef.current();
+          }
+        }
+      } else {
+        heightsRef.current = []; // don't mix stale heights in when tracking comes back
+        if (status === "not_in_position") stateRef.current = "up"; // standing up cancels a half-done rep
+      }
+
+      // Screen border: green = tracking you, red = not tracking / knees down, bright flash = rep counted.
+      const screen = screenRef.current;
+      if (screen) {
+        screen.classList.toggle("track-ok", status === "ok");
+        screen.classList.toggle("track-bad", status !== "ok");
+        screen.classList.toggle("rep-flash", now - lastRepAtRef.current < REP_FLASH_MS);
+      }
+
+      // Depth meter: 0% with arms straight, 100% once the shoulders are low enough to count.
+      // Updated straight on the DOM every frame so it never lags behind the body.
+      const depth =
+        ratio === null ? 0 : Math.min(1, Math.max(0, (SHOULDER_UP - ratio) / (SHOULDER_UP - SHOULDER_DOWN)));
+      if (meterRef.current) {
+        const lit = Math.round(depth * METER_SEGMENTS);
+        const blocks = meterRef.current.children;
+        // children are ordered top to bottom; light them from the bottom up
+        for (let i = 0; i < blocks.length; i++) blocks[i].classList.toggle("on", blocks.length - i <= lit);
+        meterRef.current.classList.toggle("reached", stateRef.current === "down");
+      }
+      if (meterLabelRef.current) meterLabelRef.current.textContent = `${Math.round(depth * 100)}%`;
+
+      // Re-render the debug panel at a limited rate so React doesn't steal frame time.
+      if (now - lastDebug > DEBUG_UPDATE_MS) {
+        lastDebug = now;
+        setDebug({ ratio, kneeLift, state: stateRef.current, reps: repsRef.current, fps, status });
+      }
+    };
+    loop();
 
     return () => {
       stopped = true;
@@ -242,7 +251,7 @@ export default function PoseCounter({ counting, onRep, facing, children }: Props
       </div>
 
       <div className="center">
-        {loading && <div className="toast">Loading pose model…</div>}
+        {loading && <div className="toast">Starting tracker…</div>}
         {error && <div className="toast error">{error}</div>}
       </div>
 

@@ -21,11 +21,14 @@ export function getPoseLandmarker(): Promise<PoseLandmarker> {
   if (!landmarkerPromise) {
     landmarkerPromise = (async () => {
       const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_URL);
-      return PoseLandmarker.createFromOptions(vision, {
-        baseOptions: { modelAssetPath: POSE_MODEL_URL, delegate: "GPU" },
-        runningMode: "VIDEO",
-        numPoses: 1,
-      });
+      const create = (delegate: "GPU" | "CPU") =>
+        PoseLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: POSE_MODEL_URL, delegate },
+          runningMode: "VIDEO",
+          numPoses: 1,
+        });
+      // Some phones fail to start the GPU path; fall back to CPU instead of never tracking.
+      return create("GPU").catch(() => create("CPU"));
     })();
   }
   return landmarkerPromise;
