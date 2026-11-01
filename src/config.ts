@@ -1,13 +1,16 @@
 // Every tunable number lives here.
 
-// Rep detection
-export const DOWN_ANGLE = 90; // elbow angle (deg) below which we are "down"
-export const UP_ANGLE = 160; // elbow angle (deg) above which we are "up" again
-export const SMOOTH_FRAMES = 4; // moving-average window for the elbow angle
-export const MIN_VISIBILITY = 0.5; // avg landmark visibility needed to count
-export const KNEE_LIFT = 0.2; // at the top of a rep the knee must be this high above the wrist (floor), as a fraction of shoulder-hip length. Knee push-ups score ~0
-export const SIDE_SWITCH_MARGIN = 0.15; // the other side must be this much more visible before we switch arms
-export const FRAME_MARGIN = 0.03; // shoulder/elbow/wrist/hip/knee must be this far inside the frame edge (0-1), else "move back"
+// Rep detection (shoulder based: shoulders and wrists are the easiest points to track, even in low light)
+// "Shoulder height" = how far the shoulders are above the wrists (the wrists are on the floor).
+// It is compared to the highest recent shoulder height (arms straight), so camera distance doesn't matter.
+export const SHOULDER_DOWN = 0.6; // shoulders below 60% of the top height = "down"
+export const SHOULDER_UP = 0.9; // back above 90% of the top height = "up", rep counted
+export const TOP_DECAY = 0.998; // per frame, lets the remembered top height slowly adapt if you move
+export const SMOOTH_FRAMES = 4; // moving-average window for the shoulder height
+export const MIN_VISIBILITY = 0.5; // a shoulder and a wrist must be at least this visible to count
+export const KNEE_LIFT = 0.2; // if a knee IS clearly visible at the top, it must be this high above the wrists (fraction of top height). Knees on the floor score ~0. A knee that can't be seen never blocks a rep
+export const FRAME_MARGIN = 0.02; // shoulder/wrist must be this far inside the frame edge (0-1)
+export const REP_FLASH_MS = 350; // how long the screen border flashes bright green after a rep
 
 // Camera (lower resolution = faster pose detection)
 export const CAMERA_WIDTH = 640;

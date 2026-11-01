@@ -3,18 +3,19 @@ import {
   CAMERA_HEIGHT,
   CAMERA_WIDTH,
   DEBUG_UPDATE_MS,
-  DOWN_ANGLE,
   KNEE_LIFT,
   METER_SEGMENTS,
-  MIN_VISIBILITY,
+  REP_FLASH_MS,
+  SHOULDER_DOWN,
+  SHOULDER_UP,
   SMOOTH_FRAMES,
-  UP_ANGLE,
+  TOP_DECAY,
 } from "./config";
 import Hud from "./Hud";
-import { drawStickman, getPoseLandmarker, readBody, type Side } from "./pose";
+import { drawStickman, getPoseLandmarker, readBody } from "./pose";
 
 type Status = "ok" | "not_detected" | "too_close" | "knee_down";
-type Debug = { angle: number | null; kneeLift: number | null; state: "up" | "down"; reps: number; fps: number; status: Status };
+type Debug = { ratio: number | null; kneeLift: number | null; state: "up" | "down"; reps: number; fps: number; status: Status };
 
 export default function PoseCounter() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -25,13 +26,15 @@ export default function PoseCounter() {
   const [facing, setFacing] = useState<"user" | "environment">("user");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [debug, setDebug] = useState<Debug>({ angle: null, kneeLift: null, state: "up", reps: 0, fps: 0, status: "not_detected" });
+  const [debug, setDebug] = useState<Debug>({ ratio: null, kneeLift: null, state: "up", reps: 0, fps: 0, status: "not_detected" });
 
   // Rep state lives in refs so the frame loop never sees stale values.
   const stateRef = useRef<"up" | "down">("up");
   const repsRef = useRef(0);
-  const anglesRef = useRef<number[]>([]);
-  const sideRef = useRef<Side | null>(null);
+  const heightsRef = useRef<number[]>([]); // recent shoulder heights, for smoothing
+  const topRef = useRef(0); // highest recent shoulder height (arms straight)
+  const screenRef = useRef<HTMLDivElement>(null);
+  const lastRepAtRef = useRef(0);
 
   // Camera + wake lock
   useEffect(() => {
@@ -118,37 +121,50 @@ export default function PoseCounter() {
           }
           ctx.restore();
 
-          let angle: number | null = null;
+          let ratio: number | null = null;
           let kneeLift: number | null = null;
           let status: Status = "not_detected";
-          const body = lm ? readBody(lm, w, h, sideRef.current) : null;
-          if (body && body.visibility >= MIN_VISIBILITY) status = body.inFrame ? "ok" : "too_close";
+          const body = lm ? readBody(lm, h) : null;
+          if (body?.visible) status = body.inFrame ? "ok" : "too_close";
 
           if (body && status === "ok") {
-            if (body.side !== sideRef.current) anglesRef.current = []; // never average two different arms
-            sideRef.current = body.side;
-            kneeLift = body.kneeLift;
-            const kneeUp = kneeLift !== null && kneeLift >= KNEE_LIFT;
-            if (!kneeUp) status = "knee_down";
-
-            const buf = anglesRef.current;
-            buf.push(body.armAngle);
+            const buf = heightsRef.current;
+            buf.push(body.shoulderHeight);
             if (buf.length > SMOOTH_FRAMES) buf.shift();
-            angle = buf.reduce((s, a) => s + a, 0) / buf.length;
+            const height = buf.reduce((s, a) => s + a, 0) / buf.length;
+            topRef.current = Math.max(topRef.current * TOP_DECAY, height);
+            ratio = topRef.current > 0 ? height / topRef.current : 1;
 
-            if (stateRef.current === "up" && angle < DOWN_ANGLE) {
+            // A knee that can't be seen never blocks a rep; a visible knee on the floor does.
+            kneeLift = body.kneeHeight === null || topRef.current <= 0 ? null : body.kneeHeight / topRef.current;
+            const kneeOk = kneeLift === null || kneeLift >= KNEE_LIFT;
+            if (!kneeOk) status = "knee_down";
+
+            if (stateRef.current === "up" && ratio < SHOULDER_DOWN) {
               stateRef.current = "down";
-            } else if (stateRef.current === "down" && angle > UP_ANGLE) {
+            } else if (stateRef.current === "down" && ratio > SHOULDER_UP) {
               stateRef.current = "up";
-              if (kneeUp) repsRef.current += 1; // knee on the floor at the top = knee push-up, no point
+              if (kneeOk) {
+                repsRef.current += 1;
+                lastRepAtRef.current = now;
+              }
             }
           } else {
-            anglesRef.current = []; // don't mix stale angles in when tracking comes back
+            heightsRef.current = []; // don't mix stale heights in when tracking comes back
           }
 
-          // Depth meter: 0% at UP_ANGLE (arms straight), 100% at DOWN_ANGLE (deep enough to count).
+          // Screen border: green = tracking you, red = not tracking / knees down, bright flash = rep counted.
+          const screen = screenRef.current;
+          if (screen) {
+            screen.classList.toggle("track-ok", status === "ok");
+            screen.classList.toggle("track-bad", status !== "ok");
+            screen.classList.toggle("rep-flash", now - lastRepAtRef.current < REP_FLASH_MS);
+          }
+
+          // Depth meter: 0% with arms straight, 100% once the shoulders are low enough to count.
           // Updated straight on the DOM every frame so it never lags behind the body.
-          const depth = angle === null ? 0 : Math.min(1, Math.max(0, (UP_ANGLE - angle) / (UP_ANGLE - DOWN_ANGLE)));
+          const depth =
+            ratio === null ? 0 : Math.min(1, Math.max(0, (SHOULDER_UP - ratio) / (SHOULDER_UP - SHOULDER_DOWN)));
           if (meterRef.current) {
             const lit = Math.round(depth * METER_SEGMENTS);
             const blocks = meterRef.current.children;
@@ -161,7 +177,7 @@ export default function PoseCounter() {
           // Re-render the debug panel at a limited rate so React doesn't steal frame time.
           if (now - lastDebug > DEBUG_UPDATE_MS) {
             lastDebug = now;
-            setDebug({ angle, kneeLift, state: stateRef.current, reps: repsRef.current, fps, status });
+            setDebug({ ratio, kneeLift, state: stateRef.current, reps: repsRef.current, fps, status });
           }
         };
         loop();
@@ -177,18 +193,12 @@ export default function PoseCounter() {
   const reset = () => {
     repsRef.current = 0;
     stateRef.current = "up";
-    anglesRef.current = [];
+    heightsRef.current = [];
+    topRef.current = 0;
   };
 
-  const live = !loading && !error;
-  let toast: string | null = null;
-  if (loading) toast = "Loading pose model…";
-  else if (live && debug.status === "not_detected") toast = "Body not detected";
-  else if (live && debug.status === "too_close") toast = "Too close, move the camera back";
-  else if (live && debug.status === "knee_down") toast = "Knees down, lift them off the floor";
-
   return (
-    <div className="screen">
+    <div className="screen track-bad" ref={screenRef}>
       <video ref={videoRef} playsInline muted className="hidden-video" />
       <canvas ref={canvasRef} className="view" />
       <div className="vignette" />
@@ -205,22 +215,17 @@ export default function PoseCounter() {
       </div>
 
       <div className="center">
-        {toast && <div className={`toast ${loading ? "" : "warn"}`}>{toast}</div>}
-        {live && (debug.status === "not_detected" || debug.status === "too_close") && (
-          <div className="guide">
-            Put the phone on the floor about 2 m away, side-on, so it sees your arm and knee.
-            Your whole body should fit in the picture.
-          </div>
-        )}
+        {loading && <div className="toast">Loading pose model…</div>}
         {error && <div className="toast error">{error}</div>}
       </div>
 
       {showDebug && (
         <div className="debug">
-          <div>Angle <b>{debug.angle === null ? "–" : debug.angle.toFixed(0)}°</b></div>
+          <div>Height <b>{debug.ratio === null ? "–" : `${Math.round(debug.ratio * 100)}%`}</b></div>
           <div>State <b>{debug.state}</b></div>
           <div>Reps <b>{debug.reps}</b></div>
           <div>FPS <b>{debug.fps.toFixed(0)}</b></div>
+          <div>Track <b>{debug.status}</b></div>
           <div>Knee <b>{debug.kneeLift === null ? "–" : debug.kneeLift.toFixed(2)}</b></div>
           <button className="mini" onClick={reset}>Reset</button>
         </div>

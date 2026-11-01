@@ -3,7 +3,7 @@ import {
   PoseLandmarker,
   type NormalizedLandmark,
 } from "@mediapipe/tasks-vision";
-import { FRAME_MARGIN, MEDIAPIPE_WASM_URL, MIN_VISIBILITY, POSE_MODEL_URL, SIDE_SWITCH_MARGIN } from "./config";
+import { FRAME_MARGIN, MEDIAPIPE_WASM_URL, MIN_VISIBILITY, POSE_MODEL_URL } from "./config";
 
 let landmarkerPromise: Promise<PoseLandmarker> | null = null;
 
@@ -21,44 +21,42 @@ export function getPoseLandmarker(): Promise<PoseLandmarker> {
   return landmarkerPromise;
 }
 
-const ARM_LEFT = [11, 13, 15]; // shoulder, elbow, wrist
-const ARM_RIGHT = [12, 14, 16];
-const HIP = { left: 23, right: 24 };
-const KNEE = { left: 25, right: 26 };
+const SHOULDERS = [11, 12];
+const WRISTS = [15, 16];
+const KNEES = [25, 26];
 
-export type Side = "left" | "right";
+// shoulderHeight: pixels the shoulders are above the wrists. kneeHeight: pixels the knee is
+// above the wrists, or null when no knee is clearly visible.
+export type BodyReading = { visible: boolean; inFrame: boolean; shoulderHeight: number; kneeHeight: number | null };
 
-// armAngle: shoulder-elbow-wrist.
-// kneeLift: how high the knee is above the wrist (the wrist is on the floor), divided by
-// shoulder-hip length so it doesn't depend on distance. Null if the knee isn't visible.
-// inFrame is false when the arm, hip or knee is cut off by the frame edge (camera too close).
-export type BodyReading = { side: Side; visibility: number; armAngle: number; kneeLift: number | null; inFrame: boolean };
+// Visibility-weighted average y (pixels) of the points that are visible enough.
+function avgY(lm: NormalizedLandmark[], ids: number[], height: number): number | null {
+  let sum = 0, weight = 0;
+  for (const i of ids) {
+    const v = lm[i].visibility ?? 0;
+    if (v < MIN_VISIBILITY) continue;
+    sum += lm[i].y * height * v;
+    weight += v;
+  }
+  return weight > 0 ? sum / weight : null;
+}
 
-// Uses the arm with higher visibility, but sticks with prevSide unless the other arm is
-// clearly more visible, so the measured arm doesn't flip back and forth between frames.
-// width/height convert normalized coords to pixels so the angles aren't skewed.
-export function readBody(lm: NormalizedLandmark[], width: number, height: number, prevSide: Side | null): BodyReading {
-  const vis = (ids: number[]) => ids.reduce((s, i) => s + (lm[i].visibility ?? 0), 0) / ids.length;
-  const leftVis = vis(ARM_LEFT);
-  const rightVis = vis(ARM_RIGHT);
-  let side: Side = leftVis >= rightVis ? "left" : "right";
-  if (prevSide && side !== prevSide && Math.abs(leftVis - rightVis) < SIDE_SWITCH_MARGIN) side = prevSide;
+// Uses both shoulders and both wrists (whichever are visible), so it doesn't matter
+// which side faces the camera and there is no left/right switching.
+export function readBody(lm: NormalizedLandmark[], height: number): BodyReading {
+  const shoulderY = avgY(lm, SHOULDERS, height);
+  const wristY = avgY(lm, WRISTS, height);
+  if (shoulderY === null || wristY === null) return { visible: false, inFrame: false, shoulderHeight: 0, kneeHeight: null };
 
-  const [shoulder, elbow, wrist] = (side === "left" ? ARM_LEFT : ARM_RIGHT).map((i) => lm[i]);
-  const hip = lm[HIP[side]];
-  const knee = lm[KNEE[side]];
-  const torso = Math.hypot((shoulder.x - hip.x) * width, (shoulder.y - hip.y) * height);
-  const kneeLift =
-    (knee.visibility ?? 0) >= MIN_VISIBILITY && torso > 0 ? ((wrist.y - knee.y) * height) / torso : null;
-
+  const kneeY = avgY(lm, KNEES, height);
   const inside = (p: NormalizedLandmark) =>
-    p.x > FRAME_MARGIN && p.x < 1 - FRAME_MARGIN && p.y > FRAME_MARGIN && p.y < 1 - FRAME_MARGIN;
+    (p.visibility ?? 0) < MIN_VISIBILITY ||
+    (p.x > FRAME_MARGIN && p.x < 1 - FRAME_MARGIN && p.y > FRAME_MARGIN && p.y < 1 - FRAME_MARGIN);
   return {
-    side,
-    visibility: side === "left" ? leftVis : rightVis,
-    armAngle: angleAt(shoulder, elbow, wrist, width, height),
-    kneeLift,
-    inFrame: [shoulder, elbow, wrist, hip, knee].every(inside),
+    visible: true,
+    inFrame: [...SHOULDERS, ...WRISTS].every((i) => inside(lm[i])),
+    shoulderHeight: wristY - shoulderY,
+    kneeHeight: kneeY === null ? null : wristY - kneeY,
   };
 }
 
@@ -99,11 +97,4 @@ export function drawStickman(ctx: CanvasRenderingContext2D, lm: NormalizedLandma
     ctx.arc(lm[0].x * w, lm[0].y * h, scale * 6, 0, Math.PI * 2);
     ctx.stroke();
   }
-}
-
-function angleAt(a: NormalizedLandmark, b: NormalizedLandmark, c: NormalizedLandmark, w: number, h: number) {
-  const abx = (a.x - b.x) * w, aby = (a.y - b.y) * h;
-  const cbx = (c.x - b.x) * w, cby = (c.y - b.y) * h;
-  const deg = Math.abs((Math.atan2(cby, cbx) - Math.atan2(aby, abx)) * (180 / Math.PI));
-  return deg > 180 ? 360 - deg : deg;
 }
