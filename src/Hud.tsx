@@ -1,22 +1,10 @@
-import { MATCH_SECONDS } from "./config";
+import Avatar from "./Avatar";
 import { barValue } from "./match";
 
-type Props = { myReps: number; oppReps: number; myName?: string; oppName?: string; secondsLeft?: number };
+type Side = { name: string; avatar: string | null };
+type Props = { myReps: number; oppReps: number; me: Side; opp: Side; secondsLeft: number };
 
-function Avatar({ color }: { color: "me" | "opp" }) {
-  return (
-    <div className={`hex ${color}`}>
-      <div className="hex-inner">
-        <svg viewBox="0 0 40 40" width="100%" height="100%">
-          <circle cx="20" cy="15" r="7" fill="#8a8f98" />
-          <path d="M6 40c0-9 6.3-14 14-14s14 5 14 14z" fill="#8a8f98" />
-        </svg>
-      </div>
-    </div>
-  );
-}
-
-export default function Hud({ myReps, oppReps, myName = "You", oppName = "Opponent", secondsLeft = MATCH_SECONDS }: Props) {
+export default function Hud({ myReps, oppReps, me, opp, secondsLeft }: Props) {
   const bar = barValue(myReps, oppReps);
   const mm = Math.floor(secondsLeft / 60);
   const ss = String(secondsLeft % 60).padStart(2, "0");
@@ -30,15 +18,15 @@ export default function Hud({ myReps, oppReps, myName = "You", oppName = "Oppone
       </div>
       <div className="hud-row">
         <div className="player">
-          <Avatar color="me" />
-          <div className="name">{myName}</div>
+          <Avatar url={me.avatar} color="me" />
+          <div className="name">{me.name}</div>
         </div>
         <div className="timer">
           {mm}:{ss}
         </div>
         <div className="player">
-          <Avatar color="opp" />
-          <div className="name">{oppName}</div>
+          <Avatar url={opp.avatar} color="opp" />
+          <div className="name">{opp.name}</div>
         </div>
       </div>
       <div className="hud-bar-row">

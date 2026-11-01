@@ -1,152 +1,135 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { RealtimeChannel } from "@supabase/supabase-js";
-import { COUNTDOWN_SECONDS, MATCH_SECONDS } from "./config";
+import { useCallback, useRef, useState } from "react";
+import { AuthScreen, ProfileSetup, useAuth, type Profile } from "./auth";
+import Dock, { type Tab } from "./Dock";
+import Avatar from "./Avatar";
 import Hud from "./Hud";
-import { barValue } from "./match";
+import { useLobby } from "./lobby";
+import LobbyPage from "./LobbyPage";
 import PoseCounter from "./PoseCounter";
-import { supabase } from "./supabase";
-
-type Phase = "ready" | "countdown" | "match" | "result";
-type MatchMsg = { type: "go" } | { type: "rep"; from: string; reps: number };
-
-// Temporary for step 3: every tab joins this one match so two tabs/phones can play.
-const TEMP_MATCH_ID = "test";
-const MY_ID = crypto.randomUUID();
+import ProfilePage from "./ProfilePage";
+import { useMatch } from "./useMatch";
 
 export default function App() {
-  const [phase, setPhase] = useState<Phase>("ready");
-  const [myReps, setMyReps] = useState(0);
-  const [oppReps, setOppReps] = useState(0);
-  const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
-  const [secondsLeft, setSecondsLeft] = useState(MATCH_SECONDS);
-  const [connected, setConnected] = useState(false);
-  const channelRef = useRef<RealtimeChannel | null>(null);
-  const myRepsRef = useRef(0);
-  const phaseRef = useRef<Phase>("ready");
-  phaseRef.current = phase;
+  const { session, profile, setProfile, loading } = useAuth();
 
-  const send = (msg: MatchMsg) => channelRef.current?.send({ type: "broadcast", event: "msg", payload: msg });
+  if (loading) return <main className="app"><div className="auth"><div className="brand">PUSHUP BATTLE</div></div></main>;
+  if (!session) return <main className="app"><AuthScreen /></main>;
+  if (!profile) return <main className="app"><ProfileSetup userId={session.user.id} onDone={setProfile} /></main>;
+  return <Game profile={profile} email={session.user.email} onProfile={setProfile} />;
+}
 
-  const start = () => {
-    myRepsRef.current = 0;
-    setMyReps(0);
-    setOppReps(0);
-    setSecondsLeft(MATCH_SECONDS);
-    setCountdown(COUNTDOWN_SECONDS);
-    setPhase("countdown");
+function Game({ profile, email, onProfile }: { profile: Profile; email?: string; onProfile: (p: Profile) => void }) {
+  const [tab, setTab] = useState<Tab>("home");
+  const [facing, setFacing] = useState<"user" | "environment">("user");
+  const [practiceReps, setPracticeReps] = useState(0);
+
+  const me = { id: profile.id, name: profile.username, avatar: profile.avatar_url };
+  const lobby = useLobby(me);
+  const m = useMatch(lobby.match, profile.id);
+  const inMatch = lobby.match !== null;
+
+  // Reps go to the match while one is running, otherwise to the practice counter on Home.
+  const repTarget = useRef<() => void>(() => {});
+  repTarget.current = inMatch ? m.addMyRep : () => tab === "home" && setPracticeReps((r) => r + 1);
+  const onRep = useCallback(() => repTarget.current(), []);
+
+  const backToLobby = () => {
+    lobby.leaveMatch();
+    setTab("friends");
   };
-
-  // Realtime match channel (broadcast only). The opponent's reps come only from these messages.
-  useEffect(() => {
-    if (!supabase) return;
-    const channel = supabase.channel(`match:${TEMP_MATCH_ID}`, { config: { broadcast: { self: false } } });
-    channel
-      .on("broadcast", { event: "msg" }, ({ payload }) => {
-        const msg = payload as MatchMsg;
-        if (msg.type === "go") start();
-        else if (msg.type === "rep" && msg.from !== MY_ID && phaseRef.current === "match") setOppReps(msg.reps);
-      })
-      .subscribe((status) => setConnected(status === "SUBSCRIBED"));
-    channelRef.current = channel;
-    return () => {
-      channelRef.current = null;
-      supabase?.removeChannel(channel);
-    };
-  }, []);
-
-  // Countdown: COUNTDOWN_SECONDS ... 1, then the match starts.
-  useEffect(() => {
-    if (phase !== "countdown") return;
-    if (countdown <= 0) {
-      setPhase("match");
-      return;
-    }
-    const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [phase, countdown]);
-
-  // Match timer, based on an end time so it doesn't drift.
-  useEffect(() => {
-    if (phase !== "match") return;
-    const endAt = Date.now() + MATCH_SECONDS * 1000;
-    const t = setInterval(() => {
-      const left = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
-      setSecondsLeft(left);
-      if (left === 0) setPhase("result");
-    }, 200);
-    return () => clearInterval(t);
-  }, [phase]);
-
-  // The match ends early when the bar hits either end.
-  const bar = barValue(myReps, oppReps);
-  useEffect(() => {
-    if (phase === "match" && (bar <= 0 || bar >= 100)) setPhase("result");
-  }, [phase, bar]);
-
-  const addMyRep = useCallback(() => {
-    myRepsRef.current += 1;
-    setMyReps(myRepsRef.current);
-    send({ type: "rep", from: MY_ID, reps: myRepsRef.current });
-  }, []);
-
-  // The match creator (whoever taps Start) tells everyone in the match to start.
-  const goAll = () => {
-    send({ type: "go" });
-    start();
-  };
-
-  const result = myReps > oppReps ? "win" : myReps < oppReps ? "lose" : "draw";
 
   return (
     <main className="app">
-      <PoseCounter counting={phase === "match"} onRep={addMyRep}>
-        <Hud myReps={myReps} oppReps={oppReps} secondsLeft={secondsLeft} />
-
-        {phase === "ready" && (
-          <div className="stage-center">
-            <button className="big-btn" onClick={goAll} disabled={!connected}>
-              Start
-            </button>
-            <div className="hint">
-              {!supabase
-                ? "Supabase env vars missing"
-                : connected
-                  ? "Connected. Tap Start on one phone, both start"
-                  : "Connecting…"}
-            </div>
-          </div>
-        )}
-
-        {phase === "countdown" && (
-          <div className="stage-center">
-            <div key={countdown} className="countdown">
-              {countdown > 0 ? countdown : "GO"}
-            </div>
-          </div>
-        )}
-
-        {phase === "result" && (
-          <div className="stage-center">
-            <div className={`result-card ${result}`}>
-              <div className="result-title">{result === "win" ? "You win!" : result === "lose" ? "You lose" : "Draw"}</div>
-              <div className="result-score">
-                <span className="me">{myReps}</span>
-                <span className="dash">–</span>
-                <span className="opp">{oppReps}</span>
+      <PoseCounter facing={facing} counting={inMatch ? m.phase === "match" : tab === "home"} onRep={onRep}>
+        {inMatch && (
+          <>
+            <Hud
+              myReps={m.myReps}
+              oppReps={m.oppReps}
+              me={{ name: me.name, avatar: me.avatar }}
+              opp={{ name: lobby.match!.opponent.name, avatar: lobby.match!.opponent.avatar }}
+              secondsLeft={m.secondsLeft}
+            />
+            {m.phase === "waiting" && (
+              <div className="stage-center">
+                <div className="toast">Waiting for {lobby.match!.opponent.name}…</div>
               </div>
-              <button className="big-btn small" onClick={goAll}>
-                Play again
+            )}
+            {m.phase === "countdown" && (
+              <div className="stage-center">
+                <div key={m.countdown} className="countdown">
+                  {m.countdown > 0 ? m.countdown : "GO"}
+                </div>
+              </div>
+            )}
+            {m.phase === "result" && (
+              <div className="stage-center">
+                <div className={`result-card glass ${m.result}`}>
+                  <div className="result-title">{m.result === "win" ? "You win!" : m.result === "lose" ? "You lose" : "Draw"}</div>
+                  <div className="result-score">
+                    <span className="me">{m.myReps}</span>
+                    <span className="dash">–</span>
+                    <span className="opp">{m.oppReps}</span>
+                  </div>
+                  <button className="big-btn small" onClick={backToLobby}>
+                    Back to lobby
+                  </button>
+                </div>
+              </div>
+            )}
+            {/* Debug (desktop only): fake a rep without doing a push-up */}
+            {m.phase === "match" && (
+              <div className="test-btns">
+                <button onClick={m.addMyRep}>+1 me</button>
+              </div>
+            )}
+          </>
+        )}
+
+        {!inMatch && tab === "home" && (
+          <div className="practice glass">
+            <div className="practice-label">PRACTICE</div>
+            <div className="practice-reps">{practiceReps}</div>
+            <div className="practice-actions">
+              <button className="pill ghost" onClick={() => setPracticeReps(0)}>
+                Reset
+              </button>
+              <button className="pill" onClick={() => setTab("friends")}>
+                Battle a friend
               </button>
             </div>
           </div>
         )}
+        {!inMatch && tab === "friends" && (
+          <LobbyPage
+            players={lobby.players}
+            status={lobby.status}
+            notice={lobby.notice}
+            onChallenge={lobby.challenge}
+            onFindMatch={lobby.findMatch}
+            onCancel={lobby.cancel}
+          />
+        )}
+        {!inMatch && tab === "profile" && <ProfilePage profile={profile} email={email} onChange={onProfile} />}
 
-        {/* Debug: fake a rep without doing a push-up (for testing with two tabs) */}
-        {phase === "match" && (
-          <div className="test-btns">
-            <button onClick={addMyRep}>+1 me</button>
+        {lobby.incoming && !inMatch && (
+          <div className="modal-back">
+            <div className="modal glass">
+              <Avatar url={lobby.incoming.avatar} color="opp" size={72} />
+              <div className="modal-title">{lobby.incoming.name} challenges you!</div>
+              <div className="row">
+                <button className="pill ghost" onClick={lobby.decline}>
+                  Decline
+                </button>
+                <button className="pill" onClick={lobby.accept}>
+                  Accept
+                </button>
+              </div>
+            </div>
           </div>
         )}
+
+        <Dock tab={tab} onTab={setTab} onFlip={() => setFacing((f) => (f === "user" ? "environment" : "user"))} locked={inMatch} />
       </PoseCounter>
     </main>
   );
