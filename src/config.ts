@@ -9,11 +9,12 @@ export const TOP_DECAY = 0.998; // per frame, lets the remembered top height slo
 export const SMOOTH_FRAMES = 4; // moving-average window for the shoulder height
 export const MIN_VISIBILITY = 0.5; // a shoulder and a wrist must be at least this visible to count
 export const KNEE_LIFT = 0.2; // if a knee IS clearly visible at the top, it must be this high above the wrists (fraction of top height). Knees on the floor score ~0. A knee that can't be seen never blocks a rep
-// Hidden "are you in push-up position" check (rough on purpose, uses loosely tracked hips/ankles).
+// Hidden "are you in push-up position" check (rough on purpose, uses loosely tracked hips/legs).
+// Hips and an ankle or knee must be seen in the picture, or nothing counts (stops sitting/standing/close-up counts).
 // Both ratios are divided by how far the wrists are below the shoulders. Standing scores ~1, a plank ~0.
 export const POSITION_VISIBILITY = 0.3; // hips/ankles count for this check above this visibility (lower = works in the dark)
 export const HIP_DROP_MAX = 0.5; // hips may be at most this far below the shoulders
-export const ANKLE_DROP_MAX = 0.6; // ankles may be at most this far below the wrists
+export const ANKLE_DROP_MAX = 0.6; // ankles (or knees) may be at most this far below the wrists
 export const FRAME_MARGIN = 0.02; // shoulder/wrist must be this far inside the frame edge (0-1)
 export const REP_FLASH_MS = 350; // how long the screen border flashes bright green after a rep
 

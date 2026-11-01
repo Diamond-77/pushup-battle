@@ -58,6 +58,13 @@ function avgY(lm: NormalizedLandmark[], ids: number[], height: number, minVis = 
   return weight > 0 ? sum / weight : null;
 }
 
+// Like avgY but with the loose POSITION_VISIBILITY, and only points inside the picture
+// (MediaPipe guesses off-screen body parts, which must not count as "seen").
+function seenY(lm: NormalizedLandmark[], ids: number[], height: number): number | null {
+  const inside = ids.filter((i) => lm[i].x > 0 && lm[i].x < 1 && lm[i].y > 0 && lm[i].y < 1);
+  return avgY(lm, inside, height, POSITION_VISIBILITY);
+}
+
 // Uses both shoulders and both wrists (whichever are visible), so it doesn't matter
 // which side faces the camera and there is no left/right switching.
 export function readBody(lm: NormalizedLandmark[], height: number): BodyReading {
@@ -66,14 +73,18 @@ export function readBody(lm: NormalizedLandmark[], height: number): BodyReading 
   if (shoulderY === null || wristY === null)
     return { visible: false, inFrame: false, inPosition: false, shoulderHeight: 0, kneeHeight: null };
 
-  // Position check. Points it can't see at all don't block it; it is meant to catch standing up.
+  // Position check: hips AND a leg point (ankle, or knee if no ankle) must be seen inside the
+  // picture as confirmation, and be roughly level with the shoulders/wrists like in a plank.
+  // Loose visibility on purpose so it still works in the dark; it's a sanity check, not the counter.
   const arm = wristY - shoulderY;
-  const hipY = avgY(lm, HIPS, height, POSITION_VISIBILITY);
-  const ankleY = avgY(lm, ANKLES, height, POSITION_VISIBILITY);
+  const hipY = seenY(lm, HIPS, height);
+  const legY = seenY(lm, ANKLES, height) ?? seenY(lm, KNEES, height);
   const inPosition =
     arm > 0 &&
-    (hipY === null || (hipY - shoulderY) / arm < HIP_DROP_MAX) &&
-    (ankleY === null || (ankleY - wristY) / arm < ANKLE_DROP_MAX);
+    hipY !== null &&
+    legY !== null &&
+    (hipY - shoulderY) / arm < HIP_DROP_MAX &&
+    (legY - wristY) / arm < ANKLE_DROP_MAX;
 
   const kneeY = avgY(lm, KNEES, height);
   const inside = (p: NormalizedLandmark) =>
