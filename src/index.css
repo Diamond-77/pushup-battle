@@ -170,4 +170,4 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .center { left: 50%; right: auto; width: 440px; transform: translate(-50%, -50%); }
   .meter-wrap { right: 24px; }
   .debug { display: grid; }
-}
+}.big-btn:disabled { opacity: 0.45; }

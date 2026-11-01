@@ -1,10 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { COUNTDOWN_SECONDS, MATCH_SECONDS } from "./config";
 import Hud from "./Hud";
 import { barValue } from "./match";
 import PoseCounter from "./PoseCounter";
+import { supabase } from "./supabase";
 
 type Phase = "ready" | "countdown" | "match" | "result";
+type MatchMsg = { type: "go" } | { type: "rep"; from: string; reps: number };
+
+// Temporary for step 3: every tab joins this one match so two tabs/phones can play.
+const TEMP_MATCH_ID = "test";
+const MY_ID = crypto.randomUUID();
 
 export default function App() {
   const [phase, setPhase] = useState<Phase>("ready");
@@ -12,14 +19,40 @@ export default function App() {
   const [oppReps, setOppReps] = useState(0);
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
   const [secondsLeft, setSecondsLeft] = useState(MATCH_SECONDS);
+  const [connected, setConnected] = useState(false);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const myRepsRef = useRef(0);
+  const phaseRef = useRef<Phase>("ready");
+  phaseRef.current = phase;
+
+  const send = (msg: MatchMsg) => channelRef.current?.send({ type: "broadcast", event: "msg", payload: msg });
 
   const start = () => {
+    myRepsRef.current = 0;
     setMyReps(0);
     setOppReps(0);
     setSecondsLeft(MATCH_SECONDS);
     setCountdown(COUNTDOWN_SECONDS);
     setPhase("countdown");
   };
+
+  // Realtime match channel (broadcast only). The opponent's reps come only from these messages.
+  useEffect(() => {
+    if (!supabase) return;
+    const channel = supabase.channel(`match:${TEMP_MATCH_ID}`, { config: { broadcast: { self: false } } });
+    channel
+      .on("broadcast", { event: "msg" }, ({ payload }) => {
+        const msg = payload as MatchMsg;
+        if (msg.type === "go") start();
+        else if (msg.type === "rep" && msg.from !== MY_ID && phaseRef.current === "match") setOppReps(msg.reps);
+      })
+      .subscribe((status) => setConnected(status === "SUBSCRIBED"));
+    channelRef.current = channel;
+    return () => {
+      channelRef.current = null;
+      supabase?.removeChannel(channel);
+    };
+  }, []);
 
   // Countdown: COUNTDOWN_SECONDS ... 1, then the match starts.
   useEffect(() => {
@@ -50,7 +83,17 @@ export default function App() {
     if (phase === "match" && (bar <= 0 || bar >= 100)) setPhase("result");
   }, [phase, bar]);
 
-  const addMyRep = useCallback(() => setMyReps((r) => r + 1), []);
+  const addMyRep = useCallback(() => {
+    myRepsRef.current += 1;
+    setMyReps(myRepsRef.current);
+    send({ type: "rep", from: MY_ID, reps: myRepsRef.current });
+  }, []);
+
+  // The match creator (whoever taps Start) tells everyone in the match to start.
+  const goAll = () => {
+    send({ type: "go" });
+    start();
+  };
 
   const result = myReps > oppReps ? "win" : myReps < oppReps ? "lose" : "draw";
 
@@ -61,10 +104,16 @@ export default function App() {
 
         {phase === "ready" && (
           <div className="stage-center">
-            <button className="big-btn" onClick={start}>
+            <button className="big-btn" onClick={goAll} disabled={!connected}>
               Start
             </button>
-            <div className="hint">Get in position, then tap Start</div>
+            <div className="hint">
+              {!supabase
+                ? "Supabase env vars missing"
+                : connected
+                  ? "Connected. Tap Start on one phone, both start"
+                  : "Connecting…"}
+            </div>
           </div>
         )}
 
@@ -85,20 +134,17 @@ export default function App() {
                 <span className="dash">–</span>
                 <span className="opp">{oppReps}</span>
               </div>
-              <button className="big-btn small" onClick={start}>
+              <button className="big-btn small" onClick={goAll}>
                 Play again
               </button>
             </div>
           </div>
         )}
 
-        {/* Test buttons standing in for the opponent until two-device play exists */}
+        {/* Debug: fake a rep without doing a push-up (for testing with two tabs) */}
         {phase === "match" && (
           <div className="test-btns">
             <button onClick={addMyRep}>+1 me</button>
-            <button className="red" onClick={() => setOppReps((r) => r + 1)}>
-              +1 red
-            </button>
           </div>
         )}
       </PoseCounter>
