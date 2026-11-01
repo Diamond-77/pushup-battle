@@ -1,0 +1,9 @@
+{
+  "name": "Pushup Battle",
+  "short_name": "Pushup Battle",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0c0d",
+  "theme_color": "#0b0c0d"
+}

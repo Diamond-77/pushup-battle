@@ -1,4 +1,5 @@
-import { BAR_START, BAR_STEP, MATCH_SECONDS } from "./config";
+import { MATCH_SECONDS } from "./config";
+import { barValue } from "./match";
 
 type Props = { myReps: number; oppReps: number; myName?: string; oppName?: string; secondsLeft?: number };
 
@@ -16,7 +17,7 @@ function Avatar({ color }: { color: "me" | "opp" }) {
 }
 
 export default function Hud({ myReps, oppReps, myName = "You", oppName = "Opponent", secondsLeft = MATCH_SECONDS }: Props) {
-  const bar = Math.min(100, Math.max(0, BAR_START + BAR_STEP * (myReps - oppReps)));
+  const bar = barValue(myReps, oppReps);
   const mm = Math.floor(secondsLeft / 60);
   const ss = String(secondsLeft % 60).padStart(2, "0");
 
