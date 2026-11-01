@@ -46,6 +46,7 @@ export function AuthScreen() {
   const [mode, setMode] = useState<"login" | "signup">("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -71,15 +72,24 @@ export function AuthScreen() {
         {!supabase && <p className="form-msg error">Supabase env vars are missing.</p>}
         <form onSubmit={submit}>
           <input type="email" placeholder="Email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          <input
-            type="password"
-            placeholder="Password (6+ characters)"
-            autoComplete={mode === "signup" ? "new-password" : "current-password"}
-            minLength={6}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+          <div className="pw-wrap">
+            <input
+              type={showPw ? "text" : "password"}
+              placeholder="Password (6+ characters)"
+              autoComplete={mode === "signup" ? "new-password" : "current-password"}
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            <button type="button" className="pw-eye" aria-label={showPw ? "Hide password" : "Show password"} onClick={() => setShowPw((v) => !v)}>
+              <svg viewBox="0 0 24 24">
+                <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
+                <circle cx="12" cy="12" r="3" />
+                {showPw && <path d="M4 4l16 16" />}
+              </svg>
+            </button>
+          </div>
           <button className="big-btn small wide" disabled={busy}>
             {busy ? "…" : mode === "signup" ? "Sign up" : "Log in"}
           </button>

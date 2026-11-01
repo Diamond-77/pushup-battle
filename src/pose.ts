@@ -49,6 +49,7 @@ export type BodyReading = {
   inFrame: boolean;
   enterPosition: boolean;
   standing: boolean;
+  wrist: { x: number; y: number }; // average wrist position in pixels (hands stay planted during a real rep)
   shoulderHeight: number;
   kneeHeight: number | null;
 };
@@ -65,6 +66,18 @@ function avgY(lm: NormalizedLandmark[], ids: number[], height: number, minVis = 
   return weight > 0 ? sum / weight : null;
 }
 
+// Visibility-weighted average x (pixels) of the visible points.
+function avgX(lm: NormalizedLandmark[], ids: number[], width: number): number {
+  let sum = 0, weight = 0;
+  for (const i of ids) {
+    const v = lm[i].visibility ?? 0;
+    if (v < MIN_VISIBILITY) continue;
+    sum += lm[i].x * width * v;
+    weight += v;
+  }
+  return weight > 0 ? sum / weight : 0;
+}
+
 // Like avgY but with the loose POSITION_VISIBILITY, and only points inside the picture
 // (MediaPipe guesses off-screen body parts, which must not count as "seen").
 function seenY(lm: NormalizedLandmark[], ids: number[], height: number): number | null {
@@ -74,11 +87,11 @@ function seenY(lm: NormalizedLandmark[], ids: number[], height: number): number 
 
 // Uses both shoulders and both wrists (whichever are visible), so it doesn't matter
 // which side faces the camera and there is no left/right switching.
-export function readBody(lm: NormalizedLandmark[], height: number): BodyReading {
+export function readBody(lm: NormalizedLandmark[], width: number, height: number): BodyReading {
   const shoulderY = avgY(lm, SHOULDERS, height);
   const wristY = avgY(lm, WRISTS, height);
   if (shoulderY === null || wristY === null)
-    return { visible: false, inFrame: false, enterPosition: false, standing: false, shoulderHeight: 0, kneeHeight: null };
+    return { visible: false, inFrame: false, enterPosition: false, standing: false, wrist: { x: 0, y: 0 }, shoulderHeight: 0, kneeHeight: null };
 
   // Position check, loose on purpose so it still works in the dark.
   const arm = wristY - shoulderY;
@@ -98,6 +111,7 @@ export function readBody(lm: NormalizedLandmark[], height: number): BodyReading 
     enterPosition,
     standing,
     inFrame: [...SHOULDERS, ...WRISTS].every((i) => inside(lm[i])),
+    wrist: { x: avgX(lm, WRISTS, width), y: wristY },
     shoulderHeight: wristY - shoulderY,
     kneeHeight: kneeY === null ? null : wristY - kneeY,
   };

@@ -243,3 +243,9 @@ input:focus { border-color: var(--me); }
   .test-btns { display: flex; }
   .sheet { left: 50%; right: auto; width: 440px; transform: translateX(-50%); }
 }.big-btn:disabled { opacity: 0.45; }
+
+/* Password field with show/hide eye */
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 50px; }
+.pw-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border: 0; background: none; display: grid; place-items: center; color: var(--muted); }
+.pw-eye svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }

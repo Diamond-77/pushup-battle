@@ -19,6 +19,8 @@ export const STAND_HIP = 1.0; // to LEAVE: hips this far below the shoulders = s
 export const STAND_LEG = 1.0; // to LEAVE: ankle/knee this far below the wrists = standing
 export const EXIT_FRAMES = 10; // must look like standing this many frames in a row to leave the position
 export const LOST_MS = 1500; // or the body is lost for this long
+export const SETTLE_MS = 1000; // after entering the position, hold it this long before reps count
+export const WRIST_MOVE_MAX = 0.35; // hands must stay planted: wrists may move at most this much (fraction of top height) during a rep
 export const FRAME_MARGIN = 0.02; // shoulder/wrist must be this far inside the frame edge (0-1)
 export const REP_FLASH_MS = 350; // how long the screen border flashes bright green after a rep
 

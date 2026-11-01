@@ -6,12 +6,14 @@ import {
   EXIT_FRAMES,
   KNEE_LIFT,
   LOST_MS,
+  SETTLE_MS,
   METER_SEGMENTS,
   REP_FLASH_MS,
   SHOULDER_DOWN,
   SHOULDER_UP,
   SMOOTH_FRAMES,
   TOP_DECAY,
+  WRIST_MOVE_MAX,
 } from "./config";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 import { drawStickman, getPoseLandmarker, readBody } from "./pose";
@@ -46,6 +48,8 @@ export default function PoseCounter({ counting, onRep, facing, children }: Props
   const inPositionRef = useRef(false);
   const standingFramesRef = useRef(0);
   const lostSinceRef = useRef<number | null>(null);
+  const enteredAtRef = useRef(0);
+  const downWristRef = useRef({ x: 0, y: 0 }); // where the hands were when the rep went down
   // Latest props in refs so the frame loop (started once) always sees current values.
   const countingRef = useRef(counting);
   const onRepRef = useRef(onRep);
@@ -150,13 +154,14 @@ export default function PoseCounter({ counting, onRep, facing, children }: Props
       let ratio: number | null = null;
       let kneeLift: number | null = null;
       let status: Status = "not_detected";
-      const body = lm ? readBody(lm, h) : null;
+      const body = lm ? readBody(lm, w, h) : null;
       if (body?.visible && body.inFrame) {
         lostSinceRef.current = null;
         if (!inPositionRef.current && body.enterPosition) {
           inPositionRef.current = true;
           standingFramesRef.current = 0;
           topRef.current = 0; // re-learn the "arms straight" height for this set
+          enteredAtRef.current = now;
           stateRef.current = "up";
         }
         if (inPositionRef.current) {
@@ -183,11 +188,16 @@ export default function PoseCounter({ counting, onRep, facing, children }: Props
         const kneeOk = kneeLift === null || kneeLift >= KNEE_LIFT;
         if (!kneeOk) status = "knee_down";
 
-        if (stateRef.current === "up" && ratio < SHOULDER_DOWN) {
+        const settled = now - enteredAtRef.current > SETTLE_MS; // e.g. still putting the phone down
+        if (stateRef.current === "up" && ratio < SHOULDER_DOWN && settled) {
           stateRef.current = "down";
+          downWristRef.current = body.wrist;
         } else if (stateRef.current === "down" && ratio > SHOULDER_UP) {
           stateRef.current = "up";
-          if (kneeOk) {
+          // Hands stay planted in a real push-up; if they "moved", the camera or the person moved instead.
+          const moved = Math.hypot(body.wrist.x - downWristRef.current.x, body.wrist.y - downWristRef.current.y);
+          const planted = moved < WRIST_MOVE_MAX * topRef.current;
+          if (kneeOk && planted) {
             repsRef.current += 1;
             lastRepAtRef.current = now;
             if (countingRef.current) onRepRef.current();
