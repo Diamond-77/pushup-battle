@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { supabase } from "./supabase";
+import { supabase, authUrlError } from "./supabase";
 
 export type Profile = { id: string; username: string; avatar_url: string | null };
 
@@ -64,7 +64,9 @@ export function AuthScreen() {
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(
+    authUrlError ? "Google sign-in failed: " + authUrlError.replace(/\+/g, " ") : null,
+  );
   const [canResend, setCanResend] = useState(false);
   const [cooldown, setCooldown] = useState(0);
 
@@ -74,7 +76,7 @@ export function AuthScreen() {
     return () => clearTimeout(t);
   }, [cooldown]);
 
-  const redirectTo = window.location.origin;
+  const redirectTo = window.location.origin + "/";
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
