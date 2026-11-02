@@ -11,11 +11,6 @@ export default function Hud({ myReps, oppReps, me, opp, secondsLeft }: Props) {
 
   return (
     <header className="hud">
-      <div className="hud-title">
-        <span className="rule" />
-        PUSHUP BATTLE
-        <span className="rule" />
-      </div>
       <div className="hud-row">
         <div className="player">
           <Avatar url={me.avatar} color="me" />

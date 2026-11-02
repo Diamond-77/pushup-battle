@@ -14,19 +14,20 @@ type Props = {
 
 export default function LobbyPage({ players, status, notice, onChallenge, onFindMatch, onCancel }: Props) {
   return (
-    <div className="page">
-      <h2>Battle</h2>
+    <div className="page dim">
+      <div className="brush-title page-title">Battle Lobby</div>
       {status === "searching" ? (
-        <button className="big-btn small wide searching" onClick={onCancel}>
+        <button className="game-btn wood wide searching" onClick={onCancel}>
           Searching… tap to cancel
         </button>
       ) : (
-        <button className="big-btn small wide" onClick={onFindMatch}>
+        <button className="game-btn jade big wide" onClick={onFindMatch}>
           Find a match
         </button>
       )}
       {notice && <p className="form-msg">{notice}</p>}
 
+      <div className="parchment">
       <div className="section-title">Online now · {players.length}</div>
       {players.length === 0 && <div className="muted">Nobody else is online. Send your friend the link!</div>}
       <ul className="player-list">
@@ -43,6 +44,7 @@ export default function LobbyPage({ players, status, notice, onChallenge, onFind
           </li>
         ))}
       </ul>
+      </div>
     </div>
   );
 }

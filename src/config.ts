@@ -46,3 +46,13 @@ export const MEDIAPIPE_WASM_URL =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.0/wasm";
 export const POSE_MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
+
+// 3D clan palace (menu backgrounds)
+export const PALACE = {
+  MAX_PIXEL_RATIO: 1.75, // sharper costs battery; 1.75 looks crisp on phones
+  SHADOW_SIZE: 1024,
+  MIN_DISTANCE: 45, // closest zoom
+  MAX_DISTANCE: 190, // farthest zoom
+  AUTO_ROTATE_SPEED: 0.35, // slow drift when idle
+  RESUME_ROTATE_MS: 4000, // start drifting again this long after a drag
+};

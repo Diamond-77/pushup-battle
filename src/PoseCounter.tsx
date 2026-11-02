@@ -26,9 +26,12 @@ type Props = {
   onRep: () => void;
   facing: "user" | "environment";
   children?: ReactNode; // overlays (HUD, pages, dock) drawn over the camera
+  paused?: boolean; // a full page covers the camera: skip tracking to save battery and GPU
 };
 
-export default function PoseCounter({ counting, onRep, facing, children }: Props) {
+export default function PoseCounter({ counting, onRep, facing, children, paused = false }: Props) {
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const meterRef = useRef<HTMLDivElement>(null);
@@ -123,6 +126,7 @@ export default function PoseCounter({ counting, onRep, facing, children }: Props
     const loop = () => {
       if (stopped) return;
       raf = requestAnimationFrame(loop);
+      if (pausedRef.current) return;
       const video = videoRef.current;
       const canvas = canvasRef.current;
       if (!video || !canvas || video.readyState < 2 || video.currentTime === lastVideoTime) return;

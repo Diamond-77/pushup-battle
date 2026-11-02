@@ -53,8 +53,8 @@ export default function ProfilePage({ profile, email, onChange }: { profile: Pro
   };
 
   return (
-    <div className="page">
-      <h2>Profile</h2>
+    <div className="page dim">
+      <div className="brush-title page-title">Profile</div>
       <button className="avatar-pick" onClick={() => fileRef.current?.click()} disabled={busy}>
         <Avatar url={profile.avatar_url} color="me" size={96} />
         <span>{busy ? "Uploading…" : "Change photo"}</span>

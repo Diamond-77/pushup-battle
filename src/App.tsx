@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useRef, useState } from "react";
 import { AuthScreen, NewPasswordScreen, ProfileSetup, useAuth, type Profile } from "./auth";
 import Dock, { type Tab } from "./Dock";
 import Avatar from "./Avatar";
@@ -7,7 +7,9 @@ import { useLobby } from "./lobby";
 import LobbyPage from "./LobbyPage";
 import PoseCounter from "./PoseCounter";
 import ProfilePage from "./ProfilePage";
-import { ComingSoon, HomePage } from "./Pages";
+import { ClanPage, HomePage, ThronePage } from "./Pages";
+// Three.js is big, so the palace loads in its own chunk after the app shows.
+const Palace3D = lazy(() => import("./palace/Palace3D"));
 import { useMatch } from "./useMatch";
 
 export default function App() {
@@ -15,7 +17,15 @@ export default function App() {
 
   if (loading) return <main className="app"><div className="auth"><div className="brand">PUSHUP BATTLE</div></div></main>;
   if (recovering) return <main className="app"><NewPasswordScreen onDone={doneRecovering} /></main>;
-  if (!session) return <main className="app"><AuthScreen /></main>;
+  if (!session)
+    return (
+      <main className="app">
+        <div className="screen">
+          <Suspense fallback={null}><Palace3D clan="Pushup Battle" /></Suspense>
+          <AuthScreen />
+        </div>
+      </main>
+    );
   if (!profile) return <main className="app"><ProfileSetup userId={session.user.id} onDone={setProfile} /></main>;
   return <Game profile={profile} email={session.user.email} onProfile={setProfile} />;
 }
@@ -29,6 +39,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
   const lobby = useLobby(me);
   const m = useMatch(lobby.match, profile.id);
   const inMatch = lobby.match !== null;
+  const menu = !inMatch && tab !== "train"; // a full page covers the camera
 
   // Reps go to the match while one is running, otherwise to the practice counter on Home.
   const repTarget = useRef<() => void>(() => {});
@@ -43,7 +54,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
 
   return (
     <main className="app">
-      <PoseCounter facing={facing} counting={inMatch ? m.phase === "match" : tab === "train"} onRep={onRep}>
+      <PoseCounter paused={menu} facing={facing} counting={inMatch ? m.phase === "match" : tab === "train"} onRep={onRep}>
         {inMatch && (
           <>
             <Hud
@@ -68,13 +79,13 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
             {m.phase === "result" && (
               <div className="stage-center">
                 <div className={`result-card glass ${m.result}`}>
-                  <div className="result-title">{m.result === "win" ? "You win!" : m.result === "lose" ? "You lose" : "Draw"}</div>
+                  <div className="result-title">{m.result === "win" ? "Victory" : m.result === "lose" ? "Defeat" : "Draw"}</div>
                   <div className="result-score">
                     <span className="me">{m.myReps}</span>
                     <span className="dash">–</span>
                     <span className="opp">{m.oppReps}</span>
                   </div>
-                  <button className="big-btn small" onClick={backToLobby}>
+                  <button className="game-btn wood" onClick={backToLobby}>
                     Back to lobby
                   </button>
                 </div>
@@ -111,12 +122,13 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
           </>
         )}
         {!inMatch && tab === "home" && <HomePage profile={profile} onBattle={() => setTab("battle")} onTrain={() => setTab("train")} />}
-        {!inMatch && tab === "throne" && (
-          <ComingSoon title="Throne" text="The best fighter sits on the throne. Win battles, earn Respect and snatch it." />
+        {menu && (
+          <Suspense fallback={null}>
+            <Palace3D clan={tab === "clan" ? `${profile.username}'s sect` : "Pushup Battle"} />
+          </Suspense>
         )}
-        {!inMatch && tab === "clan" && (
-          <ComingSoon title="Clan" text="Join a clan, train together and challenge other clans for Respect." />
-        )}
+        {!inMatch && tab === "throne" && <ThronePage />}
+        {!inMatch && tab === "clan" && <ClanPage />}
         {!inMatch && tab === "battle" && (
           <LobbyPage
             players={lobby.players}

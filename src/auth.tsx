@@ -214,7 +214,7 @@ export function AuthScreen() {
               Forgot password?
             </button>
           )}
-          <button className="big-btn small wide" disabled={busy}>
+          <button className="game-btn red wide" disabled={busy}>
             {busy ? "…" : action}
           </button>
         </form>
@@ -237,9 +237,9 @@ export function AuthScreen() {
 function AuthHero() {
   return (
     <div className="auth-hero">
-      <img src="/icon-192.png" alt="" className="auth-logo" />
-      <div className="brand big">PUSHUP BATTLE</div>
-      <p className="tagline">Challenge a friend. Every rep counts.</p>
+      <div className="auth-seal">敬</div>
+      <div className="brush-title hero-title">Pushup Battle</div>
+      <p className="tagline">Train. Earn Respect. Claim the Throne.</p>
     </div>
   );
 }
@@ -285,7 +285,7 @@ export function NewPasswordScreen({ onDone }: { onDone: () => void }) {
         <h2>Choose a new password</h2>
         <form onSubmit={submit}>
           <input type="password" placeholder="New password (6+ characters)" autoComplete="new-password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} required />
-          <button className="big-btn small wide" disabled={busy}>
+          <button className="game-btn red wide" disabled={busy}>
             {busy ? "…" : "Save password"}
           </button>
         </form>
@@ -322,7 +322,7 @@ export function ProfileSetup({ userId, onDone }: { userId: string; onDone: (p: P
         <h2>Pick your player name</h2>
         <form onSubmit={submit}>
           <input placeholder="Player name" maxLength={20} minLength={2} value={username} onChange={(e) => setUsername(e.target.value)} required />
-          <button className="big-btn small wide" disabled={busy}>
+          <button className="game-btn red wide" disabled={busy}>
             {busy ? "…" : "Let's go"}
           </button>
         </form>
