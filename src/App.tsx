@@ -51,7 +51,8 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
   const me = { id: profile.id, name: profile.username, avatar: profile.avatar_url, title: profile.title ?? null, legendary: !!profile.legendary, clan: myClan?.id ?? null, respect };
   const [viewPlayer, setViewPlayer] = useState<string | null>(null); // a player's profile page
   const [viewMembers, setViewMembers] = useState<Clan | null>(null); // a clan's rank tree page
-  useEffect(() => { setViewPlayer(null); setViewMembers(null); }, [tab]);
+  const [editingProfile, setEditingProfile] = useState(false);
+  useEffect(() => { setViewPlayer(null); setViewMembers(null); setEditingProfile(false); }, [tab]);
   const [field, setField] = useState<FieldId>("brawl"); // selected battlefield on the Battle page
   // Respect only changes on the server, so re-read the profile after a battle or a training claim.
   const refreshProfile = useCallback(async () => {
@@ -205,7 +206,11 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
             onPlayer={setViewPlayer}
           />
         )}
-        {!inMatch && tab === "profile" && <ProfilePage profile={profile} email={email} onChange={onProfile} membership={clan.membership} />}
+        {!inMatch && tab === "profile" && (editingProfile ? (
+          <ProfilePage profile={profile} email={email} onChange={onProfile} membership={clan.membership} onDone={() => setEditingProfile(false)} />
+        ) : (
+          <PlayerPage key={profile.avatar_url + (profile.bio ?? "") + profile.username} id={profile.id} myId={profile.id} onEdit={() => setEditingProfile(true)} />
+        ))}
 
         {menu && viewMembers && !viewPlayer && <ClanMembersPage clan={viewMembers} onBack={() => setViewMembers(null)} onPlayer={setViewPlayer} />}
         {menu && viewPlayer && <PlayerPage id={viewPlayer} myId={profile.id} onBack={() => setViewPlayer(null)} />}

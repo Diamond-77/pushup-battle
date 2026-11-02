@@ -713,3 +713,44 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .crop-ring { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .crop-zoom { width: 100%; accent-color: var(--me); }
 .sub-page > *, .page > .parchment, .page > .profile-hero { flex-shrink: 0; }
+
+/* ---------- Legendary avatar: halo, shimmer and orbiting sparks ---------- */
+.legend-wrap { position: relative; flex-shrink: 0; }
+.legend-wrap .hex.legendary { position: relative; z-index: 1; animation: legend-spin 2.4s linear infinite; filter: none; }
+.legend-halo { position: absolute; inset: -22%; border-radius: 50%; background: radial-gradient(circle, rgba(255,214,120,0.75), rgba(255,140,60,0.35) 45%, transparent 70%); animation: halo-pulse 1.8s ease-in-out infinite; pointer-events: none; }
+.legend-wrap .hex.legendary::after { content: ""; position: absolute; inset: 0; background: linear-gradient(120deg, transparent 35%, rgba(255,255,255,0.85) 50%, transparent 65%); background-size: 250% 100%; animation: hex-shimmer 2.2s ease-in-out infinite; mix-blend-mode: overlay; clip-path: var(--hex); pointer-events: none; }
+.legend-orbit { position: absolute; inset: -12%; animation: orbit 5s linear infinite; pointer-events: none; z-index: 2; }
+.legend-orbit i { position: absolute; left: 50%; top: 50%; width: calc(var(--s) * 0.09 + 3px); height: calc(var(--s) * 0.09 + 3px); margin: calc((var(--s) * 0.09 + 3px) / -2);
+  background: #fff6cf; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  transform: rotate(calc(var(--i) * 90deg)) translateY(calc(var(--s) * -0.66)); filter: drop-shadow(0 0 4px #ffd36b); animation: twinkle 1.2s ease-in-out infinite; animation-delay: calc(var(--i) * 0.3s); }
+@keyframes halo-pulse { 0%, 100% { opacity: 0.55; transform: scale(0.95); } 50% { opacity: 1; transform: scale(1.08); } }
+@keyframes hex-shimmer { from { background-position: 150% 0; } to { background-position: -100% 0; } }
+@keyframes orbit { to { transform: rotate(360deg); } }
+@keyframes twinkle { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+
+/* ---------- Profiles themed by clan ---------- */
+.profile-theme.theme-arasaka { --t1: #c8372d; --t2: #1a1820; --t3: #34394a; }
+.profile-theme.theme-soraran-gate { --t1: #e8b84a; --t2: #3a1f1a; --t3: #e2846a; }
+.profile-theme.theme-sleepbuilders { --t1: #7b6cd9; --t2: #0b1020; --t3: #2a3557; }
+.profile-theme { background: radial-gradient(130% 60% at 50% 0%, color-mix(in srgb, var(--t3) 55%, transparent), transparent 70%), linear-gradient(180deg, var(--t2), #120c09) !important; }
+.profile-hero.themed { position: relative; overflow: hidden; border-color: var(--t1); background: radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--t1) 35%, transparent), transparent 65%), var(--wood); }
+.profile-hero.themed > * { position: relative; z-index: 1; }
+.profile-hero.themed > .theme-fx { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.profile-theme .back-btn, .profile-theme .vote-btn { border-color: color-mix(in srgb, var(--t1) 60%, var(--wood-rim)); }
+.profile-theme .parchment { border-color: var(--t1); }
+/* Arasaka: rain and a lightning flicker */
+.theme-arasaka .theme-fx { background: repeating-linear-gradient(105deg, transparent 0 14px, rgba(169,184,204,0.22) 14px 15px); background-size: 200% 200%; animation: rain-fall 0.6s linear infinite, bolt 5s steps(1) infinite; }
+@keyframes rain-fall { from { background-position: 0 0; } to { background-position: -30px 120px; } }
+@keyframes bolt { 0%, 91%, 95%, 100% { box-shadow: none; } 92%, 96% { box-shadow: inset 0 0 0 999px rgba(230,238,255,0.25); } }
+/* Soraran Gate: a low golden sun */
+.theme-soraran-gate .theme-fx { background: radial-gradient(circle at 80% 18%, rgba(255,210,130,0.85) 0 7%, rgba(255,160,90,0.35) 14%, transparent 34%); animation: sun-glow 4s ease-in-out infinite alternate; }
+@keyframes sun-glow { to { filter: brightness(1.25); } }
+/* sleepBuilders: moon and twinkling stars */
+.theme-sleepbuilders .theme-fx { background:
+  radial-gradient(circle at 82% 16%, #e9efff 0 5%, rgba(233,239,255,0.25) 9%, transparent 16%),
+  radial-gradient(1.5px 1.5px at 12% 20%, #fff, transparent), radial-gradient(1.5px 1.5px at 30% 8%, #fff, transparent),
+  radial-gradient(1px 1px at 55% 25%, #fff, transparent), radial-gradient(1.5px 1.5px at 68% 10%, #fff, transparent),
+  radial-gradient(1px 1px at 20% 45%, #fff, transparent), radial-gradient(1.5px 1.5px at 90% 40%, #fff, transparent);
+  animation: stars-twinkle 2.5s ease-in-out infinite alternate; }
+@keyframes stars-twinkle { from { opacity: 0.6; } to { opacity: 1; } }
+.page-top { justify-content: space-between; align-items: center; }

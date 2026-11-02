@@ -1,28 +1,22 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import AvatarCropper from "./AvatarCropper";
-import { HistoryList, SocialRow } from "./PlayerPage";
-import { loadHistory, loadSocial, type HistoryRow, type Social } from "./social";
 import type { Profile } from "./auth";
 import Avatar from "./Avatar";
 import ClanLogo from "./ClanLogo";
-import { CONTACT_EMAIL, CONTACT_WHATSAPP } from "./config";
 import type { Membership } from "./useClan";
 import { supabase } from "./supabase";
 
-type Props = { profile: Profile; email?: string; onChange: (p: Profile) => void; membership: Membership | null };
+type Props = { profile: Profile; email?: string; onChange: (p: Profile) => void; membership: Membership | null; onDone: () => void };
 
-export default function ProfilePage({ profile, email, onChange, membership }: Props) {
+// Editing your own profile (opened from "Edit profile").
+export default function ProfilePage({ profile, email, onChange, membership, onDone }: Props) {
   const [name, setName] = useState(profile.username);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [cropping, setCropping] = useState<File | null>(null);
   const [bio, setBio] = useState(profile.bio ?? "");
-  const [social, setSocial] = useState<Social | null>(null);
-  const [hist, setHist] = useState<HistoryRow[] | null>(null);
   useEffect(() => {
-    loadSocial(profile.id, profile.id).then(setSocial);
-    loadHistory(profile.id).then(setHist);
   }, [profile.id]);
 
   const save = async (patch: Partial<Profile>) => {
@@ -63,7 +57,10 @@ export default function ProfilePage({ profile, email, onChange, membership }: Pr
 
   return (
     <div className="page dim">
-      <div className="brush-title page-title">Profile</div>
+      <div className="row page-top">
+        <div className="brush-title page-title">Edit profile</div>
+        <button className="back-btn" onClick={onDone}>Done</button>
+      </div>
       <div className={`profile-hero ${profile.legendary ? "legendary-card" : ""}`}>
         <button className="avatar-pick" onClick={() => fileRef.current?.click()} disabled={busy}>
           <Avatar url={profile.avatar_url} color="me" size={104} legendary={profile.legendary} />
@@ -84,7 +81,6 @@ export default function ProfilePage({ profile, email, onChange, membership }: Pr
       </div>
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={pickPhoto} />
       {cropping && <AvatarCropper file={cropping} onCancel={() => setCropping(null)} onSave={upload} />}
-      <SocialRow s={social} mine />
 
       <label className="field">
         Player name
@@ -105,21 +101,6 @@ export default function ProfilePage({ profile, email, onChange, membership }: Pr
       </label>
       {email && <div className="muted">{email}</div>}
       {message && <p className="form-msg">{message}</p>}
-      {/* Only on the developer (legendary) account, as asked */}
-      {profile.legendary && (
-      <div className="panel report">
-        <div className="section-title">Found a bug? Report it</div>
-        <div className="row stretch">
-          <a className="game-btn wood" href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Pushup Battle issue")}`}>
-            Email
-          </a>
-          <a className="game-btn jade whatsapp" href={`https://wa.me/${CONTACT_WHATSAPP}?text=${encodeURIComponent("Hi! Pushup Battle issue: ")}`} target="_blank" rel="noreferrer">
-            WhatsApp
-          </a>
-        </div>
-      </div>
-      )}
-      <HistoryList rows={hist} />
       <button className="pill ghost" onClick={() => supabase?.auth.signOut()}>
         Log out
       </button>

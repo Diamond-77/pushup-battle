@@ -3,7 +3,7 @@ import Avatar from "./Avatar";
 import ClanLogo from "./ClanLogo";
 import type { Profile } from "./auth";
 import type { Clan } from "./clans";
-import { START_RESPECT, respectTitle } from "./config";
+import { CONTACT_EMAIL, CONTACT_WHATSAPP, START_RESPECT, respectTitle } from "./config";
 import { loadHistory, loadProfile, loadSocial, modeName, setFollow, setVote, type HistoryRow, type Social } from "./social";
 
 export const ThumbUp = ({ down = false }: { down?: boolean }) => (
@@ -58,8 +58,25 @@ export function SocialRow({ s, mine, onFollow, onVote }: { s: Social | null; min
   );
 }
 
-// Another player's profile, as a full page.
-export default function PlayerPage({ id, myId, onBack }: { id: string; myId: string; onBack: () => void }) {
+// Bug reports go straight to the developer. Only shown on the developer's (legendary) profile.
+export function ReportPanel() {
+  return (
+    <div className="panel report">
+      <div className="section-title">Found a bug? Message the developer</div>
+      <div className="row stretch">
+        <a className="game-btn jade whatsapp" href={`https://wa.me/${CONTACT_WHATSAPP}?text=${encodeURIComponent("Hi! Pushup Battle bug: ")}`} target="_blank" rel="noreferrer">
+          WhatsApp
+        </a>
+        <a className="game-btn wood" href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Pushup Battle bug")}`}>
+          Email
+        </a>
+      </div>
+    </div>
+  );
+}
+
+// A player's profile, as a full page. On your own profile it has an Edit button instead of Back.
+export default function PlayerPage({ id, myId, onBack, onEdit }: { id: string; myId: string; onBack?: () => void; onEdit?: () => void }) {
   const [p, setP] = useState<Profile | null>(null);
   const [clan, setClan] = useState<Clan | null>(null);
   const [s, setS] = useState<Social | null>(null);
@@ -92,13 +109,17 @@ export default function PlayerPage({ id, myId, onBack }: { id: string; myId: str
   const respect = p?.respect ?? START_RESPECT;
 
   return (
-    <div className="page dim sub-page">
-      <button className="back-btn" onClick={onBack}>‹ Back</button>
+    <div className={`page dim sub-page ${clan ? `profile-theme theme-${clan.id}` : ""}`}>
+      <div className="row page-top">
+        {onBack ? <button className="back-btn" onClick={onBack}>‹ Back</button> : <div className="brush-title page-title">Profile</div>}
+        {onEdit && <button className="back-btn" onClick={onEdit}>Edit profile</button>}
+      </div>
       {!p ? (
         <div className="muted txt-center">Loading…</div>
       ) : (
         <>
-          <div className={`profile-hero ${p.legendary ? "legendary-card" : ""}`}>
+          <div className={`profile-hero ${clan ? "themed" : ""} ${p.legendary ? "legendary-card" : ""}`}>
+            {clan && <div className="theme-fx" />}
             <Avatar url={p.avatar_url} color="neutral" size={104} legendary={p.legendary} />
             <div className="brush-title profile-name">{p.username}</div>
             {p.title && <div className="title-badge big">{p.legendary ? "Legendary · " : ""}{p.title}</div>}
@@ -109,6 +130,7 @@ export default function PlayerPage({ id, myId, onBack }: { id: string; myId: str
             {p.bio && <p className="bio">{p.bio}</p>}
           </div>
           <SocialRow s={s} mine={mine} onFollow={follow} onVote={vote} />
+          {p.legendary && <ReportPanel />}
           <HistoryList rows={hist} />
         </>
       )}
