@@ -1,8 +1,9 @@
-import { useState } from "react";
 import Avatar from "./Avatar";
 import ClanLogo from "./ClanLogo";
 import { CLANS, type Clan } from "./clans";
-import { CLAN_DAYS } from "./config";
+import { CLAN_DAYS, START_RESPECT, respectTitle } from "./config";
+import { supabase } from "./supabase";
+import { useEffect, useState } from "react";
 import { daysLeft, loadMembers, type Member, type useClan } from "./useClan";
 import type { Profile } from "./auth";
 
@@ -24,7 +25,8 @@ export function HomePage({ profile, clan, onBattle, onTrain }: { profile: Profil
             <div className="plaque-name">{profile.username}</div>
             {profile.title && <div className="title-badge">{profile.title}</div>}
             <div className="respect">
-              0 <span className="respect-word">Respect</span>
+              {profile.respect ?? START_RESPECT} <span className="respect-word">Respect</span>
+              <span className="rank-title">{respectTitle(profile.respect ?? START_RESPECT)}</span>
             </div>
           </div>
         </div>
@@ -67,7 +69,10 @@ function MembersPanel({ members, onPick }: { members: Member[]; onPick: (m: Memb
               <Avatar url={p.avatar} color="neutral" size={36} legendary={p.legendary} />
               <div className="pl-text">
                 <div className="pl-name">{p.name}</div>
-                {p.title && <div className="title-badge">{p.title}</div>}
+                <div className="pl-status">
+                  {p.title && <span className="title-badge">{p.title}</span>}
+                  {p.respect !== null && <> {p.respect} Respect · {respectTitle(p.respect)}</>}
+                </div>
               </div>
             </button>
           </li>
@@ -84,6 +89,7 @@ function MemberModal({ member, clan, onClose }: { member: Member; clan: Clan; on
         <Avatar url={member.avatar} color="neutral" size={88} legendary={member.legendary} />
         <div className="modal-title">{member.name}</div>
         {member.title && <div className="title-badge big">{member.legendary ? "Legendary · " : ""}{member.title}</div>}
+        {member.respect !== null && <div className="respect">{member.respect} <span className="respect-word">Respect</span> <span className="rank-title">{respectTitle(member.respect)}</span></div>}
         <div className="clan-chip">
           <ClanLogo clan={clan} size={30} />
           <div><b>{clan.name}</b><span>member since {member.joinedAt.toLocaleDateString()}</span></div>
@@ -137,6 +143,7 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
         </div>
         <div className="stat-row">
           <span className="stat-chip">{plural(clan.counts[m.clan.id] ?? 1, "member")}</span>
+          <span className="stat-chip gold">{clan.respect[m.clan.id] ?? 0} Respect</span>
         </div>
         <div className="look-hint">Drag to look around · pinch to zoom</div>
         <div className="spacer" />
@@ -175,6 +182,7 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
           <div className="brush-title grow">{preview.name}</div>
           <span className="stat-chip">{plural(clan.counts[preview.id] ?? 0, "member")}</span>
         </div>
+        <div className="muted small"><b className="gold-text">{clan.respect[preview.id] ?? 0} clan Respect</b> · all members' Respect added up</div>
         <div className="muted">{preview.motto}</div>
         <div className="muted small">{WEATHER_LABEL[preview.weather]}</div>
         {clan.error && <p className="form-msg error">{clan.error}</p>}
@@ -222,19 +230,65 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
   );
 }
 
-export function ThronePage() {
+type Ranked = { id: string; username: string; avatar_url: string | null; respect: number; title?: string | null; legendary?: boolean };
+
+// The throne: the player with the most Respect sits on it. Clans are ranked by their members' total.
+export function ThronePage({ clanRespect, myId }: { clanRespect: Record<string, number>; myId: string }) {
+  const [view, setView] = useState<"players" | "clans">("players");
+  const [top, setTop] = useState<Ranked[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    supabase?.from("profiles").select("*").order("respect", { ascending: false }).limit(30)
+      .then(({ data, error }) => (error ? setFailed(true) : setTop((data ?? []) as Ranked[])));
+  }, []);
+  const king = top?.[0];
+  const clans = [...CLANS].sort((a, b) => (clanRespect[b.id] ?? 0) - (clanRespect[a.id] ?? 0));
   return (
     <div className="page dim">
       <div className="brush-title page-title">Throne</div>
-      <div className="throne-seat">
-        <div className="throne-label">THE THRONE</div>
-        <div className="throne-empty">?</div>
-        <div className="throne-holder">Unclaimed</div>
+      <div className="seg">
+        <button className={view === "players" ? "on" : ""} onClick={() => setView("players")}>Warriors</button>
+        <button className={view === "clans" ? "on" : ""} onClick={() => setView("clans")}>Clans</button>
       </div>
-      <div className="panel soon-panel">
-        <div className="soon-badge">Coming soon</div>
-        <p>The best fighter sits on the throne, everyone else stands on the floor below. Win battles, earn Respect and snatch it.</p>
-      </div>
+      {view === "players" ? (
+        <>
+          <div className="throne-seat">
+            <div className="throne-label">THE THRONE</div>
+            {king ? <Avatar url={king.avatar_url} color="me" size={84} legendary={king.legendary} /> : <div className="throne-empty">?</div>}
+            <div className="throne-holder">{king ? king.username : failed ? "Respect isn't set up yet" : "…"}</div>
+            {king && <div className="respect">{king.respect} <span className="respect-word">Respect</span> <span className="rank-title">{respectTitle(king.respect)}</span></div>}
+          </div>
+          <div className="parchment">
+            <ol className="rank-list">
+              {(top ?? []).slice(1).map((p, i) => (
+                <li key={p.id} className={p.id === myId ? "me" : ""}>
+                  <span className="rank-no">{i + 2}</span>
+                  <Avatar url={p.avatar_url} color="neutral" size={34} legendary={p.legendary} />
+                  <div className="pl-text">
+                    <div className="pl-name">{p.username}</div>
+                    <div className="pl-status">{respectTitle(p.respect)}</div>
+                  </div>
+                  <b className="gold-text">{p.respect}</b>
+                </li>
+              ))}
+            </ol>
+            {top && top.length <= 1 && <div className="muted">Win battles to stand in line for the throne.</div>}
+          </div>
+        </>
+      ) : (
+        <div className="parchment">
+          <ol className="rank-list">
+            {clans.map((c, i) => (
+              <li key={c.id}>
+                <span className="rank-no">{i + 1}</span>
+                <ClanLogo clan={c} size={34} />
+                <div className="pl-text"><div className="pl-name">{c.name}</div></div>
+                <b className="gold-text">{clanRespect[c.id] ?? 0}</b>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
     </div>
   );
 }

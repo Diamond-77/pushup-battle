@@ -3,7 +3,8 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase, authUrlError } from "./supabase";
 
 // title / legendary can only be set by the developer in the database (supabase/titles.sql)
-export type Profile = { id: string; username: string; avatar_url: string | null; title?: string | null; legendary?: boolean };
+// respect is only changed by the server (supabase/economy.sql)
+export type Profile = { id: string; username: string; avatar_url: string | null; title?: string | null; legendary?: boolean; respect?: number };
 
 // Current session plus the matching profiles row (null until the user picks a username).
 export function useAuth() {

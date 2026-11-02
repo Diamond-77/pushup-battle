@@ -12,6 +12,9 @@ import { CLANS, type Clan } from "./clans";
 import { useClan } from "./useClan";
 import { countdownSound, defeatSound, drawSound, goSound, repSound, victoryCall, victorySound } from "./sound";
 import Guide, { guideDone } from "./Guide";
+import Training from "./Training";
+import { START_RESPECT, MODES, type ModeId } from "./config";
+import { supabase } from "./supabase";
 // Three.js is big, so the palace loads in its own chunk after the app shows.
 const Palace3D = lazy(() => import("./palace/Palace3D"));
 import { useMatch } from "./useMatch";
@@ -42,9 +45,21 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
 
   const clan = useClan(profile.id);
   const myClan = clan.membership?.clan ?? null;
-  const me = { id: profile.id, name: profile.username, avatar: profile.avatar_url, title: profile.title ?? null, legendary: !!profile.legendary, clan: myClan?.id ?? null };
+  const respect = profile.respect ?? START_RESPECT;
+  const me = { id: profile.id, name: profile.username, avatar: profile.avatar_url, title: profile.title ?? null, legendary: !!profile.legendary, clan: myClan?.id ?? null, respect };
+  const [mode, setMode] = useState<ModeId>("brawl");
+  // Respect only changes on the server, so re-read the profile after a battle or a training claim.
+  const refreshProfile = useCallback(async () => {
+    const { data } = (await supabase?.from("profiles").select("*").eq("id", profile.id).maybeSingle()) ?? {};
+    if (data) onProfile(data);
+    clan.refresh();
+  }, [profile.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // pay out battles the opponent walked away from
+  useEffect(() => {
+    supabase?.rpc("settle_my_matches").then(({ error }) => { if (!error) refreshProfile(); });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const lobby = useLobby(me);
-  const m = useMatch(lobby.match, profile.id);
+  const m = useMatch(lobby.match, profile.id, refreshProfile);
   const inMatch = lobby.match !== null;
   const menu = !inMatch && tab !== "train"; // a full page covers the camera
   const [preview, setPreview] = useState<Clan>(CLANS[0]);
@@ -92,10 +107,21 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
               me={{ name: me.name, avatar: me.avatar, legendary: me.legendary }}
               opp={{ name: lobby.match!.opponent.name, avatar: lobby.match!.opponent.avatar, legendary: lobby.match!.opponent.legendary }}
               secondsLeft={m.secondsLeft}
+              barStep={m.mode.barStep}
             />
+            <div className="mode-tag">{m.mode.name} · bet {m.mode.bet}</div>
             {m.phase === "waiting" && (
               <div className="stage-center">
                 <div className="toast">Waiting for {lobby.match!.opponent.name}…</div>
+              </div>
+            )}
+            {m.phase === "cancelled" && (
+              <div className="stage-center">
+                <div className="modal panel">
+                  <div className="modal-title">Battle cancelled</div>
+                  <p className="modal-text">{m.cancelReason}</p>
+                  <button className="game-btn wood" onClick={backToLobby}>Back to lobby</button>
+                </div>
               </div>
             )}
             {m.phase === "countdown" && (
@@ -118,6 +144,11 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
                   <span>{me.name}</span>
                   <span>{lobby.match!.opponent.name}</span>
                 </div>
+                {m.ranked && (
+                  <div className={`result-respect ${m.payout && m.payout.delta < 0 ? "minus" : ""}`}>
+                    {m.payout ? `${m.payout.delta > 0 ? "+" : ""}${m.payout.delta} Respect` : "Counting Respect…"}
+                  </div>
+                )}
                 <button className="game-btn wood big" onClick={backToLobby}>
                   Back to lobby
                 </button>
@@ -139,18 +170,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
               <path d="M4 12a8 8 0 0 1 13.7-5.6M20 12a8 8 0 0 1-13.7 5.6M18 3v4h-4M6 21v-4h4" />
             </svg>
           </button>
-          <div className="practice glass">
-            <div className="practice-label">PRACTICE</div>
-            <div className="practice-reps">{practiceReps}</div>
-            <div className="practice-actions">
-              <button className="pill ghost" onClick={() => setPracticeReps(0)}>
-                Reset
-              </button>
-              <button className="pill" onClick={() => setTab("battle")}>
-                Battle a friend
-              </button>
-            </div>
-          </div>
+          <Training reps={practiceReps} respect={respect} onReset={() => setPracticeReps(0)} onBattle={() => setTab("battle")} onEarned={refreshProfile} />
           </>
         )}
         {!inMatch && tab === "home" && <HomePage profile={profile} clan={myClan} onBattle={() => setTab("battle")} onTrain={() => setTab("train")} />}
@@ -159,7 +179,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
             <Palace3D seed={shown?.name ?? "Lone Warrior"} weather={shown?.weather ?? "day"} style={shown?.palace} />
           </Suspense>
         )}
-        {!inMatch && tab === "throne" && <ThronePage />}
+        {!inMatch && tab === "throne" && <ThronePage clanRespect={clan.respect} myId={profile.id} />}
         {!inMatch && tab === "clan" && <ClanPage clan={clan} preview={preview} onPreview={setPreview} />}
         {!inMatch && tab === "battle" && (
           <LobbyPage
@@ -169,6 +189,10 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
             onChallenge={lobby.challenge}
             onFindMatch={lobby.findMatch}
             onCancel={lobby.cancel}
+            mode={mode}
+            onMode={setMode}
+            respect={respect}
+            onTrain={() => setTab("train")}
           />
         )}
         {!inMatch && tab === "profile" && <ProfilePage profile={profile} email={email} onChange={onProfile} membership={clan.membership} />}
@@ -178,6 +202,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
             <div className="modal glass">
               <Avatar url={lobby.incoming.avatar} color="opp" size={72} legendary={lobby.incoming.legendary} />
               <div className="modal-title">{lobby.incoming.name} challenges you!</div>
+              <div className="modal-text">{MODES[lobby.incoming.mode].name} · {MODES[lobby.incoming.mode].seconds / 60} min · bet {MODES[lobby.incoming.mode].bet} Respect</div>
               <div className="row">
                 <button className="pill ghost" onClick={lobby.decline}>
                   Decline

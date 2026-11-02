@@ -82,3 +82,35 @@ export const LOCK_LEARN_FRAMES = 30; // frames used to learn the player's body p
 export const LOCK_CHECK_FRAMES = 20; // frames compared after a jump or a return
 export const LOCK_JUMP = 0.22; // the shoulders jumping this far (fraction of the picture) in one frame = tracker switched people
 export const LOCK_MAX_DIFF = 0.22; // body proportions differing more than 22% = a different person
+
+// Battle modes. The bets, times and limits are enforced by the server (supabase/economy.sql): keep them in sync.
+export type ModeId = "brawl" | "classic" | "rank";
+export const MODES: Record<ModeId, { name: string; seconds: number; bet: number; minRespect: number; barStep: number; blurb: string }> = {
+  brawl: { name: "Brawl", seconds: 60, bet: 5, minRespect: 5, barStep: 5, blurb: "1 minute. Do at least 5 reps or lose 1 extra Respect." },
+  classic: { name: "Classic", seconds: 180, bet: 10, minRespect: 10, barStep: 2.5, blurb: "3 minutes. The standard duel." },
+  rank: { name: "Rank", seconds: 420, bet: 100, minRespect: 120, barStep: 1.5, blurb: "7 minutes. Needs 120 Respect to enter." },
+};
+export const BRAWL_MIN_REPS = 5;
+export const START_RESPECT = 50;
+export const TRAINING_CAP = 50; // training refills Respect up to this, never beyond
+
+// Training challenges (same list as supabase/economy.sql)
+export const TRAINING = [
+  { id: "spark", name: "Spark", reps: 10, seconds: 30, reward: 2 },
+  { id: "ember", name: "Ember", reps: 20, seconds: 60, reward: 4 },
+  { id: "flame", name: "Flame", reps: 30, seconds: 90, reward: 6 },
+  { id: "blaze", name: "Blaze", reps: 50, seconds: 180, reward: 10 },
+  { id: "inferno", name: "Inferno", reps: 100, seconds: 420, reward: 20 },
+];
+
+// Titles earned by Respect (highest reached wins)
+export const RESPECT_TITLES: [number, string][] = [
+  [0, "Wanderer"],
+  [50, "Disciple"],
+  [120, "Warrior"],
+  [250, "Iron Fist"],
+  [500, "Sect Elder"],
+  [1000, "Grandmaster"],
+  [2500, "Immortal"],
+];
+export const respectTitle = (respect: number) => RESPECT_TITLES.filter(([min]) => respect >= min).pop()![1];

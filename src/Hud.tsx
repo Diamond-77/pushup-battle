@@ -2,10 +2,10 @@ import Avatar from "./Avatar";
 import { barValue } from "./match";
 
 type Side = { name: string; avatar: string | null; legendary?: boolean };
-type Props = { myReps: number; oppReps: number; me: Side; opp: Side; secondsLeft: number };
+type Props = { myReps: number; oppReps: number; me: Side; opp: Side; secondsLeft: number; barStep?: number };
 
-export default function Hud({ myReps, oppReps, me, opp, secondsLeft }: Props) {
-  const bar = barValue(myReps, oppReps);
+export default function Hud({ myReps, oppReps, me, opp, secondsLeft, barStep }: Props) {
+  const bar = barValue(myReps, oppReps, barStep);
   const mm = Math.floor(secondsLeft / 60);
   const ss = String(secondsLeft % 60).padStart(2, "0");
 

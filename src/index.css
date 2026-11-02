@@ -581,3 +581,42 @@ a.game-btn { text-decoration: none; }
 .result-full.win { background: radial-gradient(circle at 50% 40%, #2f8f66, #0f281e 72%); }
 .result-full.lose { background: radial-gradient(circle at 50% 40%, #8e2a22, #1e0a08 72%); }
 .result-full.draw { background: radial-gradient(circle at 50% 40%, #7a5a22, #1e140c 72%); }
+
+/* ---------- Respect economy ---------- */
+.rank-title { font-family: Inter, system-ui, sans-serif; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #e9dcc0; background: rgba(0,0,0,0.35); padding: 2px 7px; border-radius: 8px; }
+.gold-text { color: var(--gold); }
+.stat-chip.gold { color: var(--gold); }
+.pl-respect { color: var(--gold); font-weight: 700; }
+.mode-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mode-pick button { display: flex; flex-direction: column; gap: 2px; align-items: center; padding: 10px 4px; border-radius: 16px; background: var(--wood); border: 2px solid var(--wood-rim); color: var(--parch); }
+.mode-pick button b { font-family: var(--brush); font-weight: 400; font-size: 1.4rem; line-height: 1; }
+.mode-pick button span { font-size: 0.68rem; color: #b9ab90; font-weight: 700; }
+.mode-pick button.on { background: linear-gradient(180deg, #56d39f, #2a9a6c); border-color: #1d5a41; }
+.mode-pick button.on span { color: #eafff5; }
+.mode-pick button.locked { opacity: 0.55; }
+.mode-blurb { text-align: center; }
+.broke { display: flex; flex-direction: column; gap: 10px; text-align: center; color: #e9dcc0; }
+.page .seg { flex-shrink: 0; }
+.rank-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.rank-list li { display: flex; align-items: center; gap: 10px; }
+.rank-list li.me .pl-name { color: var(--me); }
+.rank-no { width: 22px; text-align: center; font-family: var(--brush); font-size: 1.3rem; color: #8a6a4a; }
+.rank-list .gold-text { font-family: var(--brush); font-size: 1.4rem; font-weight: 400; }
+.mode-tag { position: absolute; z-index: 5; left: 50%; transform: translateX(-50%); top: calc(max(12px, env(safe-area-inset-top)) + 118px); padding: 4px 12px; border-radius: 10px; background: rgba(0,0,0,0.55); color: #e9dcc0; font-size: 0.75rem; font-weight: 700; }
+.result-respect { position: relative; font-family: var(--brush); font-size: 2.4rem; color: var(--gold); text-shadow: 0 3px 0 rgba(0,0,0,0.5); }
+.result-respect.minus { color: #ffb3aa; }
+
+/* training ground */
+.practice.training, .practice.train-run { width: min(360px, calc(100% - 24px)); gap: 8px; }
+.training .seg { width: 100%; }
+.train-list { list-style: none; margin: 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: 6px; max-height: 42vh; overflow-y: auto; }
+.train-list button { width: 100%; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; text-align: left; padding: 9px 12px; border-radius: 14px; border: 2px solid var(--wood-rim); background: rgba(0,0,0,0.3); color: var(--parch); }
+.train-list b { font-family: var(--brush); font-weight: 400; font-size: 1.3rem; line-height: 1; }
+.train-list span { font-size: 0.78rem; color: #b9ab90; grid-column: 1; }
+.train-list em { grid-row: 1 / 3; grid-column: 2; align-self: center; font-style: normal; font-family: var(--brush); font-size: 1.6rem; color: var(--gold); }
+.practice-reps .of { font-size: 1.6rem; color: #b9ab90; }
+.train-clock { font-family: var(--brush); font-size: 2rem; color: var(--gold); line-height: 1; }
+.train-result { font-size: 2.4rem; }
+.train-result.won { color: var(--me); }
+.train-result.lost { color: #ffb3aa; }
+.respect-gain { font-family: var(--brush); font-size: 1.8rem; color: var(--gold); }
