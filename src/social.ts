@@ -57,6 +57,14 @@ export async function setVote(me: string, id: string, vote: 1 | -1 | 0) {
   else await supabase.from("profile_votes").upsert({ voter: me, target: id, vote });
 }
 
+// You can only dislike someone you've beaten in a Rank match (the server checks this too).
+export async function beatInRank(me: string, id: string) {
+  if (!supabase) return false;
+  const { data } = await supabase.from("matches").select("id").eq("mode", "rank").eq("winner", me)
+    .or(`player_a.eq.${id},player_b.eq.${id}`).limit(1);
+  return Array.isArray(data) && data.length > 0;
+}
+
 export const HISTORY_SIZE = 20; // battles shown on a profile
 
 export async function loadHistory(id: string): Promise<HistoryRow[]> {

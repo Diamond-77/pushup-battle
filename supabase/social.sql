@@ -49,3 +49,15 @@ drop policy if exists "Battle history is public" on public.matches;
 create policy "Battle history is public" on public.matches for select using (true);
 create index if not exists matches_a_idx on public.matches (player_a, started_at desc);
 create index if not exists matches_b_idx on public.matches (player_b, started_at desc);
+
+-- 5. A dislike must be earned: only after beating that player in a Rank match.
+create or replace function public.beat_in_rank(p_winner uuid, p_loser uuid) returns boolean
+as $fn$
+  select exists (select 1 from public.matches where mode = 'rank' and winner = p_winner and p_loser in (player_a, player_b))
+$fn$ language sql stable security definer set search_path = public;
+drop policy if exists "Vote as yourself" on public.profile_votes;
+create policy "Vote as yourself" on public.profile_votes for insert
+  with check (auth.uid() = voter and (vote = 1 or public.beat_in_rank(auth.uid(), target)));
+drop policy if exists "Change your vote" on public.profile_votes;
+create policy "Change your vote" on public.profile_votes for update using (auth.uid() = voter)
+  with check (auth.uid() = voter and (vote = 1 or public.beat_in_rank(auth.uid(), target)));

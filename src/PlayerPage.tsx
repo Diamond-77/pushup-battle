@@ -4,7 +4,7 @@ import ClanLogo from "./ClanLogo";
 import type { Profile } from "./auth";
 import type { Clan } from "./clans";
 import { CONTACT_EMAIL, CONTACT_WHATSAPP, START_RESPECT, respectTitle } from "./config";
-import { loadHistory, loadProfile, loadSocial, modeName, setFollow, setVote, type HistoryRow, type Social } from "./social";
+import { beatInRank, loadHistory, loadProfile, loadSocial, modeName, setFollow, setVote, type HistoryRow, type Social } from "./social";
 
 export const ThumbUp = ({ down = false }: { down?: boolean }) => (
   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={down ? { transform: "scaleY(-1)" } : undefined}>
@@ -81,6 +81,7 @@ export default function PlayerPage({ id, myId, onBack, onEdit }: { id: string; m
   const [clan, setClan] = useState<Clan | null>(null);
   const [s, setS] = useState<Social | null>(null);
   const [hist, setHist] = useState<HistoryRow[] | null>(null);
+  const [tease, setTease] = useState(false); // "beat them in Rank first" popup
   const mine = id === myId;
 
   useEffect(() => {
@@ -98,6 +99,7 @@ export default function PlayerPage({ id, myId, onBack, onEdit }: { id: string; m
   const vote = async (v: 1 | -1) => {
     if (!s) return;
     const next = s.myVote === v ? 0 : v;
+    if (next === -1 && !(await beatInRank(myId, id))) return setTease(true);
     setS({
       ...s,
       myVote: next,
@@ -122,7 +124,7 @@ export default function PlayerPage({ id, myId, onBack, onEdit }: { id: string; m
             {clan && <div className="theme-fx" />}
             <Avatar url={p.avatar_url} color="neutral" size={104} legendary={p.legendary} />
             <div className="brush-title profile-name">{p.username}</div>
-            {p.title && <div className="title-badge big">{p.legendary ? "Legendary · " : ""}{p.title}</div>}
+            {p.title && <div className="title-badge big">{p.title}</div>}
             <div className="respect">{respect} <span className="respect-word">Respect</span> <span className="rank-title">{respectTitle(respect)}</span></div>
             <div className="clan-chip">
               {clan ? <><ClanLogo clan={clan} size={30} /><div><b>{clan.name}</b></div></> : <div><b>Lone Warrior</b></div>}
@@ -131,6 +133,16 @@ export default function PlayerPage({ id, myId, onBack, onEdit }: { id: string; m
           </div>
           <SocialRow s={s} mine={mine} onFollow={follow} onVote={vote} />
           {p.legendary && <ReportPanel />}
+          {tease && (
+            <div className="modal-back" onClick={() => setTease(false)}>
+              <div className="modal panel tease" onClick={(e) => e.stopPropagation()}>
+                <Avatar url={p.avatar_url} color="opp" size={80} legendary={p.legendary} />
+                <div className="modal-title">Whoa, someone doesn't like {p.username}!</div>
+                <p className="modal-text">Words are cheap. Defeat <b>{p.username}</b> in a <b>Rank</b> match, then you've earned the right to dislike them.</p>
+                <button className="game-btn red" onClick={() => setTease(false)}>Challenge accepted</button>
+              </div>
+            </div>
+          )}
           <HistoryList rows={hist} />
         </>
       )}

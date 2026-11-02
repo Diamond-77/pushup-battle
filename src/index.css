@@ -518,7 +518,7 @@ a.game-btn { text-decoration: none; }
 .game-btn.jade.whatsapp { font-family: "Inter", sans-serif; font-weight: 800; font-size: 1rem; }
 
 /* Legendary: a living gold-and-flame frame nobody else can get */
-.hex.legendary { background: conic-gradient(from var(--spin, 0deg), #fff3b0, #e8b84a, #ff6b3d, #c8372d, #7b6cd9, #3fbf8a, #fff3b0); animation: legend-spin 4s linear infinite; filter: drop-shadow(0 0 8px rgba(255, 190, 80, 0.8)); padding: 4px; }
+.hex.legendary { background: conic-gradient(from var(--spin, 0deg), #fff6cf, #e8b84a, #a86d1c, #ffe08a, #e8b84a, #fff6cf); animation: legend-spin 4s linear infinite; filter: drop-shadow(0 0 8px rgba(255, 190, 80, 0.8)); padding: 4px; }
 @property --spin { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 @keyframes legend-spin { to { --spin: 360deg; } }
 .legendary-card { border-color: #e8b84a; background: radial-gradient(120% 80% at 50% 0%, rgba(232,184,74,0.35), transparent 60%), var(--wood); box-shadow: inset 0 0 0 3px #1b1a1f, 0 5px 0 var(--wood-shadow), 0 0 40px rgba(232,184,74,0.35); position: relative; overflow: hidden; }
@@ -754,3 +754,4 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   animation: stars-twinkle 2.5s ease-in-out infinite alternate; }
 @keyframes stars-twinkle { from { opacity: 0.6; } to { opacity: 1; } }
 .page-top { justify-content: space-between; align-items: center; }
+.tease .modal-title { font-size: 1.7rem; }

@@ -67,7 +67,7 @@ export default function ProfilePage({ profile, email, onChange, membership, onDo
           <span>{busy ? "Uploading…" : "Change photo"}</span>
         </button>
         <div className="brush-title profile-name">{profile.username}</div>
-        {profile.title && <div className="title-badge big">{profile.legendary ? "Legendary · " : ""}{profile.title}</div>}
+        {profile.title && <div className="title-badge big">{profile.title}</div>}
         {membership ? (
           <div className="clan-chip">
             <ClanLogo clan={membership.clan} size={30} />
@@ -104,6 +104,7 @@ export default function ProfilePage({ profile, email, onChange, membership, onDo
       <button className="pill ghost" onClick={() => supabase?.auth.signOut()}>
         Log out
       </button>
+      <div className="muted small txt-center">Version {__BUILD__}</div>
     </div>
   );
 }
