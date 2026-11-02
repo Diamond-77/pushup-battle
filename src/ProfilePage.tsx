@@ -1,22 +1,13 @@
-import { useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import AvatarCropper from "./AvatarCropper";
+import { HistoryList, SocialRow } from "./PlayerPage";
+import { loadHistory, loadSocial, type HistoryRow, type Social } from "./social";
 import type { Profile } from "./auth";
 import Avatar from "./Avatar";
 import ClanLogo from "./ClanLogo";
 import { CONTACT_EMAIL, CONTACT_WHATSAPP } from "./config";
 import type { Membership } from "./useClan";
 import { supabase } from "./supabase";
-
-// Center-crops and shrinks the picked photo to a 256px JPEG before upload.
-async function toAvatarJpeg(file: File): Promise<Blob> {
-  const img = await createImageBitmap(file);
-  const side = Math.min(img.width, img.height);
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 256;
-  canvas.getContext("2d")!.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, 256, 256);
-  return new Promise((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Could not read image"))), "image/jpeg", 0.85),
-  );
-}
 
 type Props = { profile: Profile; email?: string; onChange: (p: Profile) => void; membership: Membership | null };
 
@@ -25,6 +16,14 @@ export default function ProfilePage({ profile, email, onChange, membership }: Pr
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [cropping, setCropping] = useState<File | null>(null);
+  const [bio, setBio] = useState(profile.bio ?? "");
+  const [social, setSocial] = useState<Social | null>(null);
+  const [hist, setHist] = useState<HistoryRow[] | null>(null);
+  useEffect(() => {
+    loadSocial(profile.id, profile.id).then(setSocial);
+    loadHistory(profile.id).then(setHist);
+  }, [profile.id]);
 
   const save = async (patch: Partial<Profile>) => {
     if (!supabase) return;
@@ -41,14 +40,19 @@ export default function ProfilePage({ profile, email, onChange, membership }: Pr
     }
   };
 
-  const pickPhoto = async (e: ChangeEvent<HTMLInputElement>) => {
+  const pickPhoto = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !supabase) return;
+    e.target.value = ""; // picking the same photo again still opens the cropper
+    if (file) setCropping(file);
+  };
+  const upload = async (jpeg: Blob) => {
+    setCropping(null);
+    if (!supabase) return;
     setBusy(true);
     setMessage(null);
     try {
       const path = `${profile.id}/${Date.now()}.jpg`;
-      const { error } = await supabase.storage.from("avatars").upload(path, await toAvatarJpeg(file), { contentType: "image/jpeg" });
+      const { error } = await supabase.storage.from("avatars").upload(path, jpeg, { contentType: "image/jpeg" });
       if (error) throw error;
       await save({ avatar_url: supabase.storage.from("avatars").getPublicUrl(path).data.publicUrl });
     } catch (err) {
@@ -79,6 +83,8 @@ export default function ProfilePage({ profile, email, onChange, membership }: Pr
         )}
       </div>
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={pickPhoto} />
+      {cropping && <AvatarCropper file={cropping} onCancel={() => setCropping(null)} onSave={upload} />}
+      <SocialRow s={social} mine />
 
       <label className="field">
         Player name
@@ -87,6 +93,14 @@ export default function ProfilePage({ profile, email, onChange, membership }: Pr
           <button className="pill" disabled={name.trim() === profile.username || name.trim().length < 2} onClick={() => save({ username: name.trim() })}>
             Save
           </button>
+        </div>
+      </label>
+      <label className="field">
+        Bio
+        <textarea className="bio-input" maxLength={160} rows={3} placeholder="Tell other warriors about yourself" value={bio} onChange={(e) => setBio(e.target.value)} />
+        <div className="row bio-foot">
+          <span className="muted small">{bio.length}/160</span>
+          <button className="pill" disabled={bio.trim() === (profile.bio ?? "")} onClick={() => save({ bio: bio.trim() })}>Save bio</button>
         </div>
       </label>
       {email && <div className="muted">{email}</div>}
@@ -105,6 +119,7 @@ export default function ProfilePage({ profile, email, onChange, membership }: Pr
         </div>
       </div>
       )}
+      <HistoryList rows={hist} />
       <button className="pill ghost" onClick={() => supabase?.auth.signOut()}>
         Log out
       </button>

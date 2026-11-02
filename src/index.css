@@ -668,3 +668,48 @@ a.game-btn { text-decoration: none; }
   .field-card { height: min(40vh, 340px); }
 }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+.google-btn.big { height: 64px; font-size: 1.15rem; }
+.wide-pill { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; font-size: 1rem; }
+.wide-pill .in-icon { width: 20px; height: 20px; position: static; transform: none; }
+.txt-center { text-align: center; }
+
+/* ---------- Full-page player profile, clan rank tree ---------- */
+.sub-page { z-index: 8; background: linear-gradient(180deg, #2a1d15, #160f0b) !important; pointer-events: auto !important; }
+.back-btn { align-self: flex-start; width: auto !important; margin: 0 !important; padding: 8px 14px; border-radius: 12px; border: 2px solid var(--wood-rim); background: var(--wood); color: var(--parch); font-weight: 800; }
+.bio { margin: 4px 0 0; text-align: center; color: #e9dcc0; line-height: 1.4; font-size: 0.92rem; white-space: pre-wrap; }
+.bio-input { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 14px; border: 2px solid var(--wood-rim); background: rgba(0,0,0,0.35); color: var(--parch); font: inherit; resize: none; }
+.bio-foot { justify-content: space-between; align-items: center; }
+.social-row { display: flex; flex-direction: column; gap: 10px; }
+.social-counts { display: flex; justify-content: center; gap: 22px; color: #b9ab90; font-size: 0.85rem; }
+.social-counts b { color: var(--parch); font-size: 1.1rem; }
+.vote-btn { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 0 16px; height: 56px; border-radius: 16px; border: 2px solid var(--wood-rim); background: var(--wood); color: var(--parch); font-weight: 800; }
+.vote-btn.on { background: linear-gradient(180deg, #56d39f, #2a9a6c); border-color: #1d5a41; }
+.vote-btn.down.on { background: linear-gradient(180deg, #df4b3f, #b22c22); border-color: #6b1a14; }
+.vote-btn:disabled { opacity: 0.8; }
+.history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.history li { display: flex; align-items: center; gap: 10px; }
+.h-result { width: 46px; text-align: center; padding: 4px 0; border-radius: 8px; font-weight: 800; font-size: 0.75rem; color: #fff; background: #8a7a62; }
+.history li.win .h-result { background: #2a9a6c; }
+.history li.lose .h-result { background: #b22c22; }
+.history .minus { color: #b22c22; }
+.member-row.shrink { width: auto; flex: 0 0 auto; }
+.member-row.center-row { width: auto; }
+.rank-list li { cursor: pointer; }
+
+.pyramid { display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 14px 4px; border-radius: 20px; background: radial-gradient(120% 80% at 50% 0%, rgba(232,184,74,0.18), rgba(0,0,0,0.35)); border: 2px solid var(--wood-rim); }
+.pyr-row { display: flex; justify-content: center; gap: 6px; width: 100%; }
+.pyr-seat { flex: 0 1 76px; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 2px; border-radius: 14px; border: 0; background: rgba(0,0,0,0.3); color: var(--parch); }
+.pyr-seat.top { flex-basis: 140px; padding: 10px 8px; background: linear-gradient(180deg, rgba(232,184,74,0.35), rgba(0,0,0,0.3)); border: 2px solid var(--gold); }
+.pyr-crown { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); }
+.pyr-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.72rem; font-weight: 700; }
+.pyr-seat.top .pyr-name { font-family: var(--brush); font-size: 1.4rem; font-weight: 400; }
+.pyr-respect { font-family: var(--brush); color: var(--gold); font-size: 1rem; line-height: 1; }
+.pyr-seat.open { background: none; border: 2px dashed rgba(233,220,192,0.25); color: #8a7a62; }
+.pyr-empty { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 1.4rem; background: rgba(0,0,0,0.25); }
+
+.cropper { gap: 10px; }
+.crop-frame { position: relative; overflow: hidden; border-radius: 20px; background: #111; touch-action: none; cursor: grab; }
+.crop-frame img { position: absolute; left: 0; top: 0; max-width: none; user-select: none; pointer-events: none; }
+.crop-ring { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.crop-zoom { width: 100%; accent-color: var(--me); }
+.sub-page > *, .page > .parchment, .page > .profile-hero { flex-shrink: 0; }

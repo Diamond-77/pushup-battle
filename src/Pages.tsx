@@ -4,7 +4,7 @@ import { CLANS, type Clan } from "./clans";
 import { CLAN_DAYS, START_RESPECT, respectTitle } from "./config";
 import { supabase } from "./supabase";
 import { useEffect, useState } from "react";
-import { daysLeft, loadMembers, type Member, type useClan } from "./useClan";
+import { daysLeft, type useClan } from "./useClan";
 import type { Profile } from "./auth";
 
 // Full-page screens drawn over the 3D palace.
@@ -56,77 +56,24 @@ const WEATHER_LABEL = { storm: "Storm and lightning", sunset: "Golden sunset", n
 
 type ClanState = ReturnType<typeof useClan>;
 
-// Anyone can see who is in any clan, and tap a member to see their profile.
-function MembersPanel({ members, onPick }: { members: Member[]; onPick: (m: Member) => void }) {
-  return (
-    <div className="parchment members">
-      <div className="section-title">Members · {members.length}</div>
-      {members.length === 0 && <div className="muted">Nobody yet. Be the first.</div>}
-      <ul className="player-list">
-        {members.map((p) => (
-          <li key={p.id}>
-            <button className="member-row" onClick={() => onPick(p)}>
-              <Avatar url={p.avatar} color="neutral" size={36} legendary={p.legendary} />
-              <div className="pl-text">
-                <div className="pl-name">{p.name}</div>
-                <div className="pl-status">
-                  {p.title && <span className="title-badge">{p.title}</span>}
-                  {p.respect !== null && <> {p.respect} Respect · {respectTitle(p.respect)}</>}
-                </div>
-              </div>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function MemberModal({ member, clan, onClose }: { member: Member; clan: Clan; onClose: () => void }) {
-  return (
-    <div className="modal-back" onClick={onClose}>
-      <div className={`modal panel ${member.legendary ? "legendary-card" : ""}`} onClick={(e) => e.stopPropagation()}>
-        <Avatar url={member.avatar} color="neutral" size={88} legendary={member.legendary} />
-        <div className="modal-title">{member.name}</div>
-        {member.title && <div className="title-badge big">{member.legendary ? "Legendary · " : ""}{member.title}</div>}
-        {member.respect !== null && <div className="respect">{member.respect} <span className="respect-word">Respect</span> <span className="rank-title">{respectTitle(member.respect)}</span></div>}
-        <div className="clan-chip">
-          <ClanLogo clan={clan} size={30} />
-          <div><b>{clan.name}</b><span>member since {member.joinedAt.toLocaleDateString()}</span></div>
-        </div>
-        <button className="game-btn wood" onClick={onClose}>Close</button>
-      </div>
-    </div>
-  );
-}
-
-export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; preview: Clan; onPreview: (c: Clan) => void }) {
+export function ClanPage({ clan, preview, onPreview, onMembers }: { clan: ClanState; preview: Clan; onPreview: (c: Clan) => void; onMembers: (c: Clan) => void }) {
   const [popup, setPopup] = useState<"join" | "locked" | null>(null);
   const [busy, setBusy] = useState(false);
-  const [members, setMembers] = useState<Member[] | null>(null);
-  const [picked, setPicked] = useState<Member | null>(null);
   const m = clan.membership;
   const mine = m?.clan.id === preview.id;
   const tabs = (
     <div className="clan-tabs">
       {CLANS.map((c) => (
-        <button key={c.id} className={c.id === preview.id ? "on" : ""} style={{ ["--accent" as string]: c.color }} onClick={() => { onPreview(c); setPopup(null); setMembers(null); }}>
+        <button key={c.id} className={c.id === preview.id ? "on" : ""} style={{ ["--accent" as string]: c.color }} onClick={() => { onPreview(c); setPopup(null); }}>
           {c.name}
         </button>
       ))}
     </div>
   );
-  const toggleMembers = async () => setMembers(members ? null : await loadMembers(preview.id));
   const membersBtn = (
-    <button className="game-btn wood" onClick={toggleMembers}>
-      {members ? "Hide members" : "Members"}
+    <button className="game-btn wood" onClick={() => onMembers(preview)}>
+      Members
     </button>
-  );
-  const overlays = (
-    <>
-      {members && <MembersPanel members={members} onPick={setPicked} />}
-      {picked && <MemberModal member={picked} clan={preview} onClose={() => setPicked(null)} />}
-    </>
   );
 
   // Your own clan
@@ -147,7 +94,6 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
         </div>
         <div className="look-hint">Drag to look around · pinch to zoom</div>
         <div className="spacer" />
-        {overlays}
         <div className="row stretch">
           {membersBtn}
           <button className="game-btn red" disabled>
@@ -171,7 +117,6 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
       {tabs}
       <div className="look-hint">{m ? `Scouting a rival empire` : "Choose your clan"} · drag to look around</div>
       <div className="spacer" />
-      {overlays}
       <div className="clan-card panel" style={{ ["--accent" as string]: preview.color }}>
         <div className="clan-card-top">
           <ClanLogo clan={preview} size={40} />
@@ -228,7 +173,7 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
 type Ranked = { id: string; username: string; avatar_url: string | null; respect: number; title?: string | null; legendary?: boolean };
 
 // The throne: the player with the most Respect sits on it. Clans are ranked by their members' total.
-export function ThronePage({ clanRespect, myId }: { clanRespect: Record<string, number>; myId: string }) {
+export function ThronePage({ clanRespect, myId, onPlayer }: { clanRespect: Record<string, number>; myId: string; onPlayer: (id: string) => void }) {
   const [view, setView] = useState<"players" | "clans">("players");
   const [top, setTop] = useState<Ranked[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -249,14 +194,14 @@ export function ThronePage({ clanRespect, myId }: { clanRespect: Record<string, 
         <>
           <div className="throne-seat">
             <div className="throne-label">THE THRONE</div>
-            {king ? <Avatar url={king.avatar_url} color="me" size={84} legendary={king.legendary} /> : <div className="throne-empty">?</div>}
+            {king ? <button className="member-row center-row" onClick={() => onPlayer(king.id)}><Avatar url={king.avatar_url} color="me" size={84} legendary={king.legendary} /></button> : <div className="throne-empty">?</div>}
             <div className="throne-holder">{king ? king.username : failed ? "Respect isn't set up yet" : "…"}</div>
             {king && <div className="respect">{king.respect} <span className="respect-word">Respect</span> <span className="rank-title">{respectTitle(king.respect)}</span></div>}
           </div>
           <div className="parchment">
             <ol className="rank-list">
               {(top ?? []).slice(1).map((p, i) => (
-                <li key={p.id} className={p.id === myId ? "me" : ""}>
+                <li key={p.id} className={p.id === myId ? "me" : ""} onClick={() => onPlayer(p.id)}>
                   <span className="rank-no">{i + 2}</span>
                   <Avatar url={p.avatar_url} color="neutral" size={34} legendary={p.legendary} />
                   <div className="pl-text">

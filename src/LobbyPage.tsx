@@ -18,6 +18,7 @@ type Props = {
   onField: (f: FieldId) => void;
   respect: number;
   onTrain: () => void;
+  onPlayer: (id: string) => void;
 };
 
 // Pictures of each battlefield for the cards (rendered once, in the 3D chunk).
@@ -41,7 +42,7 @@ function useShots() {
   return shots;
 }
 
-export default function LobbyPage({ players, status, notice, onChallenge, onFindMatch, onCancel, field, onField, respect, onTrain }: Props) {
+export default function LobbyPage({ players, status, notice, onChallenge, onFindMatch, onCancel, field, onField, respect, onTrain, onPlayer }: Props) {
   const shots = useShots();
   const trackRef = useRef<HTMLDivElement>(null);
   const isMode = field !== "training";
@@ -129,7 +130,9 @@ export default function LobbyPage({ players, status, notice, onChallenge, onFind
             <ul className="player-list">
               {shown.map((p) => (
                 <li key={p.id}>
-                  <Avatar url={p.avatar} color="neutral" size={40} legendary={p.legendary} />
+                  <button className="member-row shrink" onClick={() => onPlayer(p.id)} aria-label={`Open ${p.name}'s profile`}>
+                    <Avatar url={p.avatar} color="neutral" size={40} legendary={p.legendary} />
+                  </button>
                   {clanById(p.clan) && <ClanLogo clan={clanById(p.clan)!} size={22} />}
                   <div className="pl-text">
                     <div className="pl-name">

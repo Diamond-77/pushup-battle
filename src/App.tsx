@@ -13,6 +13,8 @@ import { useClan } from "./useClan";
 import { countdownSound, defeatSound, drawSound, goSound, repSound, victoryCall, victorySound } from "./sound";
 import Guide, { guideDone } from "./Guide";
 import Training from "./Training";
+import PlayerPage from "./PlayerPage";
+import ClanMembersPage from "./ClanMembersPage";
 import { START_RESPECT, MODES, FIELDS, type FieldId } from "./config";
 import { supabase } from "./supabase";
 // Three.js is big, so the palace loads in its own chunk after the app shows.
@@ -47,6 +49,9 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
   const myClan = clan.membership?.clan ?? null;
   const respect = profile.respect ?? START_RESPECT;
   const me = { id: profile.id, name: profile.username, avatar: profile.avatar_url, title: profile.title ?? null, legendary: !!profile.legendary, clan: myClan?.id ?? null, respect };
+  const [viewPlayer, setViewPlayer] = useState<string | null>(null); // a player's profile page
+  const [viewMembers, setViewMembers] = useState<Clan | null>(null); // a clan's rank tree page
+  useEffect(() => { setViewPlayer(null); setViewMembers(null); }, [tab]);
   const [field, setField] = useState<FieldId>("brawl"); // selected battlefield on the Battle page
   // Respect only changes on the server, so re-read the profile after a battle or a training claim.
   const refreshProfile = useCallback(async () => {
@@ -183,8 +188,8 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
             )}
           </Suspense>
         )}
-        {!inMatch && tab === "throne" && <ThronePage clanRespect={clan.respect} myId={profile.id} />}
-        {!inMatch && tab === "clan" && <ClanPage clan={clan} preview={preview} onPreview={setPreview} />}
+        {!inMatch && tab === "throne" && <ThronePage clanRespect={clan.respect} myId={profile.id} onPlayer={setViewPlayer} />}
+        {!inMatch && tab === "clan" && <ClanPage clan={clan} preview={preview} onPreview={setPreview} onMembers={setViewMembers} />}
         {!inMatch && tab === "battle" && (
           <LobbyPage
             players={lobby.players}
@@ -197,10 +202,13 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
             onField={setField}
             respect={respect}
             onTrain={() => setTab("train")}
+            onPlayer={setViewPlayer}
           />
         )}
         {!inMatch && tab === "profile" && <ProfilePage profile={profile} email={email} onChange={onProfile} membership={clan.membership} />}
 
+        {menu && viewMembers && !viewPlayer && <ClanMembersPage clan={viewMembers} onBack={() => setViewMembers(null)} onPlayer={setViewPlayer} />}
+        {menu && viewPlayer && <PlayerPage id={viewPlayer} myId={profile.id} onBack={() => setViewPlayer(null)} />}
         {lobby.incoming && !inMatch && (
           <div className="modal-back">
             <div className="modal glass">

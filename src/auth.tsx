@@ -4,7 +4,7 @@ import { supabase, authUrlError } from "./supabase";
 
 // title / legendary can only be set by the developer in the database (supabase/titles.sql)
 // respect is only changed by the server (supabase/economy.sql)
-export type Profile = { id: string; username: string; avatar_url: string | null; title?: string | null; legendary?: boolean; respect?: number };
+export type Profile = { id: string; username: string; avatar_url: string | null; title?: string | null; legendary?: boolean; respect?: number; bio?: string | null };
 
 // Current session plus the matching profiles row (null until the user picks a username).
 export function useAuth() {
@@ -70,6 +70,7 @@ export function AuthScreen() {
     authUrlError ? "Google sign-in failed: " + authUrlError.replace(/\+/g, " ") : null,
   );
   const [canResend, setCanResend] = useState(false);
+  const [withEmail, setWithEmail] = useState(false); // Google first; email form only when asked
   const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
@@ -152,6 +153,31 @@ export function AuthScreen() {
 
   const action = mode === "signup" ? "Create account" : mode === "login" ? "Log in" : "Send reset link";
 
+  // Main screen: one big Google button, email as the second choice.
+  if (!withEmail && mode !== "forgot") {
+    return (
+      <div className="auth">
+        <AuthHero />
+        <div className="auth-card glass">
+          {!supabase && <p className="form-msg error">Supabase env vars are missing.</p>}
+          <button className="google-btn big" onClick={google}>
+            <GoogleLogo />
+            Continue with Google
+          </button>
+          <p className="muted small txt-center">Fastest: no password, no confirmation email.</p>
+          <div className="divider"><span>or</span></div>
+          <button className="pill ghost wide-pill" onClick={() => setWithEmail(true)}>
+            <MailIcon /> Continue with email
+          </button>
+          {message && <p className="form-msg">{message}</p>}
+          <p className="fine">
+            By continuing you agree to our <a href="/privacy.html">privacy policy</a>.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="auth">
       <AuthHero />
@@ -173,17 +199,6 @@ export function AuthScreen() {
         )}
         {!supabase && <p className="form-msg error">Supabase env vars are missing.</p>}
 
-        {mode !== "forgot" && (
-          <>
-            <button className="google-btn" onClick={google}>
-              <GoogleLogo />
-              Continue with Google
-            </button>
-            <div className="divider">
-              <span>or with email</span>
-            </div>
-          </>
-        )}
 
         <form onSubmit={submit}>
           <label className="in">
@@ -223,9 +238,13 @@ export function AuthScreen() {
 
         {message && <p className="form-msg">{message}</p>}
         {canResend && resendButton}
-        {mode === "forgot" && (
+        {mode === "forgot" ? (
           <button className="link-btn" onClick={go("login")}>
             Back to log in
+          </button>
+        ) : (
+          <button className="link-btn" onClick={() => setWithEmail(false)}>
+            Back to Continue with Google
           </button>
         )}
         <p className="fine">
