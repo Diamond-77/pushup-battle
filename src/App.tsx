@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { AuthScreen, ProfileSetup, useAuth, type Profile } from "./auth";
+import { AuthScreen, NewPasswordScreen, ProfileSetup, useAuth, type Profile } from "./auth";
 import Dock, { type Tab } from "./Dock";
 import Avatar from "./Avatar";
 import Hud from "./Hud";
@@ -10,9 +10,10 @@ import ProfilePage from "./ProfilePage";
 import { useMatch } from "./useMatch";
 
 export default function App() {
-  const { session, profile, setProfile, loading } = useAuth();
+  const { session, profile, setProfile, loading, recovering, doneRecovering } = useAuth();
 
   if (loading) return <main className="app"><div className="auth"><div className="brand">PUSHUP BATTLE</div></div></main>;
+  if (recovering) return <main className="app"><NewPasswordScreen onDone={doneRecovering} /></main>;
   if (!session) return <main className="app"><AuthScreen /></main>;
   if (!profile) return <main className="app"><ProfileSetup userId={session.user.id} onDone={setProfile} /></main>;
   return <Game profile={profile} email={session.user.email} onProfile={setProfile} />;
