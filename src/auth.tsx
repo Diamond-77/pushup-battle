@@ -237,7 +237,7 @@ export function AuthScreen() {
 function AuthHero() {
   return (
     <div className="auth-hero">
-      <div className="auth-seal">敬</div>
+      <img src="/icon-192.png" alt="" className="auth-logo" />
       <div className="brush-title hero-title">Pushup Battle</div>
       <p className="tagline">Train. Earn Respect. Claim the Throne.</p>
     </div>

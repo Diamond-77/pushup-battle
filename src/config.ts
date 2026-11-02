@@ -52,7 +52,7 @@ export const PALACE = {
   MAX_PIXEL_RATIO: 1.75, // sharper costs battery; 1.75 looks crisp on phones
   SHADOW_SIZE: 1024,
   MIN_DISTANCE: 45, // closest zoom
-  MAX_DISTANCE: 190, // farthest zoom
+  MAX_DISTANCE: 210, // farthest zoom
   AUTO_ROTATE_SPEED: 0.35, // slow drift when idle
   RESUME_ROTATE_MS: 4000, // start drifting again this long after a drag
 };

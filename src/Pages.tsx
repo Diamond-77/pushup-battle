@@ -3,13 +3,11 @@ import type { Profile } from "./auth";
 
 // Full-page screens drawn over the 3D palace.
 
-export function RespectSeal({ size = 22 }: { size?: number }) {
-  return (
-    <span className="seal" style={{ width: size, height: size, fontSize: size * 0.68 }}>
-      敬
-    </span>
-  );
-}
+const FlagIcon = ({ size = 26 }: { size?: number }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 21V4M6 4h11l-2.5 4L17 12H6" />
+  </svg>
+);
 
 export function HomePage({ profile, onBattle, onTrain }: { profile: Profile; onBattle: () => void; onTrain: () => void }) {
   return (
@@ -20,12 +18,12 @@ export function HomePage({ profile, onBattle, onTrain }: { profile: Profile; onB
           <div>
             <div className="plaque-name">{profile.username}</div>
             <div className="respect">
-              <RespectSeal size={18} /> 0
+              0 <span className="respect-word">Respect</span>
             </div>
           </div>
         </div>
         <div className="clan-banner">
-          <span className="clan-glyph">無</span>
+          <span className="clan-glyph"><FlagIcon /></span>
           <span className="clan-banner-text">No clan yet</span>
         </div>
       </div>
@@ -48,7 +46,7 @@ export function ClanPage() {
   return (
     <div className="page clear">
       <div className="clan-head panel">
-        <span className="clan-glyph big">龍</span>
+        <span className="clan-glyph big"><FlagIcon size={32} /></span>
         <div>
           <div className="brush-title">Your Sect</div>
           <div className="muted">Clans are coming soon. This is a preview of a clan palace.</div>

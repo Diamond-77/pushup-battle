@@ -482,3 +482,5 @@ body { background: var(--ink); }
 /* Profile */
 .field { color: #b9ab90; }
 input { background: rgba(0,0,0,0.35); }
+.respect-word { font-family: "Inter", sans-serif; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); }
+.clan-glyph { display: grid; place-items: center; }

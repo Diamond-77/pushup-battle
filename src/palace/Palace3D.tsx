@@ -23,7 +23,7 @@ export default function Palace3D({ clan, className }: { clan: string; className?
     scene.fog = new THREE.Fog(0xe4ecf0, 180, 650);
 
     const camera = new THREE.PerspectiveCamera(42, 1, 1, 1200);
-    camera.position.set(0, 52, 112);
+    camera.position.set(0, 58, 122);
 
     scene.add(new THREE.HemisphereLight(0xdfefff, 0x6f8f4a, 1.4));
     const sun = new THREE.DirectionalLight(0xfff1d6, 2.2);
@@ -31,13 +31,13 @@ export default function Palace3D({ clan, className }: { clan: string; className?
     sun.castShadow = true;
     sun.shadow.mapSize.set(PALACE.SHADOW_SIZE, PALACE.SHADOW_SIZE);
     const sc = sun.shadow.camera;
-    sc.left = sc.bottom = -80;
-    sc.right = sc.top = 80;
+    sc.left = sc.bottom = -100;
+    sc.right = sc.top = 100;
     sc.near = 10;
     sc.far = 300;
     scene.add(sun);
 
-    const { root, mist } = buildPalace(clan);
+    const { root, tick } = buildPalace(clan);
     scene.add(root);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -74,8 +74,8 @@ export default function Palace3D({ clan, className }: { clan: string; className?
     const clock = new THREE.Clock();
     renderer.setAnimationLoop(() => {
       if (document.hidden) return;
-      const t = clock.getElapsedTime();
-      mist.children.forEach((m, i) => (m.position.x += Math.sin(t * 0.1 + i) * 0.02));
+      const t = clock.elapsedTime;
+      tick(t, Math.min(0.05, clock.getDelta()));
       controls.update();
       renderer.render(scene, camera);
     });
@@ -88,6 +88,9 @@ export default function Palace3D({ clan, className }: { clan: string; className?
       scene.traverse((o) => {
         const mesh = o as THREE.Mesh;
         mesh.geometry?.dispose();
+        const mat = mesh.material as THREE.Material | undefined;
+        if (mat && "map" in mat) (mat as THREE.MeshToonMaterial).map?.dispose();
+        mat?.dispose?.();
       });
       renderer.dispose();
       renderer.domElement.remove();
