@@ -3,7 +3,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 
 export type PlayerStatus = "idle" | "searching" | "in_match";
-export type Player = { id: string; name: string; avatar: string | null; status: PlayerStatus };
+export type Player = { id: string; name: string; avatar: string | null; status: PlayerStatus; title?: string | null; legendary?: boolean; clan?: string | null };
 export type MatchInfo = { matchId: string; creator: boolean; opponent: Player };
 
 type LobbyMsg =
@@ -14,7 +14,7 @@ type LobbyMsg =
 
 // Presence channel "lobby": who is online, challenges, and pairing into a match.
 // Pairing rule: only the player with the smaller id creates the match.
-export function useLobby(me: { id: string; name: string; avatar: string | null }) {
+export function useLobby(me: Omit<Player, "status">) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [status, setStatusState] = useState<PlayerStatus>("idle");
   const [incoming, setIncoming] = useState<Player | null>(null);
@@ -112,7 +112,7 @@ export function useLobby(me: { id: string; name: string; avatar: string | null }
   // Re-announce when the name or picture changes.
   useEffect(() => {
     channelRef.current?.track(self());
-  }, [me.name, me.avatar]);  
+  }, [me.name, me.avatar, me.title, me.legendary, me.clan]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     players,

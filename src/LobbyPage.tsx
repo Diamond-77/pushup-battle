@@ -1,4 +1,6 @@
 import Avatar from "./Avatar";
+import ClanLogo from "./ClanLogo";
+import { clanById } from "./clans";
 import type { Player, PlayerStatus } from "./lobby";
 
 const STATUS_LABEL: Record<PlayerStatus, string> = { idle: "Online", searching: "Looking for a match", in_match: "In a match" };
@@ -33,9 +35,13 @@ export default function LobbyPage({ players, status, notice, onChallenge, onFind
       <ul className="player-list">
         {players.map((p) => (
           <li key={p.id}>
-            <Avatar url={p.avatar} color="neutral" size={40} />
+            <Avatar url={p.avatar} color="neutral" size={40} legendary={p.legendary} />
+            {clanById(p.clan) && <ClanLogo clan={clanById(p.clan)!} size={22} />}
             <div className="pl-text">
-              <div className="pl-name">{p.name}</div>
+              <div className="pl-name">
+                {p.name}
+                {p.title && <span className="title-badge">{p.title}</span>}
+              </div>
               <div className={`pl-status ${p.status}`}>{STATUS_LABEL[p.status]}</div>
             </div>
             <button className="pill" disabled={p.status === "in_match" || status === "in_match"} onClick={() => onChallenge(p)}>

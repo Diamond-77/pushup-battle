@@ -1,7 +1,7 @@
 import Avatar from "./Avatar";
 import { barValue } from "./match";
 
-type Side = { name: string; avatar: string | null };
+type Side = { name: string; avatar: string | null; legendary?: boolean };
 type Props = { myReps: number; oppReps: number; me: Side; opp: Side; secondsLeft: number };
 
 export default function Hud({ myReps, oppReps, me, opp, secondsLeft }: Props) {
@@ -13,14 +13,14 @@ export default function Hud({ myReps, oppReps, me, opp, secondsLeft }: Props) {
     <header className="hud">
       <div className="hud-row">
         <div className="player">
-          <Avatar url={me.avatar} color="me" />
+          <Avatar url={me.avatar} color="me" legendary={me.legendary} />
           <div className="name">{me.name}</div>
         </div>
         <div className="timer">
           {mm}:{ss}
         </div>
         <div className="player">
-          <Avatar url={opp.avatar} color="opp" />
+          <Avatar url={opp.avatar} color="opp" legendary={opp.legendary} />
           <div className="name">{opp.name}</div>
         </div>
       </div>

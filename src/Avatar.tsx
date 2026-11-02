@@ -1,7 +1,7 @@
 // Hexagon avatar: the player's picture, or a silhouette when they have none.
-export default function Avatar({ url, color, size = 38 }: { url?: string | null; color: "me" | "opp" | "neutral"; size?: number }) {
+export default function Avatar({ url, color, size = 38, legendary }: { url?: string | null; color: "me" | "opp" | "neutral"; size?: number; legendary?: boolean }) {
   return (
-    <div className={`hex ${color}`} style={{ width: size, height: size * 1.1 }}>
+    <div className={`hex ${color} ${legendary ? "legendary" : ""}`} style={{ width: size, height: size * 1.1 }}>
       <div className="hex-inner">
         {url ? (
           <img src={url} alt="" className="hex-img" />

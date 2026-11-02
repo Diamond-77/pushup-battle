@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Avatar from "./Avatar";
+import ClanLogo from "./ClanLogo";
 import { CLANS, type Clan } from "./clans";
 import { CLAN_DAYS } from "./config";
 import { daysLeft, loadMembers, type Member, type useClan } from "./useClan";
@@ -18,16 +19,17 @@ export function HomePage({ profile, clan, onBattle, onTrain }: { profile: Profil
     <div className="page home-page clear">
       <div className="home-top">
         <div className="plaque">
-          <Avatar url={profile.avatar_url} color="me" size={46} />
+          <Avatar url={profile.avatar_url} color="me" size={46} legendary={profile.legendary} />
           <div>
             <div className="plaque-name">{profile.username}</div>
+            {profile.title && <div className="title-badge">{profile.title}</div>}
             <div className="respect">
               0 <span className="respect-word">Respect</span>
             </div>
           </div>
         </div>
         <div className="clan-banner" style={clan ? { background: `linear-gradient(180deg, ${clan.color}, #2a1810)` } : undefined}>
-          <span className="clan-glyph"><FlagIcon /></span>
+          <span className="clan-glyph">{clan ? <ClanLogo clan={clan} size={34} /> : <FlagIcon />}</span>
           <span className="clan-banner-text">{clan ? clan.name : "Lone warrior"}</span>
         </div>
       </div>
@@ -73,7 +75,7 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
       <div className="page clear">
         {tabs}
         <div className="clan-head panel">
-          <span className="clan-glyph big" style={{ background: m.clan.color }}><FlagIcon size={32} /></span>
+          <ClanLogo clan={m.clan} size={58} />
           <div>
             <div className="brush-title">{m.clan.name}</div>
             <div className="muted">{m.clan.motto}</div>
@@ -130,7 +132,8 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
       <div className="spacer" />
       <div className="clan-card panel" style={{ ["--accent" as string]: preview.color }}>
         <div className="clan-card-top">
-          <div className="brush-title">{preview.name}</div>
+          <ClanLogo clan={preview} size={40} />
+          <div className="brush-title grow">{preview.name}</div>
           <span className="stat-chip">{plural(clan.counts[preview.id] ?? 0, "member")}</span>
         </div>
         <div className="muted">{preview.motto}</div>

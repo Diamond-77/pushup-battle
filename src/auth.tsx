@@ -2,7 +2,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase, authUrlError } from "./supabase";
 
-export type Profile = { id: string; username: string; avatar_url: string | null };
+// title / legendary can only be set by the developer in the database (supabase/titles.sql)
+export type Profile = { id: string; username: string; avatar_url: string | null; title?: string | null; legendary?: boolean };
 
 // Current session plus the matching profiles row (null until the user picks a username).
 export function useAuth() {
@@ -34,7 +35,7 @@ export function useAuth() {
     setLoading(true);
     supabase
       .from("profiles")
-      .select("id, username, avatar_url")
+      .select("*")
       .eq("id", session.user.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -308,7 +309,7 @@ export function ProfileSetup({ userId, onDone }: { userId: string; onDone: (p: P
     const { data, error } = await supabase
       .from("profiles")
       .insert({ id: userId, username: username.trim() })
-      .select("id, username, avatar_url")
+      .select("*")
       .single();
     setBusy(false);
     if (error) setMessage(error.code === "23505" ? "That name is taken, try another." : error.message);

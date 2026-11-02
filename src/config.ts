@@ -59,3 +59,7 @@ export const PALACE = {
 
 export const SOUND_VOLUME = 0.7; // 0 = muted, 1 = loudest
 export const CLAN_DAYS = 30; // a clan membership lasts this many days (also set in supabase/clans.sql)
+
+// "Report an issue" contacts on the Profile page
+export const CONTACT_EMAIL = "huidromdiamond123@gmail.com";
+export const CONTACT_WHATSAPP = "916009271012"; // country code + number, no "+" (wa.me format)

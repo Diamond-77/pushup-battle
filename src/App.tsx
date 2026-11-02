@@ -38,13 +38,13 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
   const [facing, setFacing] = useState<"user" | "environment">("user");
   const [practiceReps, setPracticeReps] = useState(0);
 
-  const me = { id: profile.id, name: profile.username, avatar: profile.avatar_url };
+  const clan = useClan(profile.id);
+  const myClan = clan.membership?.clan ?? null;
+  const me = { id: profile.id, name: profile.username, avatar: profile.avatar_url, title: profile.title ?? null, legendary: !!profile.legendary, clan: myClan?.id ?? null };
   const lobby = useLobby(me);
   const m = useMatch(lobby.match, profile.id);
   const inMatch = lobby.match !== null;
   const menu = !inMatch && tab !== "train"; // a full page covers the camera
-  const clan = useClan(profile.id);
-  const myClan = clan.membership?.clan ?? null;
   const [preview, setPreview] = useState<Clan>(CLANS[0]);
   // Background palace: the clan being browsed on the Clan tab, otherwise your own clan's (lone warriors get a clear day)
   const shown = tab === "clan" ? preview : myClan;
@@ -84,8 +84,8 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
             <Hud
               myReps={m.myReps}
               oppReps={m.oppReps}
-              me={{ name: me.name, avatar: me.avatar }}
-              opp={{ name: lobby.match!.opponent.name, avatar: lobby.match!.opponent.avatar }}
+              me={{ name: me.name, avatar: me.avatar, legendary: me.legendary }}
+              opp={{ name: lobby.match!.opponent.name, avatar: lobby.match!.opponent.avatar, legendary: lobby.match!.opponent.legendary }}
               secondsLeft={m.secondsLeft}
             />
             {m.phase === "waiting" && (
@@ -163,12 +163,12 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
             onCancel={lobby.cancel}
           />
         )}
-        {!inMatch && tab === "profile" && <ProfilePage profile={profile} email={email} onChange={onProfile} />}
+        {!inMatch && tab === "profile" && <ProfilePage profile={profile} email={email} onChange={onProfile} membership={clan.membership} />}
 
         {lobby.incoming && !inMatch && (
           <div className="modal-back">
             <div className="modal glass">
-              <Avatar url={lobby.incoming.avatar} color="opp" size={72} />
+              <Avatar url={lobby.incoming.avatar} color="opp" size={72} legendary={lobby.incoming.legendary} />
               <div className="modal-title">{lobby.incoming.name} challenges you!</div>
               <div className="row">
                 <button className="pill ghost" onClick={lobby.decline}>
