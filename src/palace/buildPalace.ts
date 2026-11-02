@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import type { Env } from "./weather";
 
 // Builds a detailed, stylized sect palace in an ink-and-paint look:
 // cel shading, dark ink outlines, painted textures for roof tiles and lattice windows.
@@ -160,7 +161,7 @@ function toonRamp() {
 const toon = (color: number, map?: THREE.Texture, extra: Partial<THREE.MeshToonMaterialParameters> = {}) =>
   new THREE.MeshToonMaterial({ color: map ? 0xffffff : color, map, gradientMap: toonRamp(), ...extra });
 
-function materials(s: PalaceStyle) {
+function materials(s: PalaceStyle, env: Env) {
   return {
     wall: toon(0, wallTexture(s.wall)),
     wallPlain: toon(s.wall),
@@ -173,7 +174,7 @@ function materials(s: PalaceStyle) {
     rail: toon(0x6b2a20),
     bracket: toon(0x2f6f6a),
     trim: toon(s.trim),
-    lamp: toon(0xfff1c9, undefined, { emissive: 0x5a4010 }),
+    lamp: toon(0xfff1c9, undefined, { emissive: 0xffb347, emissiveIntensity: env.lamp }),
     banner: toon(s.banner, undefined, { side: THREE.DoubleSide }),
     grass: toon(0x8dbb63),
     water: toon(0x79bfd0),
@@ -504,7 +505,7 @@ function peaks(c: Ctx, rand: () => number) {
 }
 
 // Far mountain silhouettes, like the paler layers of an ink painting.
-function mountains(rand: () => number) {
+function mountains(rand: () => number, tint: number) {
   const g = new THREE.Group();
   const layers = [
     { r: 440, base: 90, amp: 160, low: 0x9fb4c8, mid: 0xc4d2df, snow: 0xf7f9fc },
@@ -512,6 +513,7 @@ function mountains(rand: () => number) {
     { r: 300, base: 16, amp: 40, low: 0x6f9466, mid: 0x86a87a, snow: 0xa6c492 },
   ];
   const SEG = 160;
+  const tintC = new THREE.Color(tint);
   for (const L of layers) {
     const waves = Array.from({ length: 4 }, (_, i) => ({ f: 2 + i * 3 + Math.floor(rand() * 4), p: rand() * 6.28, a: 1 / (i + 1) }));
     const pos: number[] = [], col: number[] = [], idx: number[] = [];
@@ -524,7 +526,7 @@ function mountains(rand: () => number) {
       const x = Math.cos(t) * L.r, z = Math.sin(t) * L.r;
       [-20, h * 0.55, h * 0.8, h].forEach((y, k) => {
         pos.push(x, y, z);
-        c.set(k < 2 ? L.low : h > L.base + L.amp * 0.45 ? L.snow : L.mid);
+        c.set(k < 2 ? L.low : h > L.base + L.amp * 0.45 ? L.snow : L.mid).multiply(tintC);
         col.push(c.r, c.g, c.b);
       });
     }
@@ -542,7 +544,7 @@ function mountains(rand: () => number) {
   return g;
 }
 
-function softTexture() {
+export function softTexture() {
   const c = document.createElement("canvas");
   c.width = c.height = 128;
   const x = c.getContext("2d")!;
@@ -554,15 +556,15 @@ function softTexture() {
   return new THREE.CanvasTexture(c);
 }
 
-export function skyTexture() {
+export function skyTexture(stops: [string, string, string] = ["#6fa8d6", "#bcd8ec", "#f4ecdc"]) {
   const c = document.createElement("canvas");
   c.width = 4;
   c.height = 256;
   const x = c.getContext("2d")!;
   const gr = x.createLinearGradient(0, 0, 0, 256);
-  gr.addColorStop(0, "#6fa8d6");
-  gr.addColorStop(0.55, "#bcd8ec");
-  gr.addColorStop(1, "#f4ecdc");
+  gr.addColorStop(0, stops[0]);
+  gr.addColorStop(0.55, stops[1]);
+  gr.addColorStop(1, stops[2]);
   x.fillStyle = gr;
   x.fillRect(0, 0, 4, 256);
   const t = new THREE.CanvasTexture(c);
@@ -572,12 +574,12 @@ export function skyTexture() {
 
 /* ---------- the whole compound ---------- */
 
-export function buildPalace(clan: string) {
-  const s = styleFor(clan);
+export function buildPalace(clan: string, env: Env, overrides: Partial<PalaceStyle> = {}) {
+  const s = { ...styleFor(clan), ...overrides };
   const rand = rngFrom(clan + ":layout");
   const root = new THREE.Group();
   const b = new Builder();
-  const c: Ctx = { b, T: new THREE.Matrix4(), m: materials(s) };
+  const c: Ctx = { b, T: new THREE.Matrix4(), m: materials(s, env) };
   const lotus: THREE.Vector3[] = [];
 
   // ground with gentle hills outside the walls
@@ -690,13 +692,13 @@ export function buildPalace(clan: string) {
   }
   root.add(moss);
 
-  root.add(mountains(rand));
+  root.add(mountains(rand, env.mountainTint));
 
   // drifting mist
   const tex = softTexture();
   const mist = new THREE.Group();
   for (let i = 0; i < 18; i++) {
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xf6f0e4, transparent: true, opacity: 0.4, depthWrite: false }));
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: env.fog, transparent: true, opacity: 0.4, depthWrite: false }));
     const a = rand() * Math.PI * 2, r = 130 + rand() * 120;
     sp.position.set(Math.cos(a) * r, 10 + rand() * 25, Math.sin(a) * r);
     sp.scale.setScalar(60 + rand() * 60);

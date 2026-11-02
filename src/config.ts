@@ -56,3 +56,6 @@ export const PALACE = {
   AUTO_ROTATE_SPEED: 0.35, // slow drift when idle
   RESUME_ROTATE_MS: 4000, // start drifting again this long after a drag
 };
+
+export const SOUND_VOLUME = 0.7; // 0 = muted, 1 = loudest
+export const CLAN_DAYS = 30; // a clan membership lasts this many days (also set in supabase/clans.sql)

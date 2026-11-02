@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AuthScreen, NewPasswordScreen, ProfileSetup, useAuth, type Profile } from "./auth";
 import Dock, { type Tab } from "./Dock";
 import Avatar from "./Avatar";
@@ -8,6 +8,9 @@ import LobbyPage from "./LobbyPage";
 import PoseCounter from "./PoseCounter";
 import ProfilePage from "./ProfilePage";
 import { ClanPage, HomePage, ThronePage } from "./Pages";
+import { CLANS, type Clan } from "./clans";
+import { useClan } from "./useClan";
+import { countdownSound, defeatSound, drawSound, goSound, repSound, victorySound } from "./sound";
 // Three.js is big, so the palace loads in its own chunk after the app shows.
 const Palace3D = lazy(() => import("./palace/Palace3D"));
 import { useMatch } from "./useMatch";
@@ -21,7 +24,7 @@ export default function App() {
     return (
       <main className="app">
         <div className="screen">
-          <Suspense fallback={null}><Palace3D clan="Pushup Battle" /></Suspense>
+          <Suspense fallback={null}><Palace3D seed="Soraran Gate" weather="sunset" style={CLANS[1].palace} /></Suspense>
           <AuthScreen />
         </div>
       </main>
@@ -40,11 +43,28 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
   const m = useMatch(lobby.match, profile.id);
   const inMatch = lobby.match !== null;
   const menu = !inMatch && tab !== "train"; // a full page covers the camera
+  const clan = useClan(profile.id);
+  const myClan = clan.membership?.clan ?? null;
+  const [preview, setPreview] = useState<Clan>(CLANS[0]);
+  // Background palace: the clan being browsed on the Clan tab, otherwise your own clan's (lone warriors get a clear day)
+  const shown = tab === "clan" ? myClan ?? preview : myClan;
+
+  // Sounds for the countdown and the result
+  useEffect(() => {
+    if (m.phase === "countdown") (m.countdown > 0 ? countdownSound : goSound)();
+  }, [m.phase, m.countdown]);
+  useEffect(() => {
+    if (m.phase === "result") ({ win: victorySound, lose: defeatSound, draw: drawSound })[m.result]();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [m.phase]);
 
   // Reps go to the match while one is running, otherwise to the practice counter on Home.
   const repTarget = useRef<() => void>(() => {});
   repTarget.current = inMatch ? m.addMyRep : () => tab === "train" && setPracticeReps((r) => r + 1);
-  const onRep = useCallback(() => repTarget.current(), []);
+  const onRep = useCallback(() => {
+    repSound();
+    repTarget.current();
+  }, []);
 
   const backToLobby = () => {
     lobby.leaveMatch();
@@ -121,14 +141,14 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
           </div>
           </>
         )}
-        {!inMatch && tab === "home" && <HomePage profile={profile} onBattle={() => setTab("battle")} onTrain={() => setTab("train")} />}
+        {!inMatch && tab === "home" && <HomePage profile={profile} clan={myClan} onBattle={() => setTab("battle")} onTrain={() => setTab("train")} />}
         {menu && (
           <Suspense fallback={null}>
-            <Palace3D clan={tab === "clan" ? `${profile.username}'s sect` : "Pushup Battle"} />
+            <Palace3D seed={shown?.name ?? "Lone Warrior"} weather={shown?.weather ?? "day"} style={shown?.palace} />
           </Suspense>
         )}
         {!inMatch && tab === "throne" && <ThronePage />}
-        {!inMatch && tab === "clan" && <ClanPage />}
+        {!inMatch && tab === "clan" && <ClanPage clan={clan} preview={preview} onPreview={setPreview} />}
         {!inMatch && tab === "battle" && (
           <LobbyPage
             players={lobby.players}
