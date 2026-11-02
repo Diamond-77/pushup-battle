@@ -91,6 +91,15 @@ export const MODES: Record<ModeId, { name: string; seconds: number; bet: number;
   rank: { name: "Rank", seconds: 420, bet: 100, minRespect: 120, barStep: 1.5, blurb: "7 minutes. Needs 120 Respect to enter." },
 };
 export const BRAWL_MIN_REPS = 5;
+
+// The four battlefields on the swipeable mode select (training is the 4th)
+export type FieldId = ModeId | "training";
+export const FIELDS: { id: FieldId; place: string; weather: "day" | "sunset" | "night" | "storm" }[] = [
+  { id: "brawl", place: "Bamboo Ring", weather: "sunset" },
+  { id: "classic", place: "Courtyard Duel", weather: "day" },
+  { id: "rank", place: "Peak of Heaven", weather: "night" },
+  { id: "training", place: "Training Ground", weather: "day" },
+];
 export const START_RESPECT = 50;
 export const TRAINING_CAP = 50; // training refills Respect up to this, never beyond
 

@@ -1,17 +1,17 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { buildPalace, skyTexture, softTexture, type PalaceStyle } from "./buildPalace";
+import { buildArena, buildPalace, skyTexture, softTexture, type ArenaKind, type PalaceStyle } from "./buildPalace";
 import { ENVS } from "./weather";
 import type { Weather } from "../clans";
 import { PALACE } from "../config";
 import { thunder } from "../sound";
 
-type Props = { seed: string; weather?: Weather; style?: Partial<PalaceStyle>; className?: string };
+type Props = { seed: string; weather?: Weather; style?: Partial<PalaceStyle>; className?: string; arena?: ArenaKind };
 
 // A clan's palace in 3D, in that clan's weather. Drag to look around, pinch or scroll to zoom.
 // When nobody touches it, the camera drifts slowly around the palace.
-export default function Palace3D({ seed, weather = "day", style, className }: Props) {
+export default function Palace3D({ seed, weather = "day", style, className, arena }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const flashRef = useRef<HTMLDivElement>(null);
   const styleKey = JSON.stringify(style ?? {});
@@ -31,7 +31,8 @@ export default function Palace3D({ seed, weather = "day", style, className }: Pr
     scene.fog = new THREE.Fog(env.fog, env.fogNear, env.fogFar);
 
     const camera = new THREE.PerspectiveCamera(42, 1, 1, 1200);
-    camera.position.set(0, 58, 122);
+    if (arena) camera.position.set(26, 30, 72);
+    else camera.position.set(0, 58, 122);
 
     const hemi = new THREE.HemisphereLight(env.hemiSky, env.hemiGround, env.hemi);
     scene.add(hemi);
@@ -46,7 +47,8 @@ export default function Palace3D({ seed, weather = "day", style, className }: Pr
     sc.far = 400;
     scene.add(sun);
 
-    const { root, tick } = buildPalace(seed, env, style);
+    // a battlefield (mode select) or a clan palace
+    const { root, tick } = arena ? buildArena(arena, env) : buildPalace(seed, env, style);
     scene.add(root);
 
     // sky extras
@@ -121,11 +123,11 @@ export default function Palace3D({ seed, weather = "day", style, className }: Pr
     };
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(0, 6, -2);
+    controls.target.set(0, arena ? 3 : 6, arena ? -2 : -2);
     controls.enableDamping = true;
     controls.enablePan = false;
-    controls.minDistance = PALACE.MIN_DISTANCE;
-    controls.maxDistance = PALACE.MAX_DISTANCE;
+    controls.minDistance = arena ? 22 : PALACE.MIN_DISTANCE;
+    controls.maxDistance = arena ? 90 : PALACE.MAX_DISTANCE;
     controls.minPolarAngle = 0.35;
     controls.maxPolarAngle = 1.38;
     controls.autoRotate = true;
@@ -210,7 +212,7 @@ export default function Palace3D({ seed, weather = "day", style, className }: Pr
       renderer.domElement.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed, weather, styleKey]);
+  }, [seed, weather, styleKey, arena]);
 
   return (
     <div ref={hostRef} className={`palace3d ${className ?? ""}`}>

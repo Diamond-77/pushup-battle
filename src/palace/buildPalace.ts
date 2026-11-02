@@ -727,3 +727,191 @@ export function buildPalace(clan: string, env: Env, overrides: Partial<PalaceSty
 
   return { root, style: s, tick };
 }
+
+/* ---------- battlefields (mode select) ---------- */
+
+export type ArenaKind = "brawl" | "classic" | "rank" | "training";
+
+// Small fighting grounds in the same ink-and-paint style as the palaces, one per battle mode.
+export function buildArena(kind: ArenaKind, env: Env) {
+  const style: Record<ArenaKind, Partial<PalaceStyle>> = {
+    brawl: { wall: 0x8e2f2a, roof: 0x34394a, banner: 0xc8372d, autumn: 0.8 },
+    classic: { wall: 0xb23a2e, roof: 0x2f6d6b, banner: 0x3fbf8a, autumn: 0.5 },
+    rank: { wall: 0x3a3f5c, roof: 0x4d5562, banner: 0xe8b84a, autumn: 0 },
+    training: { wall: 0xa4432c, roof: 0x3d6b5f, banner: 0x3fbf8a, autumn: 0.2 },
+  };
+  const s = { ...styleFor(kind), ...style[kind] };
+  const rand = rngFrom("arena:" + kind);
+  const root = new THREE.Group();
+  const b = new Builder();
+  const c: Ctx = { b, T: new THREE.Matrix4(), m: materials(s, env) };
+  const spots: { p: THREE.Vector3; kind: TreeKind }[] = [];
+  const ring = (n: number, r: number, y: number, rot = Math.PI / n) =>
+    Array.from({ length: n }, (_, i) => {
+      const a = (i / n) * Math.PI * 2 + rot;
+      return new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r);
+    });
+  const grass = (size = 400) => {
+    const g = new THREE.PlaneGeometry(size, size, 40, 40);
+    g.rotateX(-Math.PI / 2);
+    const gp = g.attributes.position;
+    for (let i = 0; i < gp.count; i++) {
+      const x = gp.getX(i), z = gp.getZ(i), d = Math.hypot(x, z);
+      if (d > 40) gp.setY(i, Math.sin(x * 0.05) * Math.cos(z * 0.04) * 6 * Math.min(1, (d - 40) / 40));
+    }
+    g.computeVertexNormals();
+    b.add(g, c.m.grass, new THREE.Matrix4(), false);
+  };
+  const pole = (x: number, z: number, h: number, flag: THREE.Material, side = 1) => {
+    box(c, 0.3, h, 0.3, c.m.wood, x, 0, z);
+    put(c, new THREE.PlaneGeometry(2, 4.6), flag, M(x + side * 1.15, h - 2.8, z, 0), false);
+  };
+  const gate = (z: number, w: number, h: number) => {
+    for (const sx of [-1, 1]) {
+      box(c, 0.9, 0.6, 0.9, c.m.marble, sx * w / 2, 0, z);
+      put(c, new THREE.CylinderGeometry(0.4, 0.45, h, 10), c.m.wallPlain, M(sx * w / 2, h / 2, z), false);
+    }
+    box(c, w + 2, 0.7, 0.8, c.m.wood, 0, h - 1.4, z);
+    box(c, w + 1, 0.5, 0.6, c.m.trim, 0, h - 2.4, z);
+    roofRect(sub(c, M(0, 0, z)), w + 1, 1.2, h - 0.7, 0.5, 1.2, 1.0);
+  };
+
+  if (kind === "brawl") {
+    // Bamboo Ring: an octagonal stone ring with lantern posts and ropes, deep in a bamboo grove
+    grass();
+    put(c, new THREE.CylinderGeometry(13, 14, 1.4, 8), c.m.marble, M(0, 0.7, 0, Math.PI / 8));
+    put(c, new THREE.CylinderGeometry(11.6, 11.6, 0.12, 8), c.m.paving, M(0, 1.46, 0, Math.PI / 8), false);
+    put(c, new THREE.TorusGeometry(5, 0.18, 4, 32), c.m.banner, M(0, 1.55, 0).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2)), false);
+    for (let i = 0; i < 4; i++) stairs(sub(c, M(0, 0, 0, (i * Math.PI) / 2)), 4, 1.4, 2.4, 0, 0, 15.6);
+    const posts = ring(8, 12.4, 1.4);
+    posts.forEach((p) => {
+      box(c, 0.45, 3.6, 0.45, c.m.rail, p.x, p.y, p.z);
+      box(c, 0.8, 0.8, 0.8, c.m.lamp, p.x, p.y + 3.6, p.z);
+      put(c, new THREE.ConeGeometry(0.75, 0.6, 4), c.m.ridge, M(p.x, p.y + 4.7, p.z, Math.PI / 4));
+    });
+    for (const h of [1.3, 2.4]) posts.forEach((p, i) => beam(c, p.clone().setY(p.y + h), posts[(i + 1) % 8].clone().setY(p.y + h), 0.12, 0.12, c.m.banner, false));
+    for (const sx of [-1, 1]) {
+      const d = sub(c, M(sx * 17, 0, -6));
+      put(d, new THREE.CylinderGeometry(1.5, 1.5, 2.2, 14), c.m.banner, M(0, 2.4, 0).multiply(new THREE.Matrix4().makeRotationZ(Math.PI / 2)));
+      box(d, 0.3, 1.4, 2.4, c.m.wood, -0.6, 0, 0);
+      box(d, 0.3, 1.4, 2.4, c.m.wood, 0.6, 0, 0);
+    }
+    gate(-22, 9, 8);
+    for (let i = 0; i < 60; i++) {
+      const a = rand() * Math.PI * 2, r = 24 + rand() * 40;
+      spots.push({ p: new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r), kind: i % 5 === 0 ? "maple" : "bamboo" });
+    }
+  } else if (kind === "classic") {
+    // Courtyard Duel: a paved court between two halls, jade banners on one side, red on the other
+    grass();
+    const pave = new THREE.BoxGeometry(34, 0.4, 26);
+    const puv = pave.attributes.uv;
+    for (let i = 0; i < puv.count; i++) puv.setXY(i, puv.getX(i) * 8, puv.getY(i) * 6);
+    b.add(pave, c.m.paving, M(0, 0.2, 0), false);
+    box(c, 36, 0.3, 1, c.m.marble, 0, 0, 13.5);
+    box(c, 36, 0.3, 1, c.m.marble, 0, 0, -13.5);
+    railing(c, rect(17.5, 13, 0.4), 0.8, c.m.marble, true);
+    box(c, 0.4, 0.05, 20, c.m.trim, 0, 0.4, 0, 0, false);
+    hall(sub(c, M(0, 0.4, -20)), 18, 8, { wallH: 4.6, double: true, tiers: 2, spire: true });
+    gate(17, 10, 8.5);
+    const jade = toon(0x3fbf8a, undefined, { side: THREE.DoubleSide });
+    const red = toon(0xc8372d, undefined, { side: THREE.DoubleSide });
+    for (let z = -9; z <= 9; z += 6) {
+      pole(-19.5, z, 10, jade, 1);
+      pole(19.5, z, 10, red, -1);
+    }
+    for (const [x, z] of [[-10, 10], [10, 10], [-10, -10], [10, -10]]) lantern(c, x, z);
+    for (let i = 0; i < 40; i++) {
+      const a = rand() * Math.PI * 2, r = 30 + rand() * 40;
+      spots.push({ p: new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r), kind: rand() < 0.5 ? "maple" : "pine" });
+    }
+  } else if (kind === "rank") {
+    // Peak of Heaven: a round platform on a lone rock pillar above the clouds, a pagoda behind it
+    const col = new THREE.Color();
+    const rockGeo = new THREE.CylinderGeometry(17, 7, 120, 10, 12);
+    const pos = rockGeo.attributes.position, colors: number[] = [];
+    for (let k = 0; k < pos.count; k++) {
+      const x = pos.getX(k), y = pos.getY(k), z = pos.getZ(k);
+      const sc = 1 + 0.2 * Math.sin(y * 0.1) + 0.12 * Math.sin(Math.atan2(z, x) * 3 + y * 0.06);
+      pos.setXYZ(k, x * sc, y, z * sc);
+      col.set(y > 50 ? 0x7d8a6e : 0xa39e93);
+      colors.push(col.r, col.g, col.b);
+    }
+    rockGeo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    rockGeo.deleteAttribute("uv");
+    rockGeo.computeVertexNormals();
+    put(c, rockGeo, c.m.rock, M(0, -60, 0));
+    put(c, new THREE.CylinderGeometry(16, 16.5, 1.2, 24), c.m.marble, M(0, 0.6, 0));
+    put(c, new THREE.CylinderGeometry(10, 10, 0.1, 24), c.m.paving, M(0, 1.25, 0), false);
+    put(c, new THREE.TorusGeometry(10, 0.25, 4, 40), c.m.trim, M(0, 1.3, 0).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2)), false);
+    railing(c, ring(24, 15.6, 1.2), 0.9, c.m.marble, true);
+    hall(sub(c, M(0, 1.2, -10)), 7, 7, { tiers: 5, wallH: 3.6, spire: true, plinth: true });
+    for (const p of ring(6, 13, 1.2, Math.PI / 2 + 0.3)) if (p.z > -6) lantern(c, p.x, p.z);
+    for (const sx of [-1, 1]) pole(sx * 9, 8, 11, c.m.banner, sx);
+    // smaller rock pillars around in the sea of clouds
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + rand(), r = 50 + rand() * 60, h = 30 + rand() * 50;
+      const g = new THREE.CylinderGeometry(2 + rand() * 3, 8 + rand() * 6, h, 8, 6);
+      const gp = g.attributes.position, cc: number[] = [];
+      for (let k = 0; k < gp.count; k++) {
+        const y = gp.getY(k);
+        col.set(y > h * 0.4 ? 0x7d8a6e : 0xa39e93);
+        cc.push(col.r, col.g, col.b);
+      }
+      g.setAttribute("color", new THREE.Float32BufferAttribute(cc, 3));
+      g.deleteAttribute("uv");
+      g.computeVertexNormals();
+      put(c, g, c.m.rock, M(Math.cos(a) * r, h / 2 - 40 - rand() * 20, Math.sin(a) * r, rand() * 3));
+    }
+    for (let i = 0; i < 8; i++) {
+      const p = ring(8, 30 + rand() * 30, 0)[i];
+      spots.push({ p: p.setY(-20 - rand() * 10), kind: "pine" });
+    }
+  } else {
+    // Training Ground: a sand yard with wooden dummies, stone weights and a small hall
+    grass();
+    const sand = toon(0xd8c39a);
+    box(c, 30, 0.3, 24, sand, 0, 0, 0, 0, false);
+    railing(c, rect(15, 12, 0.3), 1.0, c.m.wood, true);
+    hall(sub(c, M(0, 0.3, -18)), 14, 7, { wallH: 4.2 });
+    for (let i = 0; i < 6; i++) {
+      const x = -10 + (i % 3) * 10, z = i < 3 ? -4 : 5;
+      put(c, new THREE.CylinderGeometry(0.55, 0.6, 3.6, 10), c.m.wood, M(x, 2.1, z));
+      for (const [h, ry] of [[2.8, 0.5], [2.8, -0.5], [1.9, 0]] as const)
+        put(c, new THREE.BoxGeometry(1.6, 0.18, 0.18), c.m.wood, M(x + Math.sin(ry) * 0.6, h, z + 0.6, ry + Math.PI / 2));
+      box(c, 1.6, 0.3, 1.6, c.m.marbleShade, x, 0.3, z);
+    }
+    for (let i = 0; i < 4; i++) {
+      put(c, new THREE.CylinderGeometry(0.9, 0.9, 0.5, 12), c.m.marbleShade, M(11 + (i % 2) * 2.2, 0.55, 8 - Math.floor(i / 2) * 2.2));
+    }
+    box(c, 0.25, 3.2, 4, c.m.rail, -13, 0.3, 8);
+    for (let k = 0; k < 5; k++) put(c, new THREE.CylinderGeometry(0.08, 0.08, 4.2, 5), c.m.wood, M(-12.6, 2.4, 6.4 + k * 0.8).multiply(new THREE.Matrix4().makeRotationZ(0.12)), false);
+    gate(14, 8, 7);
+    for (let i = 0; i < 50; i++) {
+      const a = rand() * Math.PI * 2, r = 26 + rand() * 45;
+      spots.push({ p: new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r), kind: rand() < 0.6 ? "pine" : "green" });
+    }
+  }
+
+  if (kind !== "rank") peaks(c, rand);
+  b.finish(root);
+  root.add(trees(rand, spots));
+  root.add(mountains(rand, env.mountainTint));
+
+  // drifting mist (a sea of clouds under the Peak of Heaven)
+  const tex = softTexture();
+  const mist = new THREE.Group();
+  const N = kind === "rank" ? 40 : 12;
+  for (let i = 0; i < N; i++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: kind === "rank" ? 0xdfe6f5 : env.fog, transparent: true, opacity: kind === "rank" ? 0.55 : 0.35, depthWrite: false }));
+    const a = rand() * Math.PI * 2, r = kind === "rank" ? 20 + rand() * 120 : 90 + rand() * 80;
+    sp.position.set(Math.cos(a) * r, kind === "rank" ? -12 - rand() * 10 : 8 + rand() * 18, Math.sin(a) * r);
+    sp.scale.setScalar(kind === "rank" ? 50 + rand() * 40 : 50 + rand() * 40);
+    mist.add(sp);
+  }
+  root.add(mist);
+  const tick = (t: number) => {
+    mist.children.forEach((m, i) => (m.position.x += Math.sin(t * 0.1 + i) * 0.03));
+  };
+  return { root, tick };
+}

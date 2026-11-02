@@ -13,7 +13,7 @@ import { useClan } from "./useClan";
 import { countdownSound, defeatSound, drawSound, goSound, repSound, victoryCall, victorySound } from "./sound";
 import Guide, { guideDone } from "./Guide";
 import Training from "./Training";
-import { START_RESPECT, MODES, type ModeId } from "./config";
+import { START_RESPECT, MODES, FIELDS, type FieldId } from "./config";
 import { supabase } from "./supabase";
 // Three.js is big, so the palace loads in its own chunk after the app shows.
 const Palace3D = lazy(() => import("./palace/Palace3D"));
@@ -47,7 +47,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
   const myClan = clan.membership?.clan ?? null;
   const respect = profile.respect ?? START_RESPECT;
   const me = { id: profile.id, name: profile.username, avatar: profile.avatar_url, title: profile.title ?? null, legendary: !!profile.legendary, clan: myClan?.id ?? null, respect };
-  const [mode, setMode] = useState<ModeId>("brawl");
+  const [field, setField] = useState<FieldId>("brawl"); // selected battlefield on the Battle page
   // Respect only changes on the server, so re-read the profile after a battle or a training claim.
   const refreshProfile = useCallback(async () => {
     const { data } = (await supabase?.from("profiles").select("*").eq("id", profile.id).maybeSingle()) ?? {};
@@ -176,7 +176,11 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
         {!inMatch && tab === "home" && <HomePage profile={profile} clan={myClan} onBattle={() => setTab("battle")} onTrain={() => setTab("train")} />}
         {menu && (
           <Suspense fallback={null}>
-            <Palace3D seed={shown?.name ?? "Lone Warrior"} weather={shown?.weather ?? "day"} style={shown?.palace} />
+            {tab === "battle" ? (
+              <Palace3D seed={field} arena={field} weather={FIELDS.find((f) => f.id === field)!.weather} />
+            ) : (
+              <Palace3D seed={shown?.name ?? "Lone Warrior"} weather={shown?.weather ?? "day"} style={shown?.palace} />
+            )}
           </Suspense>
         )}
         {!inMatch && tab === "throne" && <ThronePage clanRespect={clan.respect} myId={profile.id} />}
@@ -189,8 +193,8 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
             onChallenge={lobby.challenge}
             onFindMatch={lobby.findMatch}
             onCancel={lobby.cancel}
-            mode={mode}
-            onMode={setMode}
+            field={field}
+            onField={setField}
             respect={respect}
             onTrain={() => setTab("train")}
           />
