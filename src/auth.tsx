@@ -60,8 +60,16 @@ export function AuthScreen() {
         ? await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } })
         : await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
-    if (error) setMessage(error.message);
-    else if (mode === "signup" && !data.session) setMessage("Check your email to confirm your account, then log in.");
+    if (error) {
+      const m = error.message.toLowerCase();
+      setMessage(
+        m.includes("rate limit")
+          ? "Too many sign-up emails right now. Ask the app owner to turn off email confirmation in Supabase, then try again."
+          : m.includes("not confirmed")
+            ? "This account's email isn't confirmed yet. Ask the app owner to confirm it in Supabase, then log in."
+            : error.message,
+      );
+    } else if (mode === "signup" && !data.session) setMessage("Check your email to confirm your account, then log in.");
   };
 
   return (
