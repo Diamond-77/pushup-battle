@@ -10,7 +10,8 @@ import ProfilePage from "./ProfilePage";
 import { ClanPage, HomePage, ThronePage } from "./Pages";
 import { CLANS, type Clan } from "./clans";
 import { useClan } from "./useClan";
-import { countdownSound, defeatSound, drawSound, goSound, repSound, victorySound } from "./sound";
+import { countdownSound, defeatSound, drawSound, goSound, repSound, victoryCall, victorySound } from "./sound";
+import Guide, { guideDone } from "./Guide";
 // Three.js is big, so the palace loads in its own chunk after the app shows.
 const Palace3D = lazy(() => import("./palace/Palace3D"));
 import { useMatch } from "./useMatch";
@@ -37,6 +38,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
   const [tab, setTab] = useState<Tab>("home");
   const [facing, setFacing] = useState<"user" | "environment">("user");
   const [practiceReps, setPracticeReps] = useState(0);
+  const [showGuide, setShowGuide] = useState(() => !guideDone());
 
   const clan = useClan(profile.id);
   const myClan = clan.membership?.clan ?? null;
@@ -58,7 +60,10 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
     if (m.phase === "countdown") (m.countdown > 0 ? countdownSound : goSound)();
   }, [m.phase, m.countdown]);
   useEffect(() => {
-    if (m.phase === "result") ({ win: victorySound, lose: defeatSound, draw: drawSound })[m.result]();
+    if (m.phase === "result") {
+      ({ win: victorySound, lose: defeatSound, draw: drawSound })[m.result]();
+      if (m.result === "win") victoryCall();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [m.phase]);
 
@@ -78,7 +83,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
 
   return (
     <main className="app">
-      <PoseCounter paused={menu} facing={facing} counting={inMatch ? m.phase === "match" : tab === "train"} onRep={onRep}>
+      <PoseCounter paused={menu} lockBody={inMatch && (m.phase === "countdown" || m.phase === "match")} facing={facing} counting={inMatch ? m.phase === "match" : tab === "train"} onRep={onRep}>
         {inMatch && (
           <>
             <Hud
@@ -101,18 +106,21 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
               </div>
             )}
             {m.phase === "result" && (
-              <div className="stage-center">
-                <div className={`result-card glass ${m.result}`}>
-                  <div className="result-title">{m.result === "win" ? "Victory" : m.result === "lose" ? "Defeat" : "Draw"}</div>
-                  <div className="result-score">
-                    <span className="me">{m.myReps}</span>
-                    <span className="dash">–</span>
-                    <span className="opp">{m.oppReps}</span>
-                  </div>
-                  <button className="game-btn wood" onClick={backToLobby}>
-                    Back to lobby
-                  </button>
+              <div className={`result-full ${m.result}`}>
+                <div className="result-rays" />
+                <div className="result-word">{m.result === "win" ? "Victory" : m.result === "lose" ? "Defeat" : "Draw"}</div>
+                <div className="result-score">
+                  <span className="me">{m.myReps}</span>
+                  <span className="dash">–</span>
+                  <span className="opp">{m.oppReps}</span>
                 </div>
+                <div className="result-names">
+                  <span>{me.name}</span>
+                  <span>{lobby.match!.opponent.name}</span>
+                </div>
+                <button className="game-btn wood big" onClick={backToLobby}>
+                  Back to lobby
+                </button>
               </div>
             )}
             {/* Debug (desktop only): fake a rep without doing a push-up */}
@@ -183,6 +191,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
         )}
 
         <Dock tab={tab} onTab={setTab} locked={inMatch} />
+        {showGuide && !inMatch && <Guide onDone={() => setShowGuide(false)} />}
       </PoseCounter>
     </main>
   );

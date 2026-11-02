@@ -80,3 +80,49 @@ export const defeatSound = () => {
 };
 export const drawSound = () => { tone(523, 0.3, { vol: 0.2 }); tone(523, 0.5, { vol: 0.2, at: 0.3 }); };
 export const thunder = () => { noise(2.6, { vol: 0.5, freq: 260 }); noise(1.2, { vol: 0.35, freq: 900, at: 0.05 }); };
+
+// A spoken announcer line in a female voice (uses the phone's built-in text-to-speech).
+// Phones name their voices differently, so known female voices are tried first, then any
+// English voice with a raised pitch.
+const FEMALE = /female|woman|samantha|victoria|karen|moira|tessa|fiona|serena|zira|susan|hazel|heera|veena|kate|allison|ava|nicky|google uk english female|google us english/i;
+const MALE = /male|daniel|alex|fred|george|rishi|david|mark|james/i;
+
+function pickVoice(): SpeechSynthesisVoice | null {
+  const voices = window.speechSynthesis?.getVoices() ?? [];
+  const en = voices.filter((v) => v.lang.toLowerCase().startsWith("en"));
+  return (
+    en.find((v) => FEMALE.test(v.name) && !/\bmale\b/i.test(v.name)) ??
+    en.find((v) => !MALE.test(v.name)) ??
+    en[0] ??
+    null
+  );
+}
+if (typeof window !== "undefined" && window.speechSynthesis) {
+  window.speechSynthesis.getVoices(); // starts loading the voice list early
+  // iPhones only allow speech after a tap, so speak a silent line on the first tap.
+  const unlockSpeech = () => {
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+    window.removeEventListener("pointerdown", unlockSpeech);
+  };
+  window.addEventListener("pointerdown", unlockSpeech, { passive: true });
+}
+
+export function announce(text: string, delay = 0) {
+  const synth = window.speechSynthesis;
+  if (!synth || SOUND_VOLUME <= 0) return;
+  setTimeout(() => {
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    const v = pickVoice();
+    if (v) u.voice = v;
+    u.lang = v?.lang ?? "en-US";
+    u.pitch = v && FEMALE.test(v.name) ? 1.25 : 1.6; // unknown voice: pitch it up so it sounds female
+    u.rate = 0.95;
+    u.volume = Math.min(1, SOUND_VOLUME + 0.3);
+    synth.speak(u);
+  }, delay);
+}
+
+export const victoryCall = () => announce("Victory!", 350);

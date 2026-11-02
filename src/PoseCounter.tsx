@@ -14,12 +14,24 @@ import {
   SMOOTH_FRAMES,
   TOP_DECAY,
   WRIST_MOVE_MAX,
+  FAST_DOWN,
+  FAST_HOLD_MS,
+  FAST_REP_MS,
+  FAST_SMOOTH_FRAMES,
+  FAST_UP,
+  FAST_WRIST_MOVE_MAX,
+  MIN_REP_MS,
+  LOCK_CHECK_FRAMES,
+  LOCK_JUMP,
+  LOCK_LEARN_FRAMES,
+  LOCK_MAX_DIFF,
 } from "./config";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
-import { drawStickman, getPoseLandmarker, readBody } from "./pose";
+import { bodySignature, drawStickman, getPoseLandmarker, medianSignature, readBody, signatureDiff, type BodySignature } from "./pose";
 
-type Status = "ok" | "not_detected" | "too_close" | "not_in_position" | "knee_down";
-type Debug = { ratio: number | null; kneeLift: number | null; state: "up" | "down"; reps: number; fps: number; status: Status };
+type Status = "ok" | "not_detected" | "too_close" | "not_in_position" | "knee_down" | "switched";
+type Debug = { ratio: number | null; kneeLift: number | null; state: "up" | "down"; reps: number; fps: number; status: Status; fast: boolean; lock: string };
+type LockPhase = "off" | "learning" | "locked" | "jump" | "checking" | "switched";
 
 type Props = {
   counting: boolean; // only report reps to the match while this is true
@@ -27,18 +39,22 @@ type Props = {
   facing: "user" | "environment";
   children?: ReactNode; // overlays (HUD, pages, dock) drawn over the camera
   paused?: boolean; // a full page covers the camera: skip tracking to save battery and GPU
+  lockBody?: boolean; // battle running: the body that started must finish (anti-cheat)
 };
 
-export default function PoseCounter({ counting, onRep, facing, children, paused = false }: Props) {
+export default function PoseCounter({ counting, onRep, facing, children, paused = false, lockBody = false }: Props) {
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
+  const lockBodyRef = useRef(lockBody);
+  lockBodyRef.current = lockBody;
+  const [switched, setSwitched] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const meterRef = useRef<HTMLDivElement>(null);
   const meterLabelRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [debug, setDebug] = useState<Debug>({ ratio: null, kneeLift: null, state: "up", reps: 0, fps: 0, status: "not_detected" });
+  const [debug, setDebug] = useState<Debug>({ ratio: null, kneeLift: null, state: "up", reps: 0, fps: 0, status: "not_detected", fast: false, lock: "off" });
 
   // Rep state lives in refs so the frame loop never sees stale values.
   const stateRef = useRef<"up" | "down">("up");
@@ -53,6 +69,19 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
   const lostSinceRef = useRef<number | null>(null);
   const enteredAtRef = useRef(0);
   const downWristRef = useRef({ x: 0, y: 0 }); // where the hands were when the rep went down
+  // Fast mode: on while reps come quickly (see FAST_* in config)
+  const fastUntilRef = useRef(0);
+  const rawRef = useRef<{ t: number; r: number }[]>([]); // unsmoothed height ratio over the last moments
+  // Body lock
+  const lock = useRef({
+    phase: "off" as LockPhase,
+    base: null as BodySignature | null,
+    frames: [] as BodySignature[],
+    lastPos: null as { x: number; y: number } | null,
+    lastSeen: 0,
+    jumpFrom: { x: 0, y: 0 },
+    jumpFrames: 0,
+  });
   // Latest props in refs so the frame loop (started once) always sees current values.
   const countingRef = useRef(counting);
   const onRepRef = useRef(onRep);
@@ -159,6 +188,53 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
       let kneeLift: number | null = null;
       let status: Status = "not_detected";
       const body = lm ? readBody(lm, w, h) : null;
+      const L = lock.current;
+      if (!lockBodyRef.current) {
+        if (L.phase !== "off") { L.phase = "off"; L.base = null; L.frames = []; L.lastPos = null; setSwitched(false); }
+      } else if (body?.visible && lm && result?.worldLandmarks[0]) {
+        if (L.phase === "off") { L.phase = "learning"; L.frames = []; }
+        const sig = bodySignature(result.worldLandmarks[0], lm);
+        const pos = { x: (lm[11].x + lm[12].x) / 2, y: (lm[11].y + lm[12].y) / 2 };
+        const dist = (a: { x: number; y: number }) => Math.hypot(pos.x - a.x, pos.y - a.y);
+        const returned = now - L.lastSeen > LOST_MS; // the body was gone for a while: maybe someone else came in
+        const compare = () => signatureDiff(medianSignature(L.frames), L.base!);
+        if (L.phase === "learning") {
+          if (body.inFrame) L.frames.push(sig);
+          if (L.frames.length >= LOCK_LEARN_FRAMES) {
+            L.base = medianSignature(L.frames);
+            L.phase = "locked";
+          }
+        } else if (L.phase === "locked") {
+          const moved = L.lastPos !== null && dist(L.lastPos) > LOCK_JUMP;
+          const gap = now - L.lastSeen;
+          // A jump between back-to-back frames = the tracker switched people. After a short gap the
+          // same person may simply have moved, so then the body proportions decide instead.
+          if (returned || (moved && gap > 200)) { L.phase = "checking"; L.frames = []; }
+          else if (moved) { L.phase = "jump"; L.jumpFrom = L.lastPos!; L.jumpFrames = 0; }
+        } else if (L.phase === "jump") {
+          // One glitchy frame jumps back; a real switch to another person stays put.
+          if (dist(L.jumpFrom) < LOCK_JUMP / 2) L.phase = "locked";
+          else if (++L.jumpFrames >= 6) { L.phase = "switched"; L.frames = []; setSwitched(true); }
+        } else if (L.phase === "checking") {
+          L.frames.push(sig);
+          if (L.frames.length >= LOCK_CHECK_FRAMES) {
+            const d = compare();
+            if (d !== null && d > LOCK_MAX_DIFF) { L.phase = "switched"; setSwitched(true); }
+            else L.phase = "locked";
+            L.frames = [];
+          }
+        } else if (L.phase === "switched") {
+          // Unlock only when the original body is clearly back.
+          L.frames.push(sig);
+          if (L.frames.length >= LOCK_CHECK_FRAMES) {
+            const d = compare();
+            if (d !== null && d < LOCK_MAX_DIFF * 0.6) { L.phase = "locked"; setSwitched(false); }
+            L.frames = [];
+          }
+        }
+        L.lastPos = pos;
+        L.lastSeen = now;
+      }
       if (body?.visible && body.inFrame) {
         lostSinceRef.current = null;
         if (!inPositionRef.current && body.enterPosition) {
@@ -173,19 +249,40 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
           if (standingFramesRef.current >= EXIT_FRAMES) inPositionRef.current = false;
         }
         status = inPositionRef.current ? "ok" : "not_in_position";
+        if (L.phase === "switched") status = "switched";
       } else {
         if (body?.visible) status = "too_close";
         lostSinceRef.current ??= now;
         if (now - lostSinceRef.current > LOST_MS) inPositionRef.current = false;
       }
 
+      let fast = now < fastUntilRef.current;
+      let downAt = fast ? FAST_DOWN : SHOULDER_DOWN;
+      let upAt = fast ? FAST_UP : SHOULDER_UP;
       if (body && status === "ok") {
         const buf = heightsRef.current;
         buf.push(body.shoulderHeight);
         if (buf.length > SMOOTH_FRAMES) buf.shift();
-        const height = buf.reduce((s, a) => s + a, 0) / buf.length;
+        const recent = fast ? buf.slice(-FAST_SMOOTH_FRAMES) : buf; // fast mode: less smoothing, less lag
+        const height = recent.reduce((s, a) => s + a, 0) / recent.length;
         topRef.current = Math.max(topRef.current * TOP_DECAY, height);
         ratio = topRef.current > 0 ? height / topRef.current : 1;
+
+        // Hint of speed: the shoulders travel a big distance in a short moment.
+        // Tiny wiggles never travel this far, so they can't switch fast mode on.
+        if (topRef.current > 0) {
+          const raw = rawRef.current;
+          raw.push({ t: now, r: body.shoulderHeight / topRef.current });
+          while (raw.length && now - raw[0].t > 250) raw.shift();
+          let lo = Infinity, hi = -Infinity;
+          for (const p of raw) { lo = Math.min(lo, p.r); hi = Math.max(hi, p.r); }
+          if (hi - lo > 0.3 && now - enteredAtRef.current > SETTLE_MS) {
+            fastUntilRef.current = Math.max(fastUntilRef.current, now + FAST_HOLD_MS);
+            fast = true;
+            downAt = FAST_DOWN;
+            upAt = FAST_UP;
+          }
+        }
 
         // A knee that can't be seen never blocks a rep; a visible knee on the floor does.
         kneeLift = body.kneeHeight === null || topRef.current <= 0 ? null : body.kneeHeight / topRef.current;
@@ -193,15 +290,17 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
         if (!kneeOk) status = "knee_down";
 
         const settled = now - enteredAtRef.current > SETTLE_MS; // e.g. still putting the phone down
-        if (stateRef.current === "up" && ratio < SHOULDER_DOWN && settled) {
+        if (stateRef.current === "up" && ratio < downAt && settled) {
           stateRef.current = "down";
           downWristRef.current = body.wrist;
-        } else if (stateRef.current === "down" && ratio > SHOULDER_UP) {
+        } else if (stateRef.current === "down" && ratio > upAt) {
           stateRef.current = "up";
           // Hands stay planted in a real push-up; if they "moved", the camera or the person moved instead.
           const moved = Math.hypot(body.wrist.x - downWristRef.current.x, body.wrist.y - downWristRef.current.y);
-          const planted = moved < WRIST_MOVE_MAX * topRef.current;
-          if (kneeOk && planted) {
+          const planted = moved < (fast ? FAST_WRIST_MOVE_MAX : WRIST_MOVE_MAX) * topRef.current;
+          const sinceLast = now - lastRepAtRef.current;
+          if (kneeOk && planted && sinceLast > MIN_REP_MS) {
+            if (sinceLast < FAST_REP_MS || fast) fastUntilRef.current = now + FAST_HOLD_MS;
             repsRef.current += 1;
             lastRepAtRef.current = now;
             if (countingRef.current) onRepRef.current();
@@ -209,6 +308,7 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
         }
       } else {
         heightsRef.current = []; // don't mix stale heights in when tracking comes back
+        rawRef.current = [];
         if (status === "not_in_position") stateRef.current = "up"; // standing up cancels a half-done rep
       }
 
@@ -223,7 +323,7 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
       // Depth meter: 0% with arms straight, 100% once the shoulders are low enough to count.
       // Updated straight on the DOM every frame so it never lags behind the body.
       const depth =
-        ratio === null ? 0 : Math.min(1, Math.max(0, (SHOULDER_UP - ratio) / (SHOULDER_UP - SHOULDER_DOWN)));
+        ratio === null ? 0 : Math.min(1, Math.max(0, (upAt - ratio) / (upAt - downAt)));
       if (meterRef.current) {
         const lit = Math.round(depth * METER_SEGMENTS);
         const blocks = meterRef.current.children;
@@ -236,7 +336,7 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
       // Re-render the debug panel at a limited rate so React doesn't steal frame time.
       if (now - lastDebug > DEBUG_UPDATE_MS) {
         lastDebug = now;
-        setDebug({ ratio, kneeLift, state: stateRef.current, reps: repsRef.current, fps, status });
+        setDebug({ ratio, kneeLift, state: stateRef.current, reps: repsRef.current, fps, status, fast, lock: L.phase });
       }
     };
     loop();
@@ -248,7 +348,7 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
   }, [facing]);
 
   return (
-    <div className="screen track-bad" ref={screenRef}>
+    <div className={`screen track-bad ${switched ? "body-switch" : ""}`} ref={screenRef}>
       <video ref={videoRef} playsInline muted className="hidden-video" />
       <canvas ref={canvasRef} className="view" />
       <div className="vignette" />
@@ -268,6 +368,12 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
         {loading && <div className="toast">Starting tracker…</div>}
         {error && <div className="toast error">{error}</div>}
       </div>
+      {switched && (
+        <div className="switch-warning">
+          <div className="switch-title">Switching body</div>
+          <div>A different person is in front of the camera. Paused until the player who started comes back.</div>
+        </div>
+      )}
 
       {/* Debug panel: laptop/desktop only (hidden on phones by CSS) */}
       <div className="debug">
@@ -277,6 +383,8 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
         <div>FPS <b>{debug.fps.toFixed(0)}</b></div>
         <div>Track <b>{debug.status}</b></div>
         <div>Knee <b>{debug.kneeLift === null ? "–" : debug.kneeLift.toFixed(2)}</b></div>
+        <div>Fast <b>{debug.fast ? "on" : "off"}</b></div>
+        <div>Lock <b>{debug.lock}</b></div>
       </div>
 
     </div>

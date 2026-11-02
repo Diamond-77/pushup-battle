@@ -1,6 +1,7 @@
 import {
   FilesetResolver,
   PoseLandmarker,
+  type Landmark,
   type NormalizedLandmark,
 } from "@mediapipe/tasks-vision";
 import {
@@ -115,6 +116,48 @@ export function readBody(lm: NormalizedLandmark[], width: number, height: number
     shoulderHeight: wristY - shoulderY,
     kneeHeight: kneeY === null ? null : wristY - kneeY,
   };
+}
+
+// Body proportions from MediaPipe's 3D "world" landmarks (meters): shoulder width, upper arm,
+// forearm and torso length. They stay about the same for one person whatever pose they're in,
+// so they tell two people apart. A length is null when its points aren't clearly seen.
+const SIG_BONES: [number, number][][] = [
+  [[11, 12]], // shoulder width
+  [[11, 13], [12, 14]], // upper arms
+  [[13, 15], [14, 16]], // forearms
+  [[11, 23], [12, 24]], // torso sides
+];
+export type BodySignature = (number | null)[];
+
+export function bodySignature(world: Landmark[], lm: NormalizedLandmark[]): BodySignature {
+  return SIG_BONES.map((bones) => {
+    let best: number | null = null, bestVis = 0.6;
+    for (const [a, b] of bones) {
+      const vis = Math.min(lm[a].visibility ?? 0, lm[b].visibility ?? 0);
+      if (vis < bestVis) continue; // use the side that is seen best
+      bestVis = vis;
+      best = Math.hypot(world[a].x - world[b].x, world[a].y - world[b].y, world[a].z - world[b].z);
+    }
+    return best;
+  });
+}
+
+// Median of each length over many frames (one bad frame can't change it).
+export function medianSignature(frames: BodySignature[]): BodySignature {
+  return SIG_BONES.map((_, i) => {
+    const v = frames.map((f) => f[i]).filter((x): x is number => x !== null).sort((a, b) => a - b);
+    return v.length >= frames.length / 3 ? v[Math.floor(v.length / 2)] : null;
+  });
+}
+
+// Average relative difference between two signatures (0.2 = 20%), or null if they can't be compared.
+export function signatureDiff(a: BodySignature, b: BodySignature): number | null {
+  let sum = 0, n = 0;
+  a.forEach((x, i) => {
+    const y = b[i];
+    if (x && y) { sum += Math.abs(Math.log(x / y)); n++; }
+  });
+  return n >= 2 ? Math.exp(sum / n) - 1 : null;
 }
 
 // Simple stickman: head, shoulders, arms, torso, legs. Orange lines, white joints.

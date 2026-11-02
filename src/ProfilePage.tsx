@@ -3,7 +3,7 @@ import type { Profile } from "./auth";
 import Avatar from "./Avatar";
 import ClanLogo from "./ClanLogo";
 import { CONTACT_EMAIL, CONTACT_WHATSAPP } from "./config";
-import { daysLeft, type Membership } from "./useClan";
+import type { Membership } from "./useClan";
 import { supabase } from "./supabase";
 
 // Center-crops and shrinks the picked photo to a 256px JPEG before upload.
@@ -72,7 +72,6 @@ export default function ProfilePage({ profile, email, onChange, membership }: Pr
             <ClanLogo clan={membership.clan} size={30} />
             <div>
               <b>{membership.clan.name}</b>
-              <span>{daysLeft(membership.expiresAt)} days left</span>
             </div>
           </div>
         ) : (

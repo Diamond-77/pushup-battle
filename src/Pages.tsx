@@ -54,23 +54,77 @@ const WEATHER_LABEL = { storm: "Storm and lightning", sunset: "Golden sunset", n
 
 type ClanState = ReturnType<typeof useClan>;
 
+// Anyone can see who is in any clan, and tap a member to see their profile.
+function MembersPanel({ members, onPick }: { members: Member[]; onPick: (m: Member) => void }) {
+  return (
+    <div className="parchment members">
+      <div className="section-title">Members · {members.length}</div>
+      {members.length === 0 && <div className="muted">Nobody yet. Be the first.</div>}
+      <ul className="player-list">
+        {members.map((p) => (
+          <li key={p.id}>
+            <button className="member-row" onClick={() => onPick(p)}>
+              <Avatar url={p.avatar} color="neutral" size={36} legendary={p.legendary} />
+              <div className="pl-text">
+                <div className="pl-name">{p.name}</div>
+                {p.title && <div className="title-badge">{p.title}</div>}
+              </div>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function MemberModal({ member, clan, onClose }: { member: Member; clan: Clan; onClose: () => void }) {
+  return (
+    <div className="modal-back" onClick={onClose}>
+      <div className={`modal panel ${member.legendary ? "legendary-card" : ""}`} onClick={(e) => e.stopPropagation()}>
+        <Avatar url={member.avatar} color="neutral" size={88} legendary={member.legendary} />
+        <div className="modal-title">{member.name}</div>
+        {member.title && <div className="title-badge big">{member.legendary ? "Legendary · " : ""}{member.title}</div>}
+        <div className="clan-chip">
+          <ClanLogo clan={clan} size={30} />
+          <div><b>{clan.name}</b><span>member since {member.joinedAt.toLocaleDateString()}</span></div>
+        </div>
+        <button className="game-btn wood" onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
+}
+
 export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; preview: Clan; onPreview: (c: Clan) => void }) {
-  const [confirming, setConfirming] = useState<string | null>(null);
+  const [popup, setPopup] = useState<"join" | "locked" | null>(null);
   const [busy, setBusy] = useState(false);
   const [members, setMembers] = useState<Member[] | null>(null);
+  const [picked, setPicked] = useState<Member | null>(null);
   const m = clan.membership;
+  const mine = m?.clan.id === preview.id;
   const tabs = (
     <div className="clan-tabs">
       {CLANS.map((c) => (
-        <button key={c.id} className={c.id === preview.id ? "on" : ""} style={{ ["--accent" as string]: c.color }} onClick={() => { onPreview(c); setConfirming(null); setMembers(null); }}>
+        <button key={c.id} className={c.id === preview.id ? "on" : ""} style={{ ["--accent" as string]: c.color }} onClick={() => { onPreview(c); setPopup(null); setMembers(null); }}>
           {c.name}
         </button>
       ))}
     </div>
   );
+  const toggleMembers = async () => setMembers(members ? null : await loadMembers(preview.id));
+  const membersBtn = (
+    <button className="game-btn wood" onClick={toggleMembers}>
+      {members ? "Hide members" : "Members"}
+    </button>
+  );
+  const overlays = (
+    <>
+      {members && <MembersPanel members={members} onPick={setPicked} />}
+      {picked && <MemberModal member={picked} clan={preview} onClose={() => setPicked(null)} />}
+    </>
+  );
 
-  // Your own clan: members and days left
-  if (m && m.clan.id === preview.id) {
+  // Your own clan
+  if (m && mine) {
     return (
       <div className="page clear">
         {tabs}
@@ -83,27 +137,12 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
         </div>
         <div className="stat-row">
           <span className="stat-chip">{plural(clan.counts[m.clan.id] ?? 1, "member")}</span>
-          <span className="stat-chip">{plural(daysLeft(m.expiresAt), "day")} left</span>
         </div>
         <div className="look-hint">Drag to look around · pinch to zoom</div>
         <div className="spacer" />
-        {members && (
-          <div className="parchment members">
-            <div className="section-title">Members · {members.length}</div>
-            <ul className="player-list">
-              {members.map((p) => (
-                <li key={p.id}>
-                  <Avatar url={p.avatar} color="neutral" size={36} />
-                  <div className="pl-text"><div className="pl-name">{p.name}</div></div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        {overlays}
         <div className="row stretch">
-          <button className="game-btn wood" onClick={async () => setMembers(members ? null : await loadMembers(m.clan.id))}>
-            {members ? "Hide members" : "Members"}
-          </button>
+          {membersBtn}
           <button className="game-btn red" disabled>
             Challenge a clan
           </button>
@@ -114,11 +153,10 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
   }
 
   const join = async () => {
-    if (confirming !== preview.id) return setConfirming(preview.id);
     setBusy(true);
     await clan.join(preview.id);
     setBusy(false);
-    setConfirming(null);
+    setPopup(null);
   };
 
   return (
@@ -126,10 +164,11 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
       {tabs}
       <div className="panel">
         <div className="brush-title page-title small">{m ? "Rival clans" : "Choose your clan"}</div>
-        <div className="muted">{m ? `You fight for ${m.clan.name}. Scout the other empires.` : `Join one clan for ${CLAN_DAYS} days, or fight alone as a Lone Warrior.`}</div>
+        <div className="muted">{m ? `You fight for ${m.clan.name}. Scout the other empires.` : "Pick a clan, or fight alone as a Lone Warrior."}</div>
       </div>
       <div className="look-hint">Drag to look around · pinch to zoom</div>
       <div className="spacer" />
+      {overlays}
       <div className="clan-card panel" style={{ ["--accent" as string]: preview.color }}>
         <div className="clan-card-top">
           <ClanLogo clan={preview} size={40} />
@@ -139,17 +178,44 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
         <div className="muted">{preview.motto}</div>
         <div className="muted small">{WEATHER_LABEL[preview.weather]}</div>
         {clan.error && <p className="form-msg error">{clan.error}</p>}
-        {m ? (
-          <div className="locked-note">You can switch in {plural(daysLeft(m.expiresAt), "day")}</div>
-        ) : (
-          <button className={`game-btn ${confirming === preview.id ? "red" : "jade"} wide`} disabled={busy || clan.loading} onClick={join}>
-            {busy ? "Joining…" : confirming === preview.id ? `Tap again: join for ${CLAN_DAYS} days` : `Join ${preview.name}`}
+        <div className="row stretch">
+          {membersBtn}
+          <button className="game-btn jade" disabled={busy || clan.loading} onClick={() => setPopup(m ? "locked" : "join")}>
+            {m ? "Switch clan" : `Join ${preview.name}`}
           </button>
-        )}
+        </div>
       </div>
       {!m && (
         <div className="lone-strip">
           <b>Lone Warrior</b> · you fight alone until you join a clan
+        </div>
+      )}
+
+      {popup && (
+        <div className="modal-back" onClick={() => !busy && setPopup(null)}>
+          <div className="modal panel" onClick={(e) => e.stopPropagation()}>
+            <ClanLogo clan={popup === "locked" ? m!.clan : preview} size={64} />
+            {popup === "join" ? (
+              <>
+                <div className="modal-title">Join {preview.name}?</div>
+                <p className="modal-text">
+                  Once you join, you are sworn to {preview.name} for <b>{CLAN_DAYS} days</b>. You can't leave or switch clans until then.
+                </p>
+                <div className="row stretch">
+                  <button className="game-btn wood" disabled={busy} onClick={() => setPopup(null)}>Not now</button>
+                  <button className="game-btn jade" disabled={busy} onClick={join}>{busy ? "Joining…" : "Join"}</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="modal-title">Still sworn to {m!.clan.name}</div>
+                <p className="modal-text">
+                  Your oath lasts {CLAN_DAYS} days. You can switch to {preview.name} in <b>{plural(daysLeft(m!.expiresAt), "day")}</b>.
+                </p>
+                <button className="game-btn wood" onClick={() => setPopup(null)}>OK</button>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -63,3 +63,22 @@ export const CLAN_DAYS = 30; // a clan membership lasts this many days (also set
 // "Report an issue" contacts on the Profile page
 export const CONTACT_EMAIL = "huidromdiamond123@gmail.com";
 export const CONTACT_WHATSAPP = "916009271012"; // country code + number, no "+" (wa.me format)
+
+// Fast push-ups: when reps come quickly, counting switches to a quicker mode that only
+// watches the shoulders (less smoothing, slightly shallower depth). It only turns on after
+// a real rep was done fast, and turns off again when you slow down, so tiny wiggles never count.
+export const FAST_REP_MS = 1100; // two reps closer than this = "fast"
+export const FAST_HOLD_MS = 1800; // stay in fast mode until no rep for this long
+export const FAST_SMOOTH_FRAMES = 2;
+export const FAST_DOWN = 0.68; // fast mode: shoulders below 68% of the top height = "down"
+export const FAST_UP = 0.85; // fast mode: back above 85% = rep
+export const FAST_WRIST_MOVE_MAX = 0.5; // hands blur when fast, so allow a bit more wrist wobble
+export const MIN_REP_MS = 280; // no rep can be faster than this (stops jitter double counts)
+
+// Body lock (anti-cheat during battles): the body that starts the match must finish it.
+// It only checks when the tracker suddenly jumps to another spot, or when someone comes back
+// after the body was lost, so the same person moving around never triggers it.
+export const LOCK_LEARN_FRAMES = 30; // frames used to learn the player's body proportions
+export const LOCK_CHECK_FRAMES = 20; // frames compared after a jump or a return
+export const LOCK_JUMP = 0.22; // the shoulders jumping this far (fraction of the picture) in one frame = tracker switched people
+export const LOCK_MAX_DIFF = 0.22; // body proportions differing more than 22% = a different person

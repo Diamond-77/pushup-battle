@@ -3,7 +3,7 @@ import { supabase } from "./supabase";
 import { clanById, type Clan } from "./clans";
 
 export type Membership = { clan: Clan; joinedAt: Date; expiresAt: Date };
-export type Member = { id: string; name: string; avatar: string | null };
+export type Member = { id: string; name: string; avatar: string | null; title: string | null; legendary: boolean; joinedAt: Date };
 
 // The player's clan (null = lone warrior), member counts per clan, and joining.
 export function useClan(userId: string) {
@@ -47,13 +47,13 @@ export async function loadMembers(clanId: string): Promise<Member[]> {
   if (!supabase) return [];
   const { data } = await supabase
     .from("clan_members")
-    .select("user_id, profiles(username, avatar_url)")
+    .select("user_id, joined_at, profiles(*)")
     .eq("clan_id", clanId)
     .gt("expires_at", new Date().toISOString())
     .order("joined_at");
   return (data ?? []).map((r) => {
-    const p = (Array.isArray(r.profiles) ? r.profiles[0] : r.profiles) as { username: string; avatar_url: string | null } | null;
-    return { id: r.user_id as string, name: p?.username ?? "?", avatar: p?.avatar_url ?? null };
+    const p = (Array.isArray(r.profiles) ? r.profiles[0] : r.profiles) as { username: string; avatar_url: string | null; title?: string | null; legendary?: boolean } | null;
+    return { id: r.user_id as string, name: p?.username ?? "?", avatar: p?.avatar_url ?? null, title: p?.title ?? null, legendary: !!p?.legendary, joinedAt: new Date(r.joined_at as string) };
   });
 }
 
