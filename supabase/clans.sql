@@ -33,10 +33,7 @@ create policy "Memberships are readable by everyone" on public.clan_members for 
 
 create or replace function public.join_clan(p_clan text)
 returns public.clan_members
-language plpgsql
-security definer
-set search_path = public
-as $$
+as $fn$
 declare
   m public.clan_members;
 begin
@@ -54,7 +51,7 @@ begin
   returning * into m;
   return m;
 end;
-$$;
+$fn$ language plpgsql security definer set search_path = public;
 
 revoke all on function public.join_clan(text) from public;
 grant execute on function public.join_clan(text) to authenticated;
