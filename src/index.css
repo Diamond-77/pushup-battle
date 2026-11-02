@@ -188,11 +188,42 @@ input {
 input:focus { border-color: var(--me); }
 
 /* Login / sign-up */
-.auth { position: relative; width: 100%; height: 100%; display: grid; place-items: center; padding: 20px; background: radial-gradient(circle at 30% 15%, #2b3a24, #0b0c0d 65%); }
-.auth-card { width: min(380px, 100%); padding: 28px 22px; border-radius: 28px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.auth-card form { width: 100%; display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
-.auth-card h2 { margin: 0; font-size: 1.5rem; }
+.auth {
+  position: relative; width: 100%; height: 100%; overflow-y: auto;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+  padding: max(24px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(60% 40% at 50% 8%, rgba(110, 224, 58, 0.28), transparent 70%),
+    radial-gradient(50% 35% at 85% 100%, rgba(255, 140, 30, 0.18), transparent 70%),
+    #0b0c0d;
+}
+.auth-hero { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.auth-logo { width: 84px; height: 84px; border-radius: 22px; box-shadow: 0 12px 40px rgba(255, 140, 30, 0.35), 0 0 0 1px rgba(255,255,255,0.12); }
 .brand { font-size: 0.75rem; letter-spacing: 0.4em; color: var(--me); font-weight: 700; }
+.brand.big { font-size: 1.15rem; letter-spacing: 0.32em; font-weight: 800; color: #fff; margin-top: 6px; }
+.tagline { margin: 0; color: var(--muted); font-size: 0.95rem; }
+.auth-card { width: min(400px, 100%); padding: 18px 18px 16px; border-radius: 28px; display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
+.auth-card h2 { margin: 4px 0 0; font-size: 1.35rem; text-align: center; }
+.auth-head { display: flex; flex-direction: column; gap: 4px; text-align: center; }
+.auth-card form { display: flex; flex-direction: column; gap: 10px; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; padding: 4px; border-radius: 16px; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08); }
+.seg button { border: 0; background: none; padding: 10px; border-radius: 12px; font-weight: 700; color: var(--muted); }
+.seg button.on { background: rgba(255,255,255,0.12); color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,0.15); }
+.google-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px; padding: 14px; border-radius: 16px;
+  border: 0; background: #fff; color: #1f1f1f; font-weight: 700; font-size: 1rem;
+}
+.google-btn:active { transform: scale(0.98); }
+.divider { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 0.78rem; }
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: rgba(255,255,255,0.14); }
+.in { position: relative; display: block; }
+.in input { padding-left: 46px; }
+.in input[type="password"], .in input[type="text"] { padding-right: 50px; }
+.in-icon { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; fill: none; stroke: var(--muted); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.in:focus-within .in-icon { stroke: var(--me); }
+.link-btn.right { align-self: flex-end; margin: -2px 2px 0; font-size: 0.85rem; text-decoration: none; color: var(--me); }
+.fine { margin: 2px 0 0; text-align: center; font-size: 0.75rem; color: var(--muted); }
+.fine a { color: var(--muted); }
 
 /* Pages drawn over the camera (lobby, profile) */
 .sheet {
@@ -250,6 +281,4 @@ input:focus { border-color: var(--me); }
 .pw-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border: 0; background: none; display: grid; place-items: center; color: var(--muted); }
 .pw-eye svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
-.or { color: var(--muted); font-size: 0.8rem; margin: 2px 0; }
 .pill.wide { width: 100%; }
-.pill.google { display: flex; align-items: center; justify-content: center; gap: 10px; background: #fff; color: #1f1f1f; padding: 13px 18px; font-size: 0.95rem; }

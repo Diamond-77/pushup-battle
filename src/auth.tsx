@@ -130,8 +130,8 @@ export function AuthScreen() {
   if (mode === "check-email") {
     return (
       <div className="auth">
+        <AuthHero />
         <div className="auth-card glass">
-          <div className="brand">PUSHUP BATTLE</div>
           <h2>Check your email</h2>
           <p className="form-msg">
             We sent a confirmation link to <b>{email}</b>. Tap it on this device to finish signing up.
@@ -146,22 +146,52 @@ export function AuthScreen() {
     );
   }
 
-  const title = mode === "signup" ? "Create account" : mode === "login" ? "Welcome back" : "Reset password";
-  const action = mode === "signup" ? "Sign up" : mode === "login" ? "Log in" : "Send reset link";
+  const action = mode === "signup" ? "Create account" : mode === "login" ? "Log in" : "Send reset link";
 
   return (
     <div className="auth">
+      <AuthHero />
       <div className="auth-card glass">
-        <div className="brand">PUSHUP BATTLE</div>
-        <h2>{title}</h2>
+        {mode === "forgot" ? (
+          <div className="auth-head">
+            <h2>Reset password</h2>
+            <p className="muted">Enter your email and we'll send you a link to choose a new one.</p>
+          </div>
+        ) : (
+          <div className="seg" role="tablist">
+            <button role="tab" aria-selected={mode === "signup"} className={mode === "signup" ? "on" : ""} onClick={go("signup")}>
+              Sign up
+            </button>
+            <button role="tab" aria-selected={mode === "login"} className={mode === "login" ? "on" : ""} onClick={go("login")}>
+              Log in
+            </button>
+          </div>
+        )}
         {!supabase && <p className="form-msg error">Supabase env vars are missing.</p>}
+
+        {mode !== "forgot" && (
+          <>
+            <button className="google-btn" onClick={google}>
+              <GoogleLogo />
+              Continue with Google
+            </button>
+            <div className="divider">
+              <span>or with email</span>
+            </div>
+          </>
+        )}
+
         <form onSubmit={submit}>
-          <input type="email" placeholder="Email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <label className="in">
+            <MailIcon />
+            <input type="email" placeholder="Email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </label>
           {mode !== "forgot" && (
-            <div className="pw-wrap">
+            <label className="in">
+              <LockIcon />
               <input
                 type={showPw ? "text" : "password"}
-                placeholder="Password (6+ characters)"
+                placeholder={mode === "signup" ? "Password (6+ characters)" : "Password"}
                 autoComplete={mode === "signup" ? "new-password" : "current-password"}
                 minLength={6}
                 value={password}
@@ -175,37 +205,60 @@ export function AuthScreen() {
                   {showPw && <path d="M4 4l16 16" />}
                 </svg>
               </button>
-            </div>
+            </label>
+          )}
+          {mode === "login" && (
+            <button type="button" className="link-btn right" onClick={go("forgot")}>
+              Forgot password?
+            </button>
           )}
           <button className="big-btn small wide" disabled={busy}>
             {busy ? "…" : action}
           </button>
         </form>
-        {mode !== "forgot" && (
-          <>
-            <div className="or">or</div>
-            <button className="pill google wide" onClick={google}>
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-                <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.6 3.8-5.5 3.8-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3.2 14.6 2.2 12 2.2 6.6 2.2 2.2 6.6 2.2 12s4.4 9.8 9.8 9.8c5.7 0 9.4-4 9.4-9.6 0-.6-.1-1.1-.2-1.6H12z" />
-              </svg>
-              Continue with Google
-            </button>
-          </>
-        )}
+
         {message && <p className="form-msg">{message}</p>}
         {canResend && resendButton}
-        {mode === "login" && (
-          <button className="link-btn" onClick={go("forgot")}>
-            Forgot password?
+        {mode === "forgot" && (
+          <button className="link-btn" onClick={go("login")}>
+            Back to log in
           </button>
         )}
-        <button className="link-btn" onClick={go(mode === "signup" ? "login" : "signup")}>
-          {mode === "signup" ? "Already have an account? Log in" : "New here? Create an account"}
-        </button>
+        <p className="fine">
+          By continuing you agree to our <a href="/privacy.html">privacy policy</a>.
+        </p>
       </div>
     </div>
   );
 }
+
+function AuthHero() {
+  return (
+    <div className="auth-hero">
+      <img src="/icon-192.png" alt="" className="auth-logo" />
+      <div className="brand big">PUSHUP BATTLE</div>
+      <p className="tagline">Challenge a friend. Every rep counts.</p>
+    </div>
+  );
+}
+
+function GoogleLogo() {
+  return (
+    <svg viewBox="0 0 48 48" width="20" height="20" aria-hidden>
+      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.3-.4-3.5z" />
+      <path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
+      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.2-.1-2.3-.4-3.5z" />
+    </svg>
+  );
+}
+
+const MailIcon = () => (
+  <svg className="in-icon" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="m4 7 8 6 8-6" /></svg>
+);
+const LockIcon = () => (
+  <svg className="in-icon" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /></svg>
+);
 
 // Opened from a "reset password" email link: choose a new password.
 export function NewPasswordScreen({ onDone }: { onDone: () => void }) {
@@ -225,8 +278,8 @@ export function NewPasswordScreen({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="auth">
+      <AuthHero />
       <div className="auth-card glass">
-        <div className="brand">PUSHUP BATTLE</div>
         <h2>Choose a new password</h2>
         <form onSubmit={submit}>
           <input type="password" placeholder="New password (6+ characters)" autoComplete="new-password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} required />
@@ -262,8 +315,8 @@ export function ProfileSetup({ userId, onDone }: { userId: string; onDone: (p: P
 
   return (
     <div className="auth">
+      <AuthHero />
       <div className="auth-card glass">
-        <div className="brand">PUSHUP BATTLE</div>
         <h2>Pick your player name</h2>
         <form onSubmit={submit}>
           <input placeholder="Player name" maxLength={20} minLength={2} value={username} onChange={(e) => setUsername(e.target.value)} required />
