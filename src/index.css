@@ -98,7 +98,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 /* Bottom dock with the camera button */
 .dock {
   position: absolute; left: 22px; right: 22px; bottom: max(18px, env(safe-area-inset-bottom));
-  height: 70px; border-radius: 99px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; z-index: 6;
+  height: 70px; border-radius: 99px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; z-index: 8;
   background: linear-gradient(180deg, rgba(110,224,58,0.10), rgba(18,19,21,0.9));
   border: 1.5px solid rgba(140, 230, 60, 0.75);
   box-shadow: 0 0 22px rgba(110, 224, 58, 0.18);
@@ -225,13 +225,32 @@ input:focus { border-color: var(--me); }
 .fine { margin: 2px 0 0; text-align: center; font-size: 0.75rem; color: var(--muted); }
 .fine a { color: var(--muted); }
 
-/* Pages drawn over the camera (lobby, profile) */
-.sheet {
-  position: absolute; z-index: 7; left: 12px; right: 12px;
-  top: max(12px, env(safe-area-inset-top)); bottom: calc(104px + env(safe-area-inset-bottom));
-  border-radius: 28px; padding: 20px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;
+/* Full pages (home, battle, profile, throne, clan): cover the camera with their own background */
+.page {
+  position: absolute; inset: 0; z-index: 7;
+  padding: max(20px, env(safe-area-inset-top)) 18px calc(110px + env(safe-area-inset-bottom));
+  overflow-y: auto; display: flex; flex-direction: column; gap: 12px;
+  background: radial-gradient(120% 70% at 50% 0%, #2b3a33, #121416 70%);
 }
-.sheet h2 { margin: 0; font-size: 1.6rem; }
+.page > * { width: 100%; max-width: 460px; margin-left: auto; margin-right: auto; }
+.page h2 { margin: 0; font-size: 1.6rem; }
+.home-page { justify-content: flex-start; }
+.home-top { display: flex; align-items: center; gap: 12px; }
+.respect { font-size: 0.85rem; color: #e8b84a; font-weight: 700; }
+.banner-slot { flex: 1; min-height: 40px; }
+.home-title { text-align: center; font-size: 2.2rem; font-weight: 900; letter-spacing: 0.06em; }
+.home-actions { display: flex; flex-direction: column; gap: 12px; align-items: stretch; margin-bottom: 16px; }
+.home-actions .big-btn { width: 100%; }
+.ghost-btn { background: none !important; border: 1.5px solid var(--line) !important; color: var(--text) !important; box-shadow: none !important; }
+.soon-card { margin-top: 12px; padding: 28px 20px; border-radius: 24px; border: 1px dashed var(--line); background: rgba(0,0,0,0.25); text-align: center; color: #cfd3d6; }
+.soon-badge { display: inline-block; padding: 4px 12px; border-radius: 99px; background: #e8b84a; color: #1b1a1f; font-weight: 800; font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.soon-card p { margin: 14px 0 0; line-height: 1.5; }
+.flip-btn {
+  position: absolute; z-index: 6; top: max(14px, env(safe-area-inset-top)); left: 14px;
+  width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--glass); border: 1px solid var(--line);
+}
+.dock-cam.active { border-color: var(--me); color: var(--me); }
 .section-title { margin-top: 8px; font-size: 0.75rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); }
 .player-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .player-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 18px; background: rgba(0,0,0,0.25); }
@@ -272,7 +291,6 @@ input:focus { border-color: var(--me); }
   .meter-wrap { right: 24px; }
   .debug { display: grid; }
   .test-btns { display: flex; }
-  .sheet { left: 50%; right: auto; width: 440px; transform: translateX(-50%); }
 }.big-btn:disabled { opacity: 0.45; }
 
 /* Password field with show/hide eye */

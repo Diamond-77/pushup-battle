@@ -14,7 +14,7 @@ type Props = {
 
 export default function LobbyPage({ players, status, notice, onChallenge, onFindMatch, onCancel }: Props) {
   return (
-    <div className="sheet glass">
+    <div className="page">
       <h2>Battle</h2>
       {status === "searching" ? (
         <button className="big-btn small wide searching" onClick={onCancel}>

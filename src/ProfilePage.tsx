@@ -53,7 +53,7 @@ export default function ProfilePage({ profile, email, onChange }: { profile: Pro
   };
 
   return (
-    <div className="sheet glass">
+    <div className="page">
       <h2>Profile</h2>
       <button className="avatar-pick" onClick={() => fileRef.current?.click()} disabled={busy}>
         <Avatar url={profile.avatar_url} color="me" size={96} />

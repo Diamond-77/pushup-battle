@@ -7,6 +7,7 @@ import { useLobby } from "./lobby";
 import LobbyPage from "./LobbyPage";
 import PoseCounter from "./PoseCounter";
 import ProfilePage from "./ProfilePage";
+import { ComingSoon, HomePage } from "./Pages";
 import { useMatch } from "./useMatch";
 
 export default function App() {
@@ -31,17 +32,18 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
 
   // Reps go to the match while one is running, otherwise to the practice counter on Home.
   const repTarget = useRef<() => void>(() => {});
-  repTarget.current = inMatch ? m.addMyRep : () => tab === "home" && setPracticeReps((r) => r + 1);
+  repTarget.current = inMatch ? m.addMyRep : () => tab === "train" && setPracticeReps((r) => r + 1);
   const onRep = useCallback(() => repTarget.current(), []);
 
   const backToLobby = () => {
     lobby.leaveMatch();
-    setTab("friends");
+    setTab("battle");
   };
+  const flip = () => setFacing((f) => (f === "user" ? "environment" : "user"));
 
   return (
     <main className="app">
-      <PoseCounter facing={facing} counting={inMatch ? m.phase === "match" : tab === "home"} onRep={onRep}>
+      <PoseCounter facing={facing} counting={inMatch ? m.phase === "match" : tab === "train"} onRep={onRep}>
         {inMatch && (
           <>
             <Hud
@@ -87,7 +89,13 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
           </>
         )}
 
-        {!inMatch && tab === "home" && (
+        {!inMatch && tab === "train" && (
+          <>
+          <button className="flip-btn" aria-label="Flip camera" onClick={flip}>
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 12a8 8 0 0 1 13.7-5.6M20 12a8 8 0 0 1-13.7 5.6M18 3v4h-4M6 21v-4h4" />
+            </svg>
+          </button>
           <div className="practice glass">
             <div className="practice-label">PRACTICE</div>
             <div className="practice-reps">{practiceReps}</div>
@@ -95,13 +103,21 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
               <button className="pill ghost" onClick={() => setPracticeReps(0)}>
                 Reset
               </button>
-              <button className="pill" onClick={() => setTab("friends")}>
+              <button className="pill" onClick={() => setTab("battle")}>
                 Battle a friend
               </button>
             </div>
           </div>
+          </>
         )}
-        {!inMatch && tab === "friends" && (
+        {!inMatch && tab === "home" && <HomePage profile={profile} onBattle={() => setTab("battle")} onTrain={() => setTab("train")} />}
+        {!inMatch && tab === "throne" && (
+          <ComingSoon title="Throne" text="The best fighter sits on the throne. Win battles, earn Respect and snatch it." />
+        )}
+        {!inMatch && tab === "clan" && (
+          <ComingSoon title="Clan" text="Join a clan, train together and challenge other clans for Respect." />
+        )}
+        {!inMatch && tab === "battle" && (
           <LobbyPage
             players={lobby.players}
             status={lobby.status}
@@ -130,7 +146,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
           </div>
         )}
 
-        <Dock tab={tab} onTab={setTab} onFlip={() => setFacing((f) => (f === "user" ? "environment" : "user"))} locked={inMatch} />
+        <Dock tab={tab} onTab={setTab} locked={inMatch} />
       </PoseCounter>
     </main>
   );
