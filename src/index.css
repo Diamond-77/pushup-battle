@@ -648,3 +648,23 @@ a.game-btn { text-decoration: none; }
 .lobby-bottom { display: flex; flex-direction: column; gap: 10px; }
 @media (min-width: 700px) { .field-card { flex-basis: 260px; } .field-track { padding: 6px calc(50% - 130px) 10px; } }
 .lobby-page .mode-blurb { align-self: center; padding: 6px 12px; border-radius: 12px; background: rgba(20,10,6,0.85); color: #e9dcc0; }
+
+/* ---------- Compact clan page: leave room for the palace on short phone screens (Safari bars) ---------- */
+.clan-card { gap: 4px; padding: 12px 14px; }
+.clan-card .brush-title { font-size: 1.8rem; }
+.clan-card .muted { font-size: 0.8rem; }
+.clan-card .row .game-btn { height: 46px; }
+.clan-card .game-btn.jade { font-family: var(--brush); font-weight: 400; font-size: 1.5rem; }
+.lone-strip { padding: 6px 10px; font-size: 0.75rem; }
+.clan-tabs button { padding: 8px 4px; }
+@media (max-height: 760px) {
+  .page { gap: 8px; padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: calc(112px + env(safe-area-inset-bottom)); }
+  .page-title { font-size: 2.1rem; }
+  .dock { height: 68px; }
+  .game-btn { height: 48px; }
+  .game-btn.big { height: 60px; font-size: 2rem; }
+  .panel { padding: 10px 12px; }
+  .clan-head .brush-title { font-size: 1.7rem; }
+  .field-card { height: min(40vh, 340px); }
+}
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }

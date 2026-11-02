@@ -151,7 +151,7 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
         <div className="row stretch">
           {membersBtn}
           <button className="game-btn red" disabled>
-            Challenge a clan
+            Clan war
           </button>
         </div>
         <div className="soon-strip">Clan wars and chat · coming soon</div>
@@ -169,11 +169,7 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
   return (
     <div className="page clear">
       {tabs}
-      <div className="panel">
-        <div className="brush-title page-title small">{m ? "Rival clans" : "Choose your clan"}</div>
-        <div className="muted">{m ? `You fight for ${m.clan.name}. Scout the other empires.` : "Pick a clan, or fight alone as a Lone Warrior."}</div>
-      </div>
-      <div className="look-hint">Drag to look around · pinch to zoom</div>
+      <div className="look-hint">{m ? `Scouting a rival empire` : "Choose your clan"} · drag to look around</div>
       <div className="spacer" />
       {overlays}
       <div className="clan-card panel" style={{ ["--accent" as string]: preview.color }}>
@@ -182,9 +178,8 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
           <div className="brush-title grow">{preview.name}</div>
           <span className="stat-chip">{plural(clan.counts[preview.id] ?? 0, "member")}</span>
         </div>
-        <div className="muted small"><b className="gold-text">{clan.respect[preview.id] ?? 0} clan Respect</b> · all members' Respect added up</div>
-        <div className="muted">{preview.motto}</div>
-        <div className="muted small">{WEATHER_LABEL[preview.weather]}</div>
+        <div className="muted small"><b className="gold-text">{clan.respect[preview.id] ?? 0} clan Respect</b></div>
+        <div className="muted">{preview.motto} <span className="small">· {WEATHER_LABEL[preview.weather]}</span></div>
         {clan.error && <p className="form-msg error">{clan.error}</p>}
         <div className="row stretch">
           {membersBtn}

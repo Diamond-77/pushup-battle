@@ -91,6 +91,8 @@ export default function ProfilePage({ profile, email, onChange, membership }: Pr
       </label>
       {email && <div className="muted">{email}</div>}
       {message && <p className="form-msg">{message}</p>}
+      {/* Only on the developer (legendary) account, as asked */}
+      {profile.legendary && (
       <div className="panel report">
         <div className="section-title">Found a bug? Report it</div>
         <div className="row stretch">
@@ -102,6 +104,7 @@ export default function ProfilePage({ profile, email, onChange, membership }: Pr
           </a>
         </div>
       </div>
+      )}
       <button className="pill ghost" onClick={() => supabase?.auth.signOut()}>
         Log out
       </button>
