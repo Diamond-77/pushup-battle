@@ -518,13 +518,13 @@ a.game-btn { text-decoration: none; }
 .game-btn.jade.whatsapp { font-family: "Inter", sans-serif; font-weight: 800; font-size: 1rem; }
 
 /* Legendary: a living gold-and-flame frame nobody else can get */
-.hex.legendary { background: conic-gradient(from var(--spin, 0deg), #fff6cf, #e8b84a, #a86d1c, #ffe08a, #e8b84a, #fff6cf); animation: legend-spin 4s linear infinite; filter: drop-shadow(0 0 8px rgba(255, 190, 80, 0.8)); padding: 4px; }
+.hex.legendary { background: conic-gradient(from var(--spin, 0deg), #0b1a2a 0deg, #0b1a2a 200deg, #1e6bff 250deg, #5fe3ff 300deg, #ffffff 330deg, #5fe3ff 345deg, #0b1a2a 360deg); animation: legend-spin 1.6s linear infinite; padding: 4px; }
 @property --spin { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 @keyframes legend-spin { to { --spin: 360deg; } }
 .legendary-card { border-color: #e8b84a; background: radial-gradient(120% 80% at 50% 0%, rgba(232,184,74,0.35), transparent 60%), var(--wood); box-shadow: inset 0 0 0 3px #1b1a1f, 0 5px 0 var(--wood-shadow), 0 0 40px rgba(232,184,74,0.35); position: relative; overflow: hidden; }
-.legendary-card::before { content: ""; position: absolute; inset: -40%; background: linear-gradient(115deg, transparent 40%, rgba(255,240,190,0.25) 50%, transparent 60%); animation: legend-shine 3.5s ease-in-out infinite; pointer-events: none; }
+.legendary-card::before { content: ""; position: absolute; inset: -40%; background: linear-gradient(115deg, transparent 40%, rgba(150,235,255,0.22) 50%, transparent 60%); animation: legend-shine 3.5s ease-in-out infinite; pointer-events: none; }
 @keyframes legend-shine { from { transform: translateX(-60%); } to { transform: translateX(60%); } }
-.legendary-card .profile-name { color: #ffe08a; text-shadow: 0 0 18px rgba(255,190,80,0.6), 0 3px 0 rgba(0,0,0,0.4); }
+.legendary-card .profile-name { color: #e6fbff; text-shadow: 0 0 18px rgba(95,227,255,0.7), 0 3px 0 rgba(0,0,0,0.4); }
 
 /* ---------- Full-screen battle result ---------- */
 .result-full { position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; overflow: hidden; animation: result-in 0.35s ease-out; }
@@ -716,13 +716,13 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 
 /* ---------- Legendary avatar: halo, shimmer and orbiting sparks ---------- */
 .legend-wrap { position: relative; flex-shrink: 0; }
-.legend-wrap .hex.legendary { position: relative; z-index: 1; animation: legend-spin 2.4s linear infinite; filter: none; }
-.legend-halo { position: absolute; inset: -22%; border-radius: 50%; background: radial-gradient(circle, rgba(255,214,120,0.75), rgba(255,140,60,0.35) 45%, transparent 70%); animation: halo-pulse 1.8s ease-in-out infinite; pointer-events: none; }
+.legend-wrap .hex.legendary { position: relative; z-index: 1; animation: legend-spin 1.6s linear infinite; }
+.legend-halo { position: absolute; inset: -22%; border-radius: 50%; background: radial-gradient(circle, rgba(95,227,255,0.55), rgba(30,107,255,0.25) 45%, transparent 70%); animation: halo-pulse 1.8s ease-in-out infinite; pointer-events: none; }
 .legend-wrap .hex.legendary::after { content: ""; position: absolute; inset: 0; background: linear-gradient(120deg, transparent 35%, rgba(255,255,255,0.85) 50%, transparent 65%); background-size: 250% 100%; animation: hex-shimmer 2.2s ease-in-out infinite; mix-blend-mode: overlay; clip-path: var(--hex); pointer-events: none; }
-.legend-orbit { position: absolute; inset: -12%; animation: orbit 5s linear infinite; pointer-events: none; z-index: 2; }
+.legend-orbit { position: absolute; inset: -12%; animation: orbit 2.6s linear infinite; pointer-events: none; z-index: 2; }
 .legend-orbit i { position: absolute; left: 50%; top: 50%; width: calc(var(--s) * 0.09 + 3px); height: calc(var(--s) * 0.09 + 3px); margin: calc((var(--s) * 0.09 + 3px) / -2);
-  background: #fff6cf; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
-  transform: rotate(calc(var(--i) * 90deg)) translateY(calc(var(--s) * -0.66)); filter: drop-shadow(0 0 4px #ffd36b); animation: twinkle 1.2s ease-in-out infinite; animation-delay: calc(var(--i) * 0.3s); }
+  background: #d8f8ff; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  transform: rotate(calc(var(--i) * 90deg)) translateY(calc(var(--s) * -0.66)); filter: drop-shadow(0 0 4px #5fe3ff); animation: twinkle 1.2s ease-in-out infinite; animation-delay: calc(var(--i) * 0.3s); }
 @keyframes halo-pulse { 0%, 100% { opacity: 0.55; transform: scale(0.95); } 50% { opacity: 1; transform: scale(1.08); } }
 @keyframes hex-shimmer { from { background-position: 150% 0; } to { background-position: -100% 0; } }
 @keyframes orbit { to { transform: rotate(360deg); } }
