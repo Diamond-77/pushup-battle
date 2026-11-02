@@ -47,7 +47,11 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
   const myClan = clan.membership?.clan ?? null;
   const [preview, setPreview] = useState<Clan>(CLANS[0]);
   // Background palace: the clan being browsed on the Clan tab, otherwise your own clan's (lone warriors get a clear day)
-  const shown = tab === "clan" ? myClan ?? preview : myClan;
+  const shown = tab === "clan" ? preview : myClan;
+  // open the Clan tab on your own clan
+  useEffect(() => {
+    if (myClan) setPreview(myClan);
+  }, [myClan?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sounds for the countdown and the result
   useEffect(() => {

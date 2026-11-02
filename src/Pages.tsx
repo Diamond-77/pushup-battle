@@ -57,10 +57,21 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
   const [busy, setBusy] = useState(false);
   const [members, setMembers] = useState<Member[] | null>(null);
   const m = clan.membership;
+  const tabs = (
+    <div className="clan-tabs">
+      {CLANS.map((c) => (
+        <button key={c.id} className={c.id === preview.id ? "on" : ""} style={{ ["--accent" as string]: c.color }} onClick={() => { onPreview(c); setConfirming(null); setMembers(null); }}>
+          {c.name}
+        </button>
+      ))}
+    </div>
+  );
 
-  if (m) {
+  // Your own clan: members and days left
+  if (m && m.clan.id === preview.id) {
     return (
       <div className="page clear">
+        {tabs}
         <div className="clan-head panel">
           <span className="clan-glyph big" style={{ background: m.clan.color }}><FlagIcon size={32} /></span>
           <div>
@@ -110,16 +121,10 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
 
   return (
     <div className="page clear">
+      {tabs}
       <div className="panel">
-        <div className="brush-title page-title small">Choose your clan</div>
-        <div className="muted">Join one clan for {CLAN_DAYS} days, or fight alone as a Lone Warrior.</div>
-      </div>
-      <div className="clan-tabs">
-        {CLANS.map((c) => (
-          <button key={c.id} className={c.id === preview.id ? "on" : ""} style={{ ["--accent" as string]: c.color }} onClick={() => { onPreview(c); setConfirming(null); }}>
-            {c.name}
-          </button>
-        ))}
+        <div className="brush-title page-title small">{m ? "Rival clans" : "Choose your clan"}</div>
+        <div className="muted">{m ? `You fight for ${m.clan.name}. Scout the other empires.` : `Join one clan for ${CLAN_DAYS} days, or fight alone as a Lone Warrior.`}</div>
       </div>
       <div className="look-hint">Drag to look around · pinch to zoom</div>
       <div className="spacer" />
@@ -131,13 +136,19 @@ export function ClanPage({ clan, preview, onPreview }: { clan: ClanState; previe
         <div className="muted">{preview.motto}</div>
         <div className="muted small">{WEATHER_LABEL[preview.weather]}</div>
         {clan.error && <p className="form-msg error">{clan.error}</p>}
-        <button className={`game-btn ${confirming === preview.id ? "red" : "jade"} wide`} disabled={busy || clan.loading} onClick={join}>
-          {busy ? "Joining…" : confirming === preview.id ? `Tap again: join for ${CLAN_DAYS} days` : `Join ${preview.name}`}
-        </button>
+        {m ? (
+          <div className="locked-note">You can switch in {plural(daysLeft(m.expiresAt), "day")}</div>
+        ) : (
+          <button className={`game-btn ${confirming === preview.id ? "red" : "jade"} wide`} disabled={busy || clan.loading} onClick={join}>
+            {busy ? "Joining…" : confirming === preview.id ? `Tap again: join for ${CLAN_DAYS} days` : `Join ${preview.name}`}
+          </button>
+        )}
       </div>
-      <div className="lone-strip">
-        <b>Lone Warrior</b> · you fight alone until you join a clan
-      </div>
+      {!m && (
+        <div className="lone-strip">
+          <b>Lone Warrior</b> · you fight alone until you join a clan
+        </div>
+      )}
     </div>
   );
 }
