@@ -249,3 +249,7 @@ input:focus { border-color: var(--me); }
 .pw-wrap input { padding-right: 50px; }
 .pw-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border: 0; background: none; display: grid; place-items: center; color: var(--muted); }
 .pw-eye svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+.or { color: var(--muted); font-size: 0.8rem; margin: 2px 0; }
+.pill.wide { width: 100%; }
+.pill.google { display: flex; align-items: center; justify-content: center; gap: 10px; background: #fff; color: #1f1f1f; padding: 13px 18px; font-size: 0.95rem; }

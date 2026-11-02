@@ -53,6 +53,7 @@ function friendlyError(message: string) {
   if (m.includes("rate limit")) return "Too many emails sent. Please wait a few minutes and try again.";
   if (m.includes("not confirmed")) return "Your email isn't confirmed yet. Tap the link in the email we sent, or resend it below.";
   if (m.includes("invalid login")) return "Wrong email or password.";
+  if (m.includes("provider is not enabled")) return "Google sign-in isn't switched on yet. Use email for now.";
   if (m.includes("already registered")) return "This email already has an account. Log in instead.";
   return message;
 }
@@ -105,6 +106,13 @@ export function AuthScreen() {
     const { error } = await supabase.auth.resend({ type: "signup", email, options: { emailRedirectTo: redirectTo } });
     setMessage(error ? friendlyError(error.message) : "Sent again. Check your inbox and spam folder.");
     if (!error) setCooldown(RESEND_COOLDOWN_S);
+  };
+
+  // Google sign-in: no confirmation email needed.
+  const google = async () => {
+    if (!supabase) return;
+    const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo } });
+    if (error) setMessage(friendlyError(error.message));
   };
 
   const go = (m: typeof mode) => () => {
@@ -173,6 +181,17 @@ export function AuthScreen() {
             {busy ? "…" : action}
           </button>
         </form>
+        {mode !== "forgot" && (
+          <>
+            <div className="or">or</div>
+            <button className="pill google wide" onClick={google}>
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+                <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.6 3.8-5.5 3.8-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3.2 14.6 2.2 12 2.2 6.6 2.2 2.2 6.6 2.2 12s4.4 9.8 9.8 9.8c5.7 0 9.4-4 9.4-9.6 0-.6-.1-1.1-.2-1.6H12z" />
+              </svg>
+              Continue with Google
+            </button>
+          </>
+        )}
         {message && <p className="form-msg">{message}</p>}
         {canResend && resendButton}
         {mode === "login" && (
