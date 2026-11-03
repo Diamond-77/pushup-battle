@@ -1270,3 +1270,13 @@ body:has(.challenge-sheet) .challenge-note { display: none; }
 .song-err { color: #ff8a80; font-size: 0.8rem; }
 .song-hint { color: rgba(255,255,255,0.5); font-size: 0.7rem; line-height: 1.35; }
 .now-play:disabled { opacity: 0.35; }
+/* phone: the name plaque shrinks so both banners (challenges + clan) stay on screen */
+.home-top .plaque { flex: 1 1 auto; min-width: 0; }
+.home-top .plaque > div { min-width: 0; }
+.home-top .plaque-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-top .respect { flex-wrap: wrap; row-gap: 2px; }
+.banner-col { flex: 0 0 auto; gap: 6px; }
+@media (max-width: 480px) {
+  .banner-col .clan-banner { width: 52px; }
+  .banner-col .clan-glyph svg { width: 26px; height: 26px; }
+}

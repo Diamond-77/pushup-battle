@@ -54,7 +54,8 @@ export default function SongPlayer({ song: given, color = "#ffd27a", className =
   useEffect(() => {
     if (!song.src) return;
     setMissing(false);
-    const a = new Audio(song.src);
+    // "#t=" asks the browser to start loading and playing right at the start point (no jump from 0:00)
+    const a = new Audio(start > 0 ? `${song.src}#t=${start}` : song.src);
     a.preload = "auto";
     a.volume = 0;
     a.addEventListener("loadedmetadata", () => { try { a.currentTime = start; } catch { /* not seekable yet */ } setTime({ now: a.currentTime, len: a.duration }); }, { once: true });
@@ -79,7 +80,7 @@ export default function SongPlayer({ song: given, color = "#ffd27a", className =
         if (cancelled) return a.pause();
         active = true; setSongActive(true); setPlaying(true);
         let v = 0;
-        fadeT = window.setInterval(() => { v = Math.min(SONG_VOLUME, v + SONG_VOLUME / 20); a.volume = v; if (v >= SONG_VOLUME) clearInterval(fadeT); }, 60);
+        fadeT = window.setInterval(() => { v = Math.min(SONG_VOLUME, v + SONG_VOLUME / 6); a.volume = v; if (v >= SONG_VOLUME) clearInterval(fadeT); }, 60);
       }).catch(() => window.addEventListener("pointerdown", go, { once: true })); // browsers wait for a first tap
     };
     const hide = () => { if (document.hidden) a.pause(); else if (active) a.play().catch(() => {}); };
