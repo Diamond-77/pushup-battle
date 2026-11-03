@@ -101,7 +101,7 @@ export function Crest({ clan, m }: { clan: string; m: Metal }) {
 }
 
 // shoulder plate: three overlapping lames with rivets
-function Pauldron({ clan, m, right }: { clan: string; m: Metal; right?: boolean }) {
+export function Pauldron({ clan, m, right }: { clan: string; m: Metal; right?: boolean }) {
   const id = `pd-${clan}-${right ? "r" : "l"}`;
   const lames = [
     "M4 14 Q34 0 66 10 L64 46 Q34 36 6 50 Z",
@@ -127,7 +127,7 @@ function Pauldron({ clan, m, right }: { clan: string; m: Metal; right?: boolean 
 }
 
 // braided cord tied in a knot with two tassels
-function Knot({ m }: { m: Metal }) {
+export function Knot({ m }: { m: Metal }) {
   const braid = (d: string) => (
     <>
       <path d={d} fill="none" stroke={INK} strokeWidth="9" strokeLinecap="round" />
@@ -198,5 +198,33 @@ export default function ArmorFrame({ clan, children }: { clan: string; children:
       {children}
       <Knot m={m} />
     </div>
+  );
+}
+
+// Sode: a tall samurai sleeve guard of laced lames, standing at each side of the throne.
+export function SideGuard({ clan, right }: { clan: string; right?: boolean }) {
+  const m = METALS[clan] ?? METALS.lone;
+  const id = `sg-${clan}-${right ? "r" : "l"}`;
+  const rows = 7;
+  return (
+    <svg className={`side-guard ${right ? "right" : "left"}`} viewBox="0 0 54 300" preserveAspectRatio="none" aria-hidden="true">
+      <Defs id={id} m={m} />
+      {/* the cord the lames hang from */}
+      <path d="M8 6 H46" stroke={m.cord} strokeWidth="6" strokeLinecap="round" />
+      {Array.from({ length: rows }, (_, i) => {
+        const y = 10 + i * 40;
+        const d = `M4 ${y} Q27 ${y - 5} 50 ${y} L48 ${y + 40} Q27 ${y + 35} 6 ${y + 40} Z`;
+        return (
+          <g key={i}>
+            <path d={d} fill={`url(#${id}-metal)`} stroke={INK} strokeWidth="2" strokeLinejoin="round" />
+            <path d={d} fill={`url(#${id}-shine)`} />
+            {/* lacing */}
+            {[14, 27, 40].map((x) => <path key={x} d={`M${x} ${y + 4} v32`} stroke={m.cord} strokeWidth="2.4" strokeDasharray="4 3" />)}
+            <path d={`M6 ${y + 37} Q27 ${y + 32} 48 ${y + 37}`} fill="none" stroke={m.glow} strokeWidth="1.2" opacity="0.7" />
+          </g>
+        );
+      })}
+      <Swirl x={14} y={150} s={1.1} c="#d9b26a" />
+    </svg>
   );
 }

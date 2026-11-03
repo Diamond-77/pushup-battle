@@ -1174,3 +1174,18 @@ body:has(.challenge-sheet) .challenge-note { display: none; }
 .test-btns { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); z-index: 20; }
 .test-btns button { padding: 10px 14px; border-radius: 12px; border: 2px solid #8f241b; background: rgba(110,224,58,0.9); color: #0d1a06; font-weight: 800; }
 @media (pointer: coarse), (max-width: 899px) { .test-btns { display: none; } }
+
+/* Throne v3: bigger seat with samurai side guards, shoulder plates and a knotted cord */
+.throne-wrap { width: min(330px, calc(100% - 40px)); margin-left: auto; margin-right: auto; margin-bottom: 34px; }
+.throne-wrap .throne-seat { width: 100%; padding: 24px 0 20px; border-radius: 160px 160px 18px 18px; min-height: 330px; box-sizing: border-box; justify-content: center; }
+.throne-wrap .crest { top: -64px; width: 230px; }
+.side-guard { position: absolute; z-index: 3; top: 30px; bottom: 6px; width: 40px; height: calc(100% - 36px); filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6)); pointer-events: none; }
+.side-guard.left { left: -30px; transform: rotate(-3deg); transform-origin: top center; }
+.side-guard.right { right: -30px; transform: rotate(3deg) scaleX(-1); transform-origin: top center; }
+.throne-wrap .pauldron { top: -10px; width: 70px; z-index: 4; }
+.throne-wrap .pauldron.left { left: -36px; }
+.throne-wrap .pauldron.right { right: -36px; }
+.throne-wrap .knot { position: absolute; z-index: 4; left: 50%; bottom: -40px; width: 230px; transform: translateX(-50%); pointer-events: none; }
+.throne-wrap .throne-holder { font-size: 1.15rem; }
+.rank-clan { flex-shrink: 0; width: 30px; height: 30px; display: grid; place-items: center; }
+.rank-clan.lone::before { content: ""; width: 10px; height: 10px; border-radius: 50%; border: 2px solid #b8aa8a; }

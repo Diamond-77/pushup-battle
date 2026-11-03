@@ -5,7 +5,7 @@ import { CLAN_DAYS, START_RESPECT, respectTitle } from "./config";
 import { supabase } from "./supabase";
 import { useEffect, useState, type ReactNode } from "react";
 import { daysLeft, type useClan } from "./useClan";
-import { Crest, METALS } from "./ArmorFrame";
+import { Crest, Knot, METALS, Pauldron, SideGuard } from "./ArmorFrame";
 import type { Profile } from "./auth";
 
 // Full-page screens drawn over the 3D palace.
@@ -215,6 +215,13 @@ export function ThronePage({ clanRespect, myId, onPlayer, onKingClan }: { clanRe
       .then(({ data, error }) => (error ? setFailed(true) : setTop((data ?? []) as Ranked[])));
   }, []);
   const king = top?.[0];
+  // every listed player's clan, for the badge beside their name
+  const [clanOf, setClanOf] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!top?.length || !supabase) return;
+    supabase.from("clan_members").select("user_id, clan_id").in("user_id", top.map((p) => p.id)).gt("expires_at", new Date().toISOString())
+      .then(({ data }) => setClanOf(Object.fromEntries((data ?? []).map((r: { user_id: string; clan_id: string }) => [r.user_id, r.clan_id]))));
+  }, [top]);
   const [kingClan, setKingClan] = useState<Clan | null>(null);
   useEffect(() => {
     if (!king || !supabase) return;
@@ -233,20 +240,29 @@ export function ThronePage({ clanRespect, myId, onPlayer, onKingClan }: { clanRe
         <>
           <div className="throne-wrap" style={{ ["--m-glow" as string]: METALS[kingClan?.id ?? "lone"].glow }}>
           {king && <Crest clan={kingClan?.id ?? "lone"} m={METALS[kingClan?.id ?? "lone"]} />}
+          {king && (
+            <>
+              <SideGuard clan={kingClan?.id ?? "lone"} />
+              <SideGuard clan={kingClan?.id ?? "lone"} right />
+              <Pauldron clan={kingClan?.id ?? "lone"} m={METALS[kingClan?.id ?? "lone"]} />
+              <Pauldron clan={kingClan?.id ?? "lone"} m={METALS[kingClan?.id ?? "lone"]} right />
+            </>
+          )}
           <div className={`throne-seat ${kingClan ? `themed theme-${kingClan.id}` : ""}`}>
             {kingClan && <div className="theme-fx" />}
             {kingClan?.id === "arasaka" && <div className="ara-run" />}
             <div className="throne-label">THE THRONE</div>
-            {king ? <button className="member-row center-row" onClick={() => onPlayer(king.id)}><Avatar url={king.avatar_url} color="me" size={84} legendary={king.legendary} /></button> : <div className="throne-empty">?</div>}
+            {king ? <button className="member-row center-row" onClick={() => onPlayer(king.id)}><Avatar url={king.avatar_url} color="me" size={132} legendary={king.legendary} glow={METALS[kingClan?.id ?? "lone"].glow} /></button> : <div className="throne-empty">?</div>}
             <div className="throne-holder">{king ? king.username : failed ? "Respect isn't set up yet" : "…"}</div>
             {king && <div className="respect">{king.respect} <span className="respect-word">Respect</span> <span className="rank-title">{respectTitle(king.respect)}</span></div>}
             {king && <ThroneMotto king={king} mine={king.id === myId} />}
             {king && (
               <div className="throne-clan">
-                {kingClan ? <><ClanLogo clan={kingClan} size={22} /><span>{kingClan.name}</span></> : <span>Lone Warrior</span>}
+                {kingClan ? <><ClanLogo clan={kingClan} size={30} /><span>{kingClan.name}</span></> : <span>Lone Warrior</span>}
               </div>
             )}
           </div>
+          {king && <Knot m={METALS[kingClan?.id ?? "lone"]} />}
           </div>
           <div className="parchment">
             <ol className="rank-list">
@@ -258,6 +274,7 @@ export function ThronePage({ clanRespect, myId, onPlayer, onKingClan }: { clanRe
                     <div className="pl-name">{p.username}</div>
                     <div className="pl-status">{respectTitle(p.respect)}</div>
                   </div>
+                  {(() => { const c = clanById(clanOf[p.id]); return c ? <span className="rank-clan" title={c.name}><ClanLogo clan={c} size={26} /></span> : <span className="rank-clan lone" title="Lone Warrior" />; })()}
                   <b className="gold-text">{p.respect}</b>
                 </li>
               ))}
