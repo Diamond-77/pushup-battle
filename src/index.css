@@ -966,3 +966,35 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .vs-score b { font-size: 1.5rem; color: #8f8f9a; font-variant-numeric: tabular-nums; min-width: 1.4em; text-align: center; }
 .vs-score b.hi { color: #fff; text-shadow: 0 0 12px var(--acc); }
 .vs-score i { font-style: normal; font-family: "Ma Shan Zheng", cursive; font-size: 1.3rem; color: var(--acc); }
+
+/* ---------- Arasaka special: the dev's clan gets motion ---------- */
+@property --ara-ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.ara-fx { position: absolute; inset: 0; pointer-events: none; z-index: 2; border-radius: 16px; }
+.ara-run { position: absolute; inset: -3px; border-radius: 18px; padding: 3px;
+  background: conic-gradient(from var(--ara-ang), transparent 0 72%, rgba(255,59,47,0.2) 78%, #ff3b2f 86%, #fff 89%, #ff3b2f 92%, transparent 96%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  filter: drop-shadow(0 0 6px #ff3b2f) drop-shadow(0 0 14px rgba(255,59,47,0.6)); animation: ara-spin 3.2s linear infinite; }
+.ara-run.two { animation-duration: 5.3s; animation-direction: reverse; opacity: 0.55; }
+@keyframes ara-spin { to { --ara-ang: 360deg; } }
+.ara-bolt { position: absolute; inset: 10px; width: calc(100% - 20px); height: calc(100% - 20px); opacity: 0; animation: ara-strike 6s steps(1) infinite; }
+.ara-bolt polyline { fill: none; stroke: #fff; stroke-width: 0.9; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.ara-bolt { filter: drop-shadow(0 0 3px #ff3b2f) drop-shadow(0 0 10px #ff3b2f); }
+.ara-bolt polyline { stroke-width: 2.5px; }
+.ara-bolt.b2 { animation-delay: -2.7s; animation-duration: 7.4s; }
+@keyframes ara-strike { 0%, 100% { opacity: 0; } 58% { opacity: 1; } 59% { opacity: 0.2; } 60% { opacity: 0.9; } 62% { opacity: 0; } }
+.ara-flash { position: absolute; inset: 10px; border-radius: 8px; background: radial-gradient(80% 60% at 60% 40%, rgba(255,90,70,0.35), transparent 70%); opacity: 0; animation: ara-strike 6s steps(1) infinite; mix-blend-mode: screen; }
+.ember { position: absolute; bottom: 14px; border-radius: 50%; background: #ffb070; box-shadow: 0 0 6px #ff5a2a, 0 0 12px #ff3b2f; opacity: 0; animation: ember-rise linear infinite; }
+@keyframes ember-rise { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 60% { transform: translate(14px, -55%); } 100% { transform: translate(-8px, -260px); opacity: 0; } }
+.armor-arasaka .crest { animation: crest-pulse 2.4s ease-in-out infinite; }
+@keyframes crest-pulse { 50% { filter: drop-shadow(0 0 18px rgba(255,59,47,0.95)) drop-shadow(0 0 4px #fff); } }
+.armor-arasaka .pauldron.left { animation: plate-breathe 3s ease-in-out infinite; }
+.armor-arasaka .pauldron.right { animation: plate-breathe-r 3s ease-in-out infinite; }
+@keyframes plate-breathe { 50% { transform: translateY(-2px) rotate(-2deg); } }
+@keyframes plate-breathe-r { 0%, 100% { transform: scaleX(-1); } 50% { transform: scaleX(-1) translateY(-2px) rotate(-2deg); } }
+.armor-arasaka .pcard-name { animation: ara-glitch 4.5s steps(1) infinite; }
+@keyframes ara-glitch { 0%, 100% { transform: none; clip-path: none; }
+  71% { transform: translateX(-3px); clip-path: inset(0 0 55% 0); } 72% { transform: translateX(3px); clip-path: inset(45% 0 0 0); } 73% { transform: none; clip-path: none; } }
+.armor-arasaka .knot { animation: knot-sway 3.6s ease-in-out infinite; transform-origin: 50% 20%; }
+@keyframes knot-sway { 0%, 100% { transform: translateX(-50%) rotate(0); } 50% { transform: translateX(-50%) rotate(2.5deg); } }
+@media (prefers-reduced-motion: reduce) { .ara-fx * , .armor-arasaka * { animation: none !important; } }

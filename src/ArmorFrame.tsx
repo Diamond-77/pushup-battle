@@ -166,6 +166,27 @@ export const Blossom = ({ color }: { color: string }) => (
   </svg>
 );
 
+// Arasaka only: lightning running round the frame, strikes across the card, embers rising.
+const EMBERS = Array.from({ length: 16 }, (_, i) => ({ x: (i * 37) % 100, d: 3 + ((i * 7) % 5), delay: -((i * 13) % 50) / 10, s: 2 + (i % 3) }));
+function ArasakaFx() {
+  return (
+    <div className="ara-fx" aria-hidden="true">
+      <div className="ara-run" />
+      <div className="ara-run two" />
+      <svg className="ara-bolt" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <polyline points="72,0 60,22 68,26 50,50 58,54 38,78 46,80 30,100" />
+      </svg>
+      <svg className="ara-bolt b2" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <polyline points="18,0 28,18 20,24 34,46 26,50 40,72" />
+      </svg>
+      <div className="ara-flash" />
+      {EMBERS.map((e, i) => (
+        <i key={i} className="ember" style={{ left: `${e.x}%`, width: e.s, height: e.s, animationDuration: `${e.d}s`, animationDelay: `${e.delay}s` }} />
+      ))}
+    </div>
+  );
+}
+
 export default function ArmorFrame({ clan, children }: { clan: string; children: ReactNode }) {
   const m = METALS[clan] ?? METALS.lone;
   return (
@@ -173,6 +194,7 @@ export default function ArmorFrame({ clan, children }: { clan: string; children:
       <Crest clan={clan} m={m} />
       <Pauldron clan={clan} m={m} />
       <Pauldron clan={clan} m={m} right />
+      {clan === "arasaka" && <ArasakaFx />}
       {children}
       <Knot m={m} />
     </div>
