@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 .env.local
 public/mediapipe/wasm
+
+# local song sources (the web copies live in public/music)
+the musics/
