@@ -756,5 +756,17 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .page-top { justify-content: space-between; align-items: center; }
 .tease .modal-title { font-size: 1.7rem; }
 .cam-help { z-index: 35; }
-.cam-steps { margin: 0; padding-left: 22px; color: #e9dcc0; line-height: 1.6; text-align: left; align-self: stretch; }
-.cam-steps li::marker { color: var(--gold); font-weight: 800; }
+.small-note { font-size: 0.85rem; color: #b9ab90 !important; }
+.cam-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; align-self: stretch; }
+.cam-steps li { display: flex; gap: 10px; align-items: center; }
+.cam-no { flex: 0 0 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--gold); color: #24140d; font-weight: 800; }
+.cam-step { flex: 1; display: flex; flex-direction: column; gap: 4px; color: #e9dcc0; font-size: 0.9rem; font-weight: 600; }
+.mock-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 999px; background: #f1f3f4; color: #202124; font-size: 0.8rem; }
+.mock-hot { display: grid; place-items: center; min-width: 26px; height: 26px; border-radius: 50%; background: #fff; color: #202124; font-weight: 800; box-shadow: 0 0 0 3px #3fbf8a; animation: hot-pulse 1.2s ease-in-out infinite; }
+.mock-url { color: #5f6368; }
+.mock-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 10px; background: #f1f3f4; color: #202124; font-size: 0.85rem; font-weight: 600; box-shadow: 0 0 0 2px #3fbf8a; }
+.mock-toggle { width: 34px; height: 18px; border-radius: 9px; background: #bdc1c6; position: relative; }
+.mock-toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; }
+.mock-toggle.on { background: #3fbf8a; }
+.mock-toggle.on::after { left: 18px; }
+@keyframes hot-pulse { 50% { box-shadow: 0 0 0 6px rgba(63,191,138,0.4); } }

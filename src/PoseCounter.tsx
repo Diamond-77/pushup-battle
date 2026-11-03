@@ -55,6 +55,32 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
   const [error, setError] = useState<string | null>(null);
   const [camDenied, setCamDenied] = useState(false); // camera permission refused: show the help popup
   const [camTry, setCamTry] = useState(0); // bump to ask for the camera again
+  // Ask for the camera only after the player taps "Allow camera" (or it was allowed before),
+  // so the browser's prompt never pops up by surprise and gets blocked by accident.
+  const [camWanted, setCamWanted] = useState(() => {
+    try { return localStorage.getItem("pb_cam_ok") === "1"; } catch { return false; }
+  });
+  useEffect(() => {
+    navigator.permissions?.query({ name: "camera" as PermissionName }).then((p) => {
+      if (p.state === "granted") setCamWanted(true);
+      if (p.state === "denied") setCamDenied(true);
+    }).catch(() => {});
+  }, []);
+  // Tapped inside the button, so the browser shows its own "Allow camera?" prompt.
+  const askCamera = async () => {
+    try {
+      const test = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      test.getTracks().forEach((t) => t.stop());
+      try { localStorage.setItem("pb_cam_ok", "1"); } catch { /* ignore */ }
+      setCamDenied(false);
+      setCamWanted(true);
+      setCamTry((n) => n + 1);
+    } catch (e) {
+      const name = (e as Error).name;
+      if (name === "NotAllowedError" || name === "SecurityError") setCamDenied(true);
+      else setError("The camera couldn't start. Close other apps using it and try again.");
+    }
+  };
   const [loading, setLoading] = useState(true);
   const [debug, setDebug] = useState<Debug>({ ratio: null, kneeLift: null, state: "up", reps: 0, fps: 0, status: "not_detected", fast: false, lock: "off" });
 
@@ -92,6 +118,7 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
 
   // Camera + wake lock
   useEffect(() => {
+    if (!camWanted) return;
     let stream: MediaStream | null = null;
     let wakeLock: WakeLockSentinel | null = null;
     let cancelled = false;
@@ -139,7 +166,7 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
       stream?.getTracks().forEach((t) => t.stop());
       wakeLock?.release().catch(() => {});
     };
-  }, [facing, camTry]);
+  }, [facing, camTry, camWanted]);
 
   // Pose detection loop
   useEffect(() => {
@@ -378,7 +405,8 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
         {loading && <div className="toast">Starting tracker…</div>}
         {error && <div className="toast error">{error}</div>}
       </div>
-      {camDenied && !paused && <CameraHelp onRetry={() => setCamTry((n) => n + 1)} />}
+      {!paused && !camWanted && !camDenied && <CameraAsk onAllow={askCamera} />}
+      {camDenied && !paused && <CameraHelp onRetry={askCamera} />}
       {switched && (
         <div className="switch-warning">
           <div className="switch-title">Switching body</div>
@@ -402,27 +430,73 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
   );
 }
 
-// Shown when camera access was refused. A website can't open the phone's settings by itself,
-// so it shows the exact steps for this phone, plus a button to ask again.
+// Before the browser asks: explain why, then the player taps to get the real prompt.
+function CameraAsk({ onAllow }: { onAllow: () => void }) {
+  return (
+    <div className="modal-back cam-help">
+      <div className="modal panel">
+        <svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="#3fbf8a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 7h3l2-2h8l2 2h3v12H3z" /><circle cx="12" cy="13" r="3.5" />
+        </svg>
+        <div className="modal-title">Turn on your camera</div>
+        <p className="modal-text">The camera watches your push-ups and counts every rep. Nothing is recorded or sent anywhere.</p>
+        <p className="modal-text small-note">Next, your browser asks. Tap <b>Allow</b>.</p>
+        <button className="game-btn jade big wide" onClick={onAllow}>Allow camera</button>
+      </div>
+    </div>
+  );
+}
+
+// Shown when camera access was refused. A website can't open the phone's settings itself,
+// so it shows the steps as little pictures of the browser, plus a button to ask again.
 function CameraHelp({ onRetry }: { onRetry: () => void }) {
   const ua = navigator.userAgent;
   const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   const android = /Android/.test(ua);
+  const Bar = ({ hot }: { hot: "tune" | "aa" }) => (
+    <div className="mock-bar">
+      {hot === "aa" && <span className="mock-hot">aA</span>}
+      {hot === "tune" && (
+        <span className="mock-hot">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
+        </span>
+      )}
+      <span className="mock-url">pushup-battle…</span>
+    </div>
+  );
+  const Row = ({ label, on }: { label: string; on?: boolean }) => (
+    <div className="mock-row"><span>{label}</span>{on !== undefined && <i className={`mock-toggle ${on ? "on" : ""}`} />}</div>
+  );
   const steps = ios
-    ? ["Tap the \u201caA\u201d button in the address bar", "Tap Website Settings", "Set Camera to Allow", "Come back and tap Try again"]
+    ? [
+        { pic: <Bar hot="aa" />, text: "Tap aA in the address bar" },
+        { pic: <Row label="Website Settings" />, text: "Tap Website Settings" },
+        { pic: <Row label="Camera: Allow" on />, text: "Set Camera to Allow" },
+      ]
     : android
-      ? ["Tap the icon left of the web address", "Tap Permissions (or Site settings)", "Turn Camera on", "Come back and tap Try again"]
-      : ["Click the icon left of the web address", "Set Camera to Allow", "Click Try again"];
+      ? [
+          { pic: <Bar hot="tune" />, text: "Tap this icon next to the web address" },
+          { pic: <Row label="Permissions" />, text: "Tap Permissions" },
+          { pic: <Row label="Camera" on />, text: "Turn Camera on" },
+        ]
+      : [
+          { pic: <Bar hot="tune" />, text: "Click the icon left of the web address" },
+          { pic: <Row label="Camera" on />, text: "Turn Camera on" },
+        ];
   return (
     <div className="modal-back cam-help">
       <div className="modal panel">
-        <svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="#c8372d" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 7h3l2-2h8l2 2h3v12H3z" /><circle cx="12" cy="13" r="3.5" /><path d="M3 3l18 18" />
-        </svg>
         <div className="modal-title">Camera is blocked</div>
-        <p className="modal-text">Pushup Battle needs your camera to count your push-ups. Nothing is recorded or sent anywhere.</p>
-        <ol className="cam-steps">{steps.map((t) => <li key={t}>{t}</li>)}</ol>
-        <button className="game-btn jade wide" onClick={onRetry}>Try again</button>
+        <p className="modal-text">Your browser said no to the camera. Turn it back on in {steps.length} taps:</p>
+        <ol className="cam-steps">
+          {steps.map((st, i) => (
+            <li key={i}>
+              <span className="cam-no">{i + 1}</span>
+              <div className="cam-step">{st.pic}<span>{st.text}</span></div>
+            </li>
+          ))}
+        </ol>
+        <button className="game-btn jade wide" onClick={onRetry}>I turned it on, try again</button>
       </div>
     </div>
   );
