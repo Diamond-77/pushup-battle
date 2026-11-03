@@ -34,7 +34,7 @@ create or replace function public._bot_total(p_tier text, p_mode text)
 returns integer
 as $fn$
 declare
-  pace numeric := case p_tier when 'weak' then 19 when 'strong' then 31 else 44 end; -- first minute
+  pace numeric := case p_tier when 'weak' then 23 when 'strong' then 31 else 44 end; -- first minute
   mins integer := public.mode_seconds(p_mode) / 60;
   total numeric := 0;
   i integer;
