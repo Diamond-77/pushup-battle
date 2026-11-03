@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Avatar from "./Avatar";
 import { MODES, type ModeId } from "./config";
 import type { Player } from "./lobby";
+import { askBadgePermission } from "./badge";
 import {
   answerChallenge, cancelChallenge, checkInChallenge, sendChallenge, untilText, whenText,
   CHALLENGE_STAKE, type ChallengeView,
@@ -170,7 +171,7 @@ export function ChallengeButton({ list, now, online, onStart, onChanged, onPlaye
   const shown = tab === "in" ? theirs : mine;
   return (
     <>
-      <button className="clan-banner challenge-banner" onClick={() => { setOpen(true); setTab(theirs.some(hot) || !mine.some(hot) ? "in" : "out"); }} aria-label="Challenges">
+      <button className="clan-banner challenge-banner" onClick={() => { askBadgePermission(); setOpen(true); setTab(theirs.some(hot) || !mine.some(hot) ? "in" : "out"); }} aria-label="Challenges">
         <span className="clan-glyph"><SwordsIcon /></span>
         <span className="clan-banner-text">Challenges</span>
         {ping > 0 && <i className="dock-ping banner-ping">{ping}</i>}

@@ -23,6 +23,7 @@ import { useMatch } from "./useMatch";
 import { usePushupLog } from "./stats";
 import { useChallenges, untilText } from "./challenges";
 import { ChallengeButton, openChallenges } from "./ChallengeUI";
+import { useAppBadge } from "./badge";
 import { setAmbienceOn, setMusicOn, setMusicScene, useSoundPrefs } from "./music";
 import { effectsOn, setEffectsOn } from "./sound";
 
@@ -95,6 +96,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
 
   // Scheduled challenges: the mailbox on Home, a red ping on the dock and a notice on every page (not in battle)
   const ch = useChallenges(profile.id);
+  useAppBadge(ch.ping);
   const seenNotes = useRef(new Set<string>());
   const [note, setNote] = useState<{ key: string; text: string; avatar: string | null } | null>(null);
   useEffect(() => {
