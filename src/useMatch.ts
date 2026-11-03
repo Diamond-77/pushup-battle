@@ -4,6 +4,7 @@ import { BRAWL_MIN_REPS, COUNTDOWN_SECONDS, MODES } from "./config";
 import type { MatchInfo } from "./lobby";
 import { barValue } from "./match";
 import { supabase } from "./supabase";
+import { botRepTimes } from "./botPace";
 
 export type Phase = "waiting" | "countdown" | "match" | "result" | "cancelled";
 type MatchMsg = { type: "go" } | { type: "rep"; from: string; reps: number } | { type: "end"; from: string; reps: number } | { type: "cancel"; reason: string };
@@ -51,6 +52,11 @@ export function useMatch(info: MatchInfo | null, myId: string, onSettled?: () =>
     setServerResult(null);
     setReportError(null);
     setCancelReason(null);
+    // a bot battle: the server already paid both bets; start after a short "joined" pause
+    if (info.bot) {
+      const t = setTimeout(() => start(), 1200 + Math.random() * 1500);
+      return () => clearTimeout(t);
+    }
     const channel = supabase.channel(`match:${info.matchId}`, {
       config: { presence: { key: myId }, broadcast: { self: false } },
     });
@@ -117,11 +123,25 @@ export function useMatch(info: MatchInfo | null, myId: string, onSettled?: () =>
     return () => clearInterval(t);
   }, [phase]);
 
-  // The match ends early when the bar hits either end.
+  // A bot's push-ups land on their own schedule (its total was decided by the server).
+  useEffect(() => {
+    if (phase !== "match" || !info?.bot) return;
+    const times = botRepTimes(info.bot.total, mode.seconds, info.bot.seed);
+    const t0 = Date.now();
+    const t = setInterval(() => {
+      const el = Date.now() - t0;
+      let n = 0;
+      while (n < times.length && times[n] <= el) n++;
+      setOppReps(n);
+    }, 150);
+    return () => clearInterval(t);
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The match ends early when the bar hits either end (not against a bot: its count runs the full time).
   const bar = barValue(myReps, oppReps, mode.barStep);
   useEffect(() => {
-    if (phase === "match" && (bar <= 0 || bar >= 100)) setPhase("result");
-  }, [phase, bar]);
+    if (phase === "match" && !info?.bot && (bar <= 0 || bar >= 100)) setPhase("result");
+  }, [phase, bar]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addMyRep = useCallback(() => {
     if (phaseRef.current !== "match") return;

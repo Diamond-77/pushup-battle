@@ -5,7 +5,7 @@ import type { ModeId } from "./config";
 
 export type PlayerStatus = "idle" | "searching" | "in_match";
 export type Player = { id: string; tab?: string; name: string; avatar: string | null; status: PlayerStatus; title?: string | null; legendary?: boolean; clan?: string | null; respect?: number; mode?: ModeId };
-export type MatchInfo = { matchId: string; creator: boolean; opponent: Player; mode: ModeId };
+export type MatchInfo = { matchId: string; creator: boolean; opponent: Player; mode: ModeId; bot?: { total: number; seed: number } };
 export type Challenge = Player & { mode: ModeId };
 
 type LobbyMsg =
@@ -20,6 +20,10 @@ type LobbyMsg =
 // that sent/accepted the challenge (or was paired) joins the battle, so an idle tab can't report 0 reps.
 const TAB = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Math.random());
 const forMe = (tab?: string) => !tab || tab === TAB;
+// How long to look for a real opponent before a bot steps in (the developer account gets one right away).
+const BOT_WAIT_MS = () => 7000 + Math.random() * 7000;
+const TESTER_WAIT_MS = 1800;
+
 export function useLobby(me: Omit<Player, "status">) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [status, setStatusState] = useState<PlayerStatus>("idle");
@@ -32,6 +36,7 @@ export function useLobby(me: Omit<Player, "status">) {
   const playersRef = useRef<Player[]>([]);
   const modeRef = useRef<ModeId>("brawl"); // the mode I'm searching for
   const meRef = useRef(me);
+  const botTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   meRef.current = me;
 
   const self = (): Player => ({ ...meRef.current, tab: TAB, status: statusRef.current, mode: modeRef.current });
@@ -69,6 +74,7 @@ export function useLobby(me: Omit<Player, "status">) {
   const trySearchPair = useCallback(
     (list: Player[]) => {
       if (statusRef.current !== "searching") return;
+      if (meRef.current.legendary) return; // the developer account always battles bots
       const mode = modeRef.current;
       const other = list.find((p) => p.status === "searching" && p.mode === mode);
       if (other && meRef.current.id < other.id) createMatch(other, mode);
@@ -148,8 +154,26 @@ export function useLobby(me: Omit<Player, "status">) {
       setNotice(null);
       setStatus("searching");
       trySearchPair(playersRef.current);
+      // nobody came: battle a bot
+      if (botTimer.current) clearTimeout(botTimer.current);
+      botTimer.current = setTimeout(async () => {
+        if (statusRef.current !== "searching" || modeRef.current !== mode || !supabase) return;
+        setStatus("in_match"); // so no real player pairs with me meanwhile
+        const { data, error } = await supabase.rpc("start_bot_match", { p_mode: mode });
+        if (error || !data) {
+          setStatus("searching");
+          if (error && !/function|schema cache/i.test(error.message)) { setNotice(error.message); setStatus("idle"); }
+          return;
+        }
+        const d = data as { match_id: string; total: number; seed: number; opponent: { id: string; name: string; avatar: string | null; legendary: boolean; title: string | null } };
+        setNotice(null);
+        setIncoming(null);
+        setMatch({ matchId: d.match_id, creator: true, mode, bot: { total: d.total, seed: d.seed },
+          opponent: { id: d.opponent.id, name: d.opponent.name, avatar: d.opponent.avatar, legendary: d.opponent.legendary, title: d.opponent.title, status: "in_match" } });
+      }, meRef.current.legendary ? TESTER_WAIT_MS : BOT_WAIT_MS());
     },
     cancel: () => {
+      if (botTimer.current) clearTimeout(botTimer.current);
       setNotice(null);
       setStatus("idle");
     },
