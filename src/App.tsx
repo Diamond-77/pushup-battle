@@ -205,7 +205,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
                 </div>
                 {m.ranked && (
                   <div className={`result-respect ${m.payout && m.payout.delta < 0 ? "minus" : ""}`}>
-                    {m.payout ? `${m.payout.delta > 0 ? "+" : ""}${m.payout.delta} Respect` : "Counting Respect…"}
+                    {m.payout ? `${m.payout.delta > 0 ? "+" : ""}${m.payout.delta} Respect` : m.reportError ? `Couldn't send your score: ${m.reportError}` : "Counting Respect…"}
                   </div>
                 )}
                 <button className="game-btn wood big" onClick={backToLobby}>

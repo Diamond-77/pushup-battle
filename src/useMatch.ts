@@ -24,6 +24,7 @@ export function useMatch(info: MatchInfo | null, myId: string, onSettled?: () =>
   const [secondsLeft, setSecondsLeft] = useState(mode.seconds);
   const [cancelReason, setCancelReason] = useState<string | null>(null);
   const [payout, setPayout] = useState<Payout>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
   const [serverResult, setServerResult] = useState<"win" | "lose" | "draw" | null>(null);
   const rankedRef = useRef(true); // false when the economy functions aren't installed
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -48,6 +49,7 @@ export function useMatch(info: MatchInfo | null, myId: string, onSettled?: () =>
     setPhase("waiting");
     setPayout(null);
     setServerResult(null);
+    setReportError(null);
     setCancelReason(null);
     const channel = supabase.channel(`match:${info.matchId}`, {
       config: { presence: { key: myId }, broadcast: { self: false } },
@@ -152,8 +154,18 @@ export function useMatch(info: MatchInfo | null, myId: string, onSettled?: () =>
     let stop = false;
     const matchId = info.matchId;
     (async () => {
-      const { error } = await supabase.rpc("report_match", { p_match: matchId, p_reps: myRepsRef.current });
-      if (error) return;
+      // Send my count. If it fails (e.g. the sign-in token went stale in a long-open tab), refresh and try again.
+      const reps = myRepsRef.current;
+      let error: { message: string } | null = null;
+      for (let t = 0; t < 6 && !stop; t++) {
+        ({ error } = await supabase.rpc("report_match", { p_match: matchId, p_reps: reps }));
+        if (!error) break;
+        console.warn("report_match failed", error.message);
+        if (/not your match|already over/i.test(error.message)) break;
+        await supabase.auth.refreshSession().catch(() => {});
+        await new Promise((r) => setTimeout(r, 1500 * (t + 1)));
+      }
+      if (error) { setReportError(error.message); return; }
       for (let i = 0; i < 40 && !stop; i++) {
         const { data } = await supabase.from("matches").select("*").eq("id", matchId).maybeSingle();
         if (data?.settled_at) {
@@ -178,5 +190,5 @@ export function useMatch(info: MatchInfo | null, myId: string, onSettled?: () =>
     return () => { stop = true; };
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { phase, myReps, oppReps, countdown, secondsLeft, addMyRep, result, payout, cancelReason, ranked: rankedRef.current, mode };
+  return { phase, myReps, oppReps, countdown, secondsLeft, addMyRep, result, payout, cancelReason, reportError, ranked: rankedRef.current, mode };
 }
