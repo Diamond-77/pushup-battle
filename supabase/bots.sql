@@ -12,6 +12,8 @@ create table if not exists public.bot_accounts (
   tier text not null check (tier in ('weak', 'strong', 'boss'))
 );
 alter table public.bot_accounts enable row level security;
+-- while you're signed in as a bot (e.g. changing its picture) it's "online" and won't be picked
+alter table public.bot_accounts add column if not exists online_until timestamptz;
 
 -- accounts that always get a bot match, and which tier
 create table if not exists public.bot_testers (
@@ -75,10 +77,14 @@ begin
       want := case want when 'weak' then 'strong' when 'boss' then 'strong' else (case when random() < 0.5 then 'weak' else 'boss' end) end;
     end if;
   end if;
+  -- skip bots you're signed in as, and bots already in a battle (a real player can't be in two)
   select b.user_id, p.username, p.avatar_url, p.legendary, p.title, p.respect into bot
     from public.bot_accounts b join public.profiles p on p.id = b.user_id
+   where (b.online_until is null or b.online_until < now())
+     and not exists (select 1 from public.matches x where x.settled_at is null and b.user_id in (x.player_a, x.player_b)
+                     and x.started_at > now() - interval '10 minutes')
    order by (b.tier = want) desc, random() limit 1;
-  if bot.user_id is null then raise exception 'No opponent found'; end if;
+  if bot.user_id is null then raise exception 'No opponent found right now. Try again in a moment.'; end if;
 
   -- the bot always has enough for its bet
   if bot.respect < bet then perform public._add_respect(bot.user_id, bet - bot.respect, 'refill', null); end if;
@@ -93,6 +99,13 @@ begin
     'opponent', json_build_object('id', bot.user_id, 'name', bot.username, 'avatar', bot.avatar_url, 'legendary', coalesce(bot.legendary, false), 'title', bot.title));
 end;
 $fn$ language plpgsql security definer set search_path = public;
+
+-- the app calls this every minute; it only does something when you're signed in as a bot
+create or replace function public.bot_heartbeat()
+returns void
+as $fn$
+  update public.bot_accounts set online_until = now() + interval '2 minutes' where user_id = auth.uid();
+$fn$ language sql security definer set search_path = public;
 
 -- the bot's count goes into the match once the player has reported, or the battle is long over
 create or replace function public._fill_bot_reps(p_match uuid)

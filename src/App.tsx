@@ -97,6 +97,13 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
   // Scheduled challenges: the mailbox on Home, a red ping on the dock and a notice on every page (not in battle)
   const ch = useChallenges(profile.id);
   useAppBadge(ch.ping);
+  // if this account is a bot, tell the server it's in use so it isn't picked as an opponent
+  useEffect(() => {
+    const beat = () => { supabase?.rpc("bot_heartbeat").then(() => {}); };
+    beat();
+    const t = setInterval(beat, 60000);
+    return () => clearInterval(t);
+  }, []);
   const seenNotes = useRef(new Set<string>());
   const [note, setNote] = useState<{ key: string; text: string; avatar: string | null } | null>(null);
   useEffect(() => {
