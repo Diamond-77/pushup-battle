@@ -770,3 +770,4 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .mock-toggle.on { background: #3fbf8a; }
 .mock-toggle.on::after { left: 18px; }
 @keyframes hot-pulse { 50% { box-shadow: 0 0 0 6px rgba(63,191,138,0.4); } }
+.mock-bar.menu { justify-content: space-between; }

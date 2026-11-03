@@ -475,9 +475,9 @@ function CameraHelp({ onRetry }: { onRetry: () => void }) {
       ]
     : android
       ? [
-          { pic: <Bar hot="tune" />, text: "Tap this icon next to the web address" },
-          { pic: <Row label="Permissions" />, text: "Tap Permissions" },
-          { pic: <Row label="Camera" on />, text: "Turn Camera on" },
+          { pic: <div className="mock-bar menu"><span className="mock-url">pushup-battle…</span><span className="mock-hot">⋮</span></div>, text: "Tap the ⋮ menu at the top right of Chrome" },
+          { pic: <div className="mock-bar menu"><span className="mock-url">← ☆ ⬇</span><span className="mock-hot">ⓘ</span><span className="mock-url">↻</span></div>, text: "Tap the ⓘ in the top row of the menu" },
+          { pic: <Row label="Permissions → Camera" on />, text: "Tap Permissions, turn Camera on" },
         ]
       : [
           { pic: <Bar hot="tune" />, text: "Click the icon left of the web address" },
