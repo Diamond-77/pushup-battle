@@ -1260,3 +1260,13 @@ body:has(.challenge-sheet) .challenge-note { display: none; }
 @property --find-a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 @keyframes find-spin { to { --find-a: 360deg; } }
 @keyframes find-breathe { 50% { box-shadow: 0 5px 0 var(--edge, #6e1a14), 0 0 22px rgba(255,70,50,0.55); } }
+.song-disc:not(.spin) { opacity: 0.85; }
+.song-edit { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 8px; }
+.song-field { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.3); color: #fff; font: inherit; font-size: 0.85rem; }
+.song-edit-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.song-chip { padding: 7px 12px; border-radius: 99px; border: 0; background: #fff; color: #111; font-weight: 700; font-size: 0.78rem; }
+.song-chip.ghost { background: rgba(255,255,255,0.12); color: #fff; }
+.song-chip:disabled { opacity: 0.6; }
+.song-err { color: #ff8a80; font-size: 0.8rem; }
+.song-hint { color: rgba(255,255,255,0.5); font-size: 0.7rem; line-height: 1.35; }
+.now-play:disabled { opacity: 0.35; }

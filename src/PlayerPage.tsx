@@ -7,7 +7,8 @@ const Palace3D = lazy(() => import("./palace/Palace3D"));
 import { CONTACT_EMAIL, CONTACT_WHATSAPP, RESPECT_TITLES, START_RESPECT, respectTitle } from "./config";
 import Achievements from "./Achievements";
 import ArmorFrame, { Blossom, METALS } from "./ArmorFrame";
-import SongPlayer from "./SongPlayer";
+import SongPlayer, { type SongEditor } from "./SongPlayer";
+import { supabase } from "./supabase";
 import { PLAYER_SONGS } from "./config";
 import FollowSheet from "./FollowSheet";
 import { loadCard, type PlayerCard } from "./stats";
@@ -118,6 +119,38 @@ export default function PlayerPage({ id, myId, onBack, onEdit, onPlayer }: { id:
   const [challenge, setChallenge] = useState<ModeId | "any" | null>(null);
   const [sent, setSent] = useState(false);
   const mine = id === myId;
+  // the profile song: the one the player uploaded, or one set for them in config.ts
+  const profileSong = p?.song_url
+    ? { src: p.song_url, start: p.song_start ?? 0, title: p.song_title || "My song", artist: p.song_artist || p.username, art: p.avatar_url ?? undefined }
+    : p ? PLAYER_SONGS[p.username]?.profile ?? null : null;
+  const saveSong = async (patch: Partial<Profile>) => {
+    if (!supabase) return "Not connected";
+    const { error } = await supabase.from("profiles").update(patch).eq("id", myId);
+    if (error) return /column|schema cache/i.test(error.message) ? "Run profile-songs.sql in Supabase first" : error.message;
+    setP((old) => (old ? { ...old, ...patch } : old));
+    return null;
+  };
+  const songEditor: SongEditor = {
+    upload: async (f) => {
+      if (!supabase) return "Not connected";
+      const ext = (f.name.split(".").pop() || "mp3").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5);
+      const path = `${myId}/${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from("songs").upload(path, f, { contentType: f.type || "audio/mpeg", upsert: false });
+      if (error) return /bucket|not found/i.test(error.message) ? "Run profile-songs.sql in Supabase first" : error.message;
+      const url = supabase.storage.from("songs").getPublicUrl(path).data.publicUrl;
+      const old = p?.song_url?.split("/songs/")[1];
+      const e = await saveSong({ song_url: url, song_title: f.name.replace(/\.[^.]+$/, "").slice(0, 80), song_artist: null, song_start: 0 });
+      if (!e && old) supabase.storage.from("songs").remove([decodeURIComponent(old)]);
+      return e;
+    },
+    setStart: async (sec) => { await saveSong({ song_start: Math.max(0, Math.min(3600, sec)) }); },
+    setMeta: async (title, artist) => { await saveSong({ song_title: title || null, song_artist: artist || null }); },
+    remove: async () => {
+      const old = p?.song_url?.split("/songs/")[1];
+      await saveSong({ song_url: null, song_title: null, song_artist: null, song_start: 0 });
+      if (old && supabase) supabase.storage.from("songs").remove([decodeURIComponent(old)]);
+    },
+  };
 
   useEffect(() => {
     setP(null); setCard(null); setSheet(null);
@@ -169,8 +202,8 @@ export default function PlayerPage({ id, myId, onBack, onEdit, onPlayer }: { id:
         <div className="muted txt-center">Loading…</div>
       ) : (
         <>
-          <ArmorFrame clan={clan?.id ?? "lone"} className={PLAYER_SONGS[p.username]?.profile ? "assemble" : ""}>
-          {PLAYER_SONGS[p.username]?.profile && <SongPlayer song={PLAYER_SONGS[p.username].profile!} color={accent} className="profile-song" />}
+          <ArmorFrame clan={clan?.id ?? "lone"} className={profileSong ? "assemble" : ""}>
+          {(mine || profileSong) && <SongPlayer song={profileSong} color={accent} className="profile-song" editor={mine ? songEditor : undefined} />}
           <div className={`pcard ${p.legendary ? "dev" : ""}`}>
             <Blossom color={accent} />
             <div className="pcard-side">

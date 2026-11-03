@@ -4,7 +4,8 @@ import { supabase, authUrlError } from "./supabase";
 
 // title / legendary can only be set by the developer in the database (supabase/titles.sql)
 // respect is only changed by the server (supabase/economy.sql)
-export type Profile = { id: string; username: string; avatar_url: string | null; title?: string | null; legendary?: boolean; respect?: number; bio?: string | null };
+export type Profile = { id: string; username: string; avatar_url: string | null; title?: string | null; legendary?: boolean; respect?: number; bio?: string | null;
+  song_url?: string | null; song_title?: string | null; song_artist?: string | null; song_start?: number };
 
 // Current session plus the matching profiles row (null until the user picks a username).
 export function useAuth() {

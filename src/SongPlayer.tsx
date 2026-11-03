@@ -29,7 +29,17 @@ function Cover({ song, color, size }: { song: PlayerSong; color: string; size: n
 
 // A small spinning record that plays a player's song on loop (from its start point), quietly.
 // Tap it for a lock-screen style card with the song's name, artist, progress and play/pause.
-export default function SongPlayer({ song, color = "#ffd27a", className = "" }: { song: PlayerSong; color?: string; className?: string }) {
+// On your own profile the card also lets you pick a song from your device, name it, and set where it starts.
+export type SongEditor = {
+  upload: (file: File) => Promise<string | null>; // error text or null
+  setStart: (sec: number) => Promise<void>;
+  setMeta: (title: string, artist: string) => Promise<void>;
+  remove: () => Promise<void>;
+};
+const NO_SONG: PlayerSong = { src: "", title: "No song yet", artist: "Pick one from your phone" };
+
+export default function SongPlayer({ song: given, color = "#ffd27a", className = "", editor }: { song: PlayerSong | null; color?: string; className?: string; editor?: SongEditor }) {
+  const song = given ?? NO_SONG;
   const prefs = useSoundPrefs();
   const [off, setOff] = useState(() => readOff(song.src) || !prefs.music);
   const [playing, setPlaying] = useState(false);
@@ -42,6 +52,8 @@ export default function SongPlayer({ song, color = "#ffd27a", className = "" }: 
   const start = song.start ?? 0;
 
   useEffect(() => {
+    if (!song.src) return;
+    setMissing(false);
     const a = new Audio(song.src);
     a.preload = "auto";
     a.volume = 0;
@@ -58,7 +70,7 @@ export default function SongPlayer({ song, color = "#ffd27a", className = "" }: 
 
   useEffect(() => {
     const a = audio.current;
-    if (!a) return;
+    if (!a || !song.src) return;
     let active = false, fadeT = 0, cancelled = false;
     const go = () => {
       if (cancelled) return;
@@ -81,7 +93,7 @@ export default function SongPlayer({ song, color = "#ffd27a", className = "" }: 
       setPlaying(false);
       if (active) setSongActive(false);
     };
-  }, [off, held, start]);
+  }, [off, held, start, song.src]);
 
   const toggle = () => setOff((o) => { try { localStorage.setItem(key(song.src), o ? "0" : "1"); } catch { /* ignore */ } return !o; });
   // the scrubber: hold the bar and slide to jump anywhere in the song (like the lock screen)
@@ -123,16 +135,52 @@ export default function SongPlayer({ song, color = "#ffd27a", className = "" }: 
             </div>
             <div className="now-times"><span>{mmss(shown)}</span><span>{missing ? "song file not added yet" : time.len ? `-${mmss(Math.max(0, time.len - shown))}` : ""}</span></div>
             <div className="now-controls">
-              <button className="now-play" onClick={toggle} aria-label={off ? "Play" : "Pause"}>
+              <button className="now-play" disabled={!song.src} onClick={toggle} aria-label={off ? "Play" : "Pause"}>
                 {off
                   ? <svg viewBox="0 0 24 24" width="30" height="30"><path d="M7 4.5v15l13-7.5z" fill="currentColor" /></svg>
                   : <svg viewBox="0 0 24 24" width="30" height="30"><path d="M6 4h4.5v16H6zM13.5 4H18v16h-4.5z" fill="currentColor" /></svg>}
               </button>
             </div>
+            {editor && <SongEdit editor={editor} song={given} now={time.now} />}
           </div>
         </div>,
         document.body,
       )}
     </>
+  );
+}
+
+function SongEdit({ editor, song, now }: { editor: SongEditor; song: PlayerSong | null; now: number }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [title, setTitle] = useState(song?.title ?? "");
+  const [artist, setArtist] = useState(song?.artist ?? "");
+  useEffect(() => { setTitle(song?.title ?? ""); setArtist(song?.artist ?? ""); }, [song?.src]); // eslint-disable-line react-hooks/exhaustive-deps
+  const file = useRef<HTMLInputElement>(null);
+  const pick = async (f: File | undefined) => {
+    if (!f) return;
+    if (f.size > 15 * 1024 * 1024) return setErr("That file is over 15 MB. Try a shorter or smaller one.");
+    setBusy("Uploading…"); setErr(null);
+    const e = await editor.upload(f);
+    setBusy(null); if (e) setErr(e);
+  };
+  const saveMeta = () => { if (song && (title !== song.title || artist !== song.artist)) editor.setMeta(title.trim().slice(0, 80), artist.trim().slice(0, 80)); };
+  return (
+    <div className="song-edit">
+      {song && (
+        <>
+          <input className="song-field" value={title} maxLength={80} placeholder="Song name" onChange={(e) => setTitle(e.target.value)} onBlur={saveMeta} />
+          <input className="song-field" value={artist} maxLength={80} placeholder="Artist" onChange={(e) => setArtist(e.target.value)} onBlur={saveMeta} />
+        </>
+      )}
+      <div className="song-edit-row">
+        <button className="song-chip" onClick={() => file.current?.click()} disabled={!!busy}>{busy ?? (song ? "Change song" : "Add a song")}</button>
+        {song && <button className="song-chip" onClick={async () => { setBusy("Saving…"); await editor.setStart(Math.floor(now)); setBusy(null); }}>Start from {mmss(now)}</button>}
+        {song && <button className="song-chip ghost" onClick={() => editor.remove()}>Remove</button>}
+      </div>
+      <input ref={file} type="file" accept="audio/*" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} />
+      {err && <div className="song-err">{err}</div>}
+      <div className="song-hint">From your phone or computer (MP3 or M4A, up to 15 MB). Songs from Apple Music or Spotify can't be picked.</div>
+    </div>
   );
 }
