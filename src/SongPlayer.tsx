@@ -5,6 +5,19 @@ import { setSongActive, useSoundPrefs } from "./music";
 
 const key = (src: string) => `pb_song_off:${src}`;
 const readOff = (src: string) => { try { return localStorage.getItem(key(src)) === "1"; } catch { return false; } };
+// Only one player song at a time: the newest page's song plays, the ones under it wait (and resume when it closes).
+type Slot = { hold: (on: boolean) => void };
+const stack: Slot[] = [];
+function pushSlot(slot: Slot) {
+  stack.forEach((x) => x.hold(true));
+  stack.push(slot);
+  return () => {
+    const i = stack.indexOf(slot);
+    if (i >= 0) stack.splice(i, 1);
+    if (i === stack.length) stack[stack.length - 1]?.hold(false); // I was on top: the one below may play again
+  };
+}
+
 const mmss = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
 
 // The song's "cover": the player's picture if given, otherwise a painted swirl in the clan colour.
@@ -23,6 +36,8 @@ export default function SongPlayer({ song, color = "#ffd27a", className = "" }: 
   const [open, setOpen] = useState(false);
   const [time, setTime] = useState({ now: 0, len: 0 });
   const [missing, setMissing] = useState(false);
+  const [held, setHeld] = useState(false); // another song on a newer page is playing
+  useEffect(() => pushSlot({ hold: setHeld }), []);
   const audio = useRef<HTMLAudioElement | null>(null);
   const start = song.start ?? 0;
 
@@ -56,7 +71,7 @@ export default function SongPlayer({ song, color = "#ffd27a", className = "" }: 
       }).catch(() => window.addEventListener("pointerdown", go, { once: true })); // browsers wait for a first tap
     };
     const hide = () => { if (document.hidden) a.pause(); else if (active) a.play().catch(() => {}); };
-    if (!off) { go(); document.addEventListener("visibilitychange", hide); }
+    if (!off && !held) { go(); document.addEventListener("visibilitychange", hide); }
     return () => {
       cancelled = true;
       clearInterval(fadeT);
@@ -66,7 +81,7 @@ export default function SongPlayer({ song, color = "#ffd27a", className = "" }: 
       setPlaying(false);
       if (active) setSongActive(false);
     };
-  }, [off, start]);
+  }, [off, held, start]);
 
   const toggle = () => setOff((o) => { try { localStorage.setItem(key(song.src), o ? "0" : "1"); } catch { /* ignore */ } return !o; });
   // the scrubber: hold the bar and slide to jump anywhere in the song (like the lock screen)
