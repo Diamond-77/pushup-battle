@@ -17,21 +17,39 @@ export const ThumbUp = ({ down = false }: { down?: boolean }) => (
   </svg>
 );
 
-export function HistoryList({ rows }: { rows: HistoryRow[] | null }) {
+const WHEN = (d: Date) => d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" })
+  + " · " + d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+
+// Last battles: me vs them with both pictures, who won, the score and the date.
+export function HistoryList({ rows, me, onPlayer }: { rows: HistoryRow[] | null; me?: Profile; onPlayer?: (id: string) => void }) {
   return (
     <div className="parchment">
       <div className="section-title">Last battles</div>
       {rows === null && <div className="muted">Loading…</div>}
       {rows?.length === 0 && <div className="muted">No battles yet.</div>}
-      <ul className="history">
+      <ul className="history vs-history">
         {rows?.map((r) => (
           <li key={r.id} className={r.result}>
-            <span className="h-result">{r.result === "win" ? "Won" : r.result === "lose" ? "Lost" : r.result === "draw" ? "Draw" : "…"}</span>
-            <div className="pl-text">
-              <div className="pl-name">vs {r.opponent}</div>
-              <div className="pl-status">{modeName(r.mode)} · {r.myReps ?? "–"}–{r.oppReps ?? "–"} · {r.when.toLocaleDateString()}</div>
+            <div className="vs-top">
+              <span className="h-result">{r.result === "win" ? "Won" : r.result === "lose" ? "Lost" : r.result === "draw" ? "Draw" : "…"}</span>
+              <span className="vs-when">{modeName(r.mode)} · {WHEN(r.when)}</span>
+              <b className={r.delta < 0 ? "minus" : "gold-text"}>{r.delta > 0 ? "+" : ""}{r.delta}</b>
             </div>
-            <b className={r.delta < 0 ? "minus" : "gold-text"}>{r.delta > 0 ? "+" : ""}{r.delta}</b>
+            <div className="vs-row">
+              <div className="vs-side">
+                <Avatar url={me?.avatar_url ?? null} color="me" size={44} legendary={me?.legendary} />
+                <span>{me?.username ?? "Me"}</span>
+              </div>
+              <div className="vs-score">
+                <b className={r.result === "win" ? "hi" : ""}>{r.myReps ?? "–"}</b>
+                <i>VS</i>
+                <b className={r.result === "lose" ? "hi" : ""}>{r.oppReps ?? "–"}</b>
+              </div>
+              <button className="vs-side" onClick={() => onPlayer?.(r.oppId)} disabled={!onPlayer}>
+                <Avatar url={r.oppAvatar} color="opp" size={44} legendary={r.oppLegendary} />
+                <span>{r.opponent}</span>
+              </button>
+            </div>
           </li>
         ))}
       </ul>
@@ -200,7 +218,7 @@ export default function PlayerPage({ id, myId, onBack, onEdit, onPlayer }: { id:
             <button className={tab === "achievements" ? "on" : ""} onClick={() => setTab("achievements")}>Achievements</button>
             <button className={tab === "history" ? "on" : ""} onClick={() => setTab("history")}>History</button>
           </div>
-          {tab === "achievements" ? <Achievements card={card} accent={accent} dark={metal.dark} mid={metal.mid} name={p.username} /> : <HistoryList rows={hist} />}
+          {tab === "achievements" ? <Achievements card={card} accent={accent} dark={metal.dark} mid={metal.mid} name={p.username} /> : <HistoryList rows={hist} me={p} onPlayer={onPlayer} />}
           {sheet && (
             <FollowSheet id={id} name={p.username} start={sheet} counts={{ followers: s?.followers ?? 0, following: s?.following ?? 0 }}
               onClose={() => setSheet(null)} onPlayer={onPlayer ? (pid) => { setSheet(null); onPlayer(pid); } : undefined} />

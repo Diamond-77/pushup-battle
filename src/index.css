@@ -929,8 +929,11 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .achv-panel { position: relative; padding: 12px; border-radius: 8px; border: 1.5px solid color-mix(in srgb, var(--acc) 45%, transparent); background: #08080b; }
 .scroll3d { aspect-ratio: 1 / 0.6; height: auto !important; transition: none; }
 .achv-panel .scroll-hint { left: 12px; right: auto; width: 30%; bottom: 8px; }
-.achv-streak { margin-top: 10px; margin-left: 0; transition: margin 0.9s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.achv-panel:not(.open) .achv-streak { margin-top: calc(-60% + 4px); margin-left: 36%; }
+.achv-streak { margin-top: 10px; }
+.achv-panel.open .achv-streak { animation: streak-drop 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes streak-drop { from { transform: translate(20%, -95%) scale(0.85); opacity: 0.5; } }
+/* closed: the streaks sit beside the rolled scroll, inside the panel */
+.achv-panel:not(.open) .achv-streak { position: absolute; top: 12px; left: 36%; right: 12px; margin: 0; }
 .achv-panel:not(.open) .scroll3d + .scroll-hint + .achv-streak { pointer-events: none; }
 .achv-panel .streak-card { background: none; border: 0; padding: 2px 4px; gap: 8px; border-radius: 0; }
 .achv-panel.open .streak-card { background: #0d0d10; border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 12px 14px; }
@@ -953,3 +956,17 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .armor .pcard-side { padding-top: 52px; }
 .achv-panel .scroll-hint { bottom: 10px; font-size: 0.62rem; }
 .achv-panel .scroll-hint { top: 4px; bottom: auto; width: 32%; letter-spacing: 0.18em; }
+
+/* history: me vs them */
+.vs-history li { flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.06); }
+.pv2 .vs-history li.win { border-color: rgba(63,191,138,0.35); }
+.pv2 .vs-history li.lose { border-color: rgba(200,55,45,0.35); }
+.vs-top { display: flex; align-items: center; gap: 8px; }
+.vs-when { flex: 1; font-size: 0.72rem; color: #8f8f9a; }
+.vs-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; }
+.vs-side { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; border: 0; background: none; color: #e9e4da; padding: 0; font: inherit; }
+.vs-side span { font-size: 0.8rem; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vs-score { display: flex; align-items: center; gap: 10px; }
+.vs-score b { font-size: 1.5rem; color: #8f8f9a; font-variant-numeric: tabular-nums; min-width: 1.4em; text-align: center; }
+.vs-score b.hi { color: #fff; text-shadow: 0 0 12px var(--acc); }
+.vs-score i { font-style: normal; font-family: "Ma Shan Zheng", cursive; font-size: 1.3rem; color: var(--acc); }

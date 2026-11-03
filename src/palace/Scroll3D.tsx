@@ -176,7 +176,7 @@ export default function Scroll3D({ total, accent, dark, mid, name, open, onToggl
     scene.add(sun);
 
     const rampTex = toonRamp();
-    const toon = (color: THREE.ColorRepresentation, map?: THREE.Texture) => new THREE.MeshToonMaterial({ color: map ? 0xffffff : color, map, gradientMap: rampTex });
+    const toon = (color: THREE.ColorRepresentation, map?: THREE.Texture) => new THREE.MeshToonMaterial({ color: map ? 0xffffff : color, gradientMap: rampTex, ...(map ? { map } : {}) });
     const inkHull = new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide });
     const lineMat = new THREE.LineBasicMaterial({ color: 0x2a1c12, transparent: true, opacity: 0.6 });
     const accentCol = new THREE.Color(accent);

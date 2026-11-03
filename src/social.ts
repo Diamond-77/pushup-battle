@@ -6,7 +6,7 @@ import type { Profile } from "./auth";
 // Profiles, follows, likes and battle history (supabase/social.sql).
 
 export type Social = { followers: number; following: number; likes: number; dislikes: number; iFollow: boolean; myVote: 1 | -1 | 0 };
-export type HistoryRow = { id: string; mode: ModeId; when: Date; myReps: number | null; oppReps: number | null; opponent: string; result: "win" | "lose" | "draw" | "pending"; delta: number };
+export type HistoryRow = { id: string; mode: ModeId; when: Date; myReps: number | null; oppReps: number | null; opponent: string; oppId: string; oppAvatar: string | null; oppLegendary: boolean; result: "win" | "lose" | "draw" | "pending"; delta: number };
 
 const count = async (table: string, col: string, id: string, extra?: [string, number]) => {
   if (!supabase) return 0;
@@ -71,14 +71,15 @@ export async function loadHistory(id: string): Promise<HistoryRow[]> {
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("matches")
-    .select("*, a:profiles!matches_player_a_fkey(username), b:profiles!matches_player_b_fkey(username)")
+    .select("*, a:profiles!matches_player_a_fkey(username, avatar_url, legendary), b:profiles!matches_player_b_fkey(username, avatar_url, legendary)")
     .or(`player_a.eq.${id},player_b.eq.${id}`)
     .order("started_at", { ascending: false })
     .limit(HISTORY_SIZE);
   if (error || !Array.isArray(data)) return [];
   return data.map((m) => {
     const meA = m.player_a === id;
-    const name = (x: unknown) => ((Array.isArray(x) ? x[0] : x) as { username?: string } | null)?.username ?? "?";
+    const one = (x: unknown) => (Array.isArray(x) ? x[0] : x) as { username?: string; avatar_url?: string | null; legendary?: boolean } | null;
+    const opp = one(meA ? m.b : m.a);
     const bothPaid = m.a_paid && m.b_paid;
     const result = !m.settled_at ? "pending" : !bothPaid || !m.winner ? "draw" : m.winner === id ? "win" : "lose";
     const myReps = meA ? m.a_reps : m.b_reps;
@@ -89,7 +90,10 @@ export async function loadHistory(id: string): Promise<HistoryRow[]> {
       when: new Date(m.started_at),
       myReps,
       oppReps: meA ? m.b_reps : m.a_reps,
-      opponent: name(meA ? m.b : m.a),
+      opponent: opp?.username ?? "?",
+      oppId: meA ? m.player_b : m.player_a,
+      oppAvatar: opp?.avatar_url ?? null,
+      oppLegendary: !!opp?.legendary,
       result,
       delta: (result === "win" ? m.bet : result === "lose" ? -m.bet : 0) + penalty,
     } as HistoryRow;
