@@ -143,6 +143,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
     setPracticeReps((r) => r + 1);
     pushupLog.add();
   };
+  const devDesktop = !!profile.legendary && typeof window !== "undefined" && window.matchMedia("(pointer: fine) and (hover: hover) and (min-width: 900px)").matches && !("ontouchstart" in window);
   const onRep = useCallback(() => {
     repSound();
     repTarget.current();
@@ -311,6 +312,10 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
               <button className="game-btn wood" onClick={() => setSoundMenu(false)}>Done</button>
             </div>
           </div>
+        )}
+        {/* Developer test button: only on the developer account, only on a desktop computer */}
+        {devDesktop && ((inMatch && m.phase === "match") || (!inMatch && tab === "train")) && (
+          <div className="test-btns"><button onClick={onRep}>+1 me</button></div>
         )}
         {note && !inMatch && (
           <button className="challenge-note" onClick={() => { setNote(null); setViewPlayer(null); setTab("home"); openChallenges(); }}>
