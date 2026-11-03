@@ -176,11 +176,11 @@ export default function PlayerPage({ id, myId, onBack, onEdit, onPlayer }: { id:
                   <div className="brush-title pcard-name">{p.username}</div>
                   {p.title && <div className="dev-badge">{p.title}</div>}
                   <div className="pcard-respect"><b>{respect}</b> Respect</div>
-                  <div className="meter" title={prog.next ? `${prog.left} to ${prog.next}` : "Highest title"}>
-                    <div className="meter-fill" style={{ width: `${Math.max(4, prog.pct)}%` }} />
+                  <div className="rmeter" title={prog.next ? `${prog.left} to ${prog.next}` : "Highest title"}>
+                    <div className="rmeter-fill" style={{ width: `${Math.max(4, prog.pct)}%` }} />
                     {[25, 50, 75].map((x) => <i key={x} style={{ left: `${x}%` }} />)}
                   </div>
-                  <div className="meter-note">{prog.next ? <>{prog.left} to <b>{prog.next}</b></> : "Highest title reached"}</div>
+                  <div className="rmeter-note">{prog.next ? <>{prog.left} to <b>{prog.next}</b></> : "Highest title reached"}</div>
                 </div>
               </div>
               <div className="pcard-counts">

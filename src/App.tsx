@@ -168,13 +168,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
                 </button>
               </div>
             )}
-            {/* Debug (desktop only): fake a rep without doing a push-up */}
-            {m.phase === "match" && (
-              <div className="test-btns">
-                <button onClick={m.addMyRep}>+1 me</button>
-              </div>
-            )}
-          </>
+</>
         )}
 
         {!inMatch && tab === "train" && (
