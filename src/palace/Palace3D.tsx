@@ -7,11 +7,12 @@ import type { Weather } from "../clans";
 import { PALACE } from "../config";
 import { thunder } from "../sound";
 
-type Props = { seed: string; weather?: Weather; style?: Partial<PalaceStyle>; className?: string; arena?: ArenaKind };
+// zoom > 1 pulls the camera further out. still = no touch control (a backdrop the page scrolls over).
+type Props = { seed: string; weather?: Weather; style?: Partial<PalaceStyle>; className?: string; arena?: ArenaKind; zoom?: number; still?: boolean };
 
 // A clan's palace in 3D, in that clan's weather. Drag to look around, pinch or scroll to zoom.
 // When nobody touches it, the camera drifts slowly around the palace.
-export default function Palace3D({ seed, weather = "day", style, className, arena }: Props) {
+export default function Palace3D({ seed, weather = "day", style, className, arena, zoom = 1, still = false }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const flashRef = useRef<HTMLDivElement>(null);
   const styleKey = JSON.stringify(style ?? {});
@@ -33,6 +34,7 @@ export default function Palace3D({ seed, weather = "day", style, className, aren
     const camera = new THREE.PerspectiveCamera(42, 1, 1, 1200);
     if (arena) camera.position.set(26, 30, 72);
     else camera.position.set(0, 58, 122);
+    camera.position.multiplyScalar(zoom);
 
     const hemi = new THREE.HemisphereLight(env.hemiSky, env.hemiGround, env.hemi);
     scene.add(hemi);
@@ -127,11 +129,16 @@ export default function Palace3D({ seed, weather = "day", style, className, aren
     controls.enableDamping = true;
     controls.enablePan = false;
     controls.minDistance = arena ? 22 : PALACE.MIN_DISTANCE;
-    controls.maxDistance = arena ? 90 : PALACE.MAX_DISTANCE;
+    controls.maxDistance = (arena ? 90 : PALACE.MAX_DISTANCE) * zoom;
     controls.minPolarAngle = 0.35;
     controls.maxPolarAngle = 1.38;
     controls.autoRotate = true;
-    controls.autoRotateSpeed = PALACE.AUTO_ROTATE_SPEED;
+    controls.autoRotateSpeed = PALACE.AUTO_ROTATE_SPEED * (still ? 2.2 : 1);
+    if (still) {
+      controls.enabled = false;
+      renderer.domElement.style.touchAction = "pan-y";
+      renderer.domElement.style.pointerEvents = "none";
+    }
     let idleTimer = 0;
     controls.addEventListener("start", () => {
       controls.autoRotate = false;
@@ -212,7 +219,7 @@ export default function Palace3D({ seed, weather = "day", style, className, aren
       renderer.domElement.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed, weather, styleKey, arena]);
+  }, [seed, weather, styleKey, arena, zoom, still]);
 
   return (
     <div ref={hostRef} className={`palace3d ${className ?? ""}`}>

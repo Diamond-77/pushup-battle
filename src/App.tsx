@@ -20,6 +20,7 @@ import { supabase } from "./supabase";
 // Three.js is big, so the palace loads in its own chunk after the app shows.
 const Palace3D = lazy(() => import("./palace/Palace3D"));
 import { useMatch } from "./useMatch";
+import { usePushupLog } from "./stats";
 
 export default function App() {
   const { session, profile, setProfile, loading, recovering, doneRecovering } = useAuth();
@@ -89,8 +90,15 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
   }, [m.phase]);
 
   // Reps go to the match while one is running, otherwise to the practice counter on Home.
+  // Training reps also go to the lifetime push-up count (battle reps are counted by the server).
+  const pushupLog = usePushupLog();
+  useEffect(() => { if (tab !== "train") pushupLog.flush(); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
   const repTarget = useRef<() => void>(() => {});
-  repTarget.current = inMatch ? m.addMyRep : () => tab === "train" && setPracticeReps((r) => r + 1);
+  repTarget.current = inMatch ? m.addMyRep : () => {
+    if (tab !== "train") return;
+    setPracticeReps((r) => r + 1);
+    pushupLog.add();
+  };
   const onRep = useCallback(() => {
     repSound();
     repTarget.current();
@@ -180,7 +188,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
           </>
         )}
         {!inMatch && tab === "home" && <HomePage profile={profile} clan={myClan} onBattle={() => setTab("battle")} onTrain={() => setTab("train")} />}
-        {menu && (
+        {menu && !viewPlayer && !(tab === "profile" && !editingProfile) && (
           <Suspense fallback={null}>
             {tab === "battle" ? (
               <Palace3D seed={field} arena={field} weather={FIELDS.find((f) => f.id === field)!.weather} />
@@ -209,11 +217,11 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
         {!inMatch && tab === "profile" && (editingProfile ? (
           <ProfilePage profile={profile} email={email} onChange={onProfile} membership={clan.membership} onDone={() => setEditingProfile(false)} />
         ) : (
-          <PlayerPage key={profile.avatar_url + (profile.bio ?? "") + profile.username} id={profile.id} myId={profile.id} onEdit={() => setEditingProfile(true)} />
+          <PlayerPage key={profile.avatar_url + (profile.bio ?? "") + profile.username} id={profile.id} myId={profile.id} onEdit={() => setEditingProfile(true)} onPlayer={setViewPlayer} />
         ))}
 
         {menu && viewMembers && !viewPlayer && <ClanMembersPage clan={viewMembers} onBack={() => setViewMembers(null)} onPlayer={setViewPlayer} />}
-        {menu && viewPlayer && <PlayerPage id={viewPlayer} myId={profile.id} onBack={() => setViewPlayer(null)} />}
+        {menu && viewPlayer && <PlayerPage id={viewPlayer} myId={profile.id} onBack={() => setViewPlayer(null)} onPlayer={setViewPlayer} />}
         {lobby.incoming && !inMatch && (
           <div className="modal-back">
             <div className="modal glass">

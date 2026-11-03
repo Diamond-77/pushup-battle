@@ -1,9 +1,13 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import Avatar from "./Avatar";
 import ClanLogo from "./ClanLogo";
 import type { Profile } from "./auth";
 import type { Clan } from "./clans";
-import { CONTACT_EMAIL, CONTACT_WHATSAPP, START_RESPECT, respectTitle } from "./config";
+const Palace3D = lazy(() => import("./palace/Palace3D"));
+import { CONTACT_EMAIL, CONTACT_WHATSAPP, RESPECT_TITLES, START_RESPECT, respectTitle } from "./config";
+import Achievements from "./Achievements";
+import FollowSheet from "./FollowSheet";
+import { loadCard, type PlayerCard } from "./stats";
 import { beatInRank, loadHistory, loadProfile, loadSocial, modeName, setFollow, setVote, type HistoryRow, type Social } from "./social";
 
 export const ThumbUp = ({ down = false }: { down?: boolean }) => (
@@ -34,30 +38,6 @@ export function HistoryList({ rows }: { rows: HistoryRow[] | null }) {
   );
 }
 
-export function SocialRow({ s, mine, onFollow, onVote }: { s: Social | null; mine: boolean; onFollow?: () => void; onVote?: (v: 1 | -1) => void }) {
-  return (
-    <div className="social-row">
-      <div className="social-counts">
-        <span><b>{s?.followers ?? "–"}</b> followers</span>
-        <span><b>{s?.following ?? "–"}</b> following</span>
-      </div>
-      <div className="row stretch">
-        {!mine && (
-          <button className={`game-btn ${s?.iFollow ? "wood" : "jade"}`} disabled={!s} onClick={onFollow}>
-            {s?.iFollow ? "Following" : "Follow"}
-          </button>
-        )}
-        <button className={`vote-btn ${s?.myVote === 1 ? "on" : ""}`} disabled={!s || mine} onClick={() => onVote?.(1)} aria-label="Like">
-          <ThumbUp /> {s?.likes ?? 0}
-        </button>
-        <button className={`vote-btn down ${s?.myVote === -1 ? "on" : ""}`} disabled={!s || mine} onClick={() => onVote?.(-1)} aria-label="Dislike">
-          <ThumbUp down /> {s?.dislikes ?? 0}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // Bug reports go straight to the developer. Only shown on the developer's (legendary) profile.
 export function ReportPanel() {
   return (
@@ -75,19 +55,50 @@ export function ReportPanel() {
   );
 }
 
+export const ordinal = (n: number) => {
+  const t = n % 100, u = n % 10;
+  return n + (t >= 11 && t <= 13 ? "th" : u === 1 ? "st" : u === 2 ? "nd" : u === 3 ? "rd" : "th");
+};
+
+// Each clan's colour on the profile card (lone warriors get steel).
+const ACCENT: Record<string, string> = { arasaka: "#e0453a", "soraran-gate": "#f2a541", sleepbuilders: "#9a8cff" };
+const LONE_ACCENT = "#9fb3c8";
+
+// How far through the current Respect title, toward the next one.
+function titleProgress(respect: number) {
+  let i = 0;
+  RESPECT_TITLES.forEach(([min], k) => { if (respect >= min) i = k; });
+  const [min] = RESPECT_TITLES[i];
+  const next = RESPECT_TITLES[i + 1];
+  if (!next) return { pct: 100, next: null as string | null, left: 0 };
+  return { pct: Math.round(((respect - min) / (next[0] - min)) * 100), next: next[1], left: next[0] - respect };
+}
+
+const LoneMark = ({ size = 30 }: { size?: number }) => (
+  <svg viewBox="0 0 48 52" width={size} height={size * 1.08} aria-hidden="true">
+    <path d="M24 1 46 13v26L24 51 2 39V13z" fill="#2b3340" stroke="#0b0d10" strokeWidth="2.5" />
+    <path d="M24 10v26M18 30h12M24 36v6" stroke="#dfe7f0" strokeWidth="3" strokeLinecap="round" />
+  </svg>
+);
+
 // A player's profile, as a full page. On your own profile it has an Edit button instead of Back.
-export default function PlayerPage({ id, myId, onBack, onEdit }: { id: string; myId: string; onBack?: () => void; onEdit?: () => void }) {
+export default function PlayerPage({ id, myId, onBack, onEdit, onPlayer }: { id: string; myId: string; onBack?: () => void; onEdit?: () => void; onPlayer?: (id: string) => void }) {
   const [p, setP] = useState<Profile | null>(null);
   const [clan, setClan] = useState<Clan | null>(null);
   const [s, setS] = useState<Social | null>(null);
   const [hist, setHist] = useState<HistoryRow[] | null>(null);
+  const [card, setCard] = useState<PlayerCard | null>(null);
+  const [tab, setTab] = useState<"achievements" | "history">("achievements");
+  const [sheet, setSheet] = useState<"followers" | "following" | null>(null);
   const [tease, setTease] = useState(false); // "beat them in Rank first" popup
   const mine = id === myId;
 
   useEffect(() => {
+    setP(null); setCard(null); setSheet(null);
     loadProfile(id).then((r) => { setP(r.profile); setClan(r.clan); });
     loadSocial(id, myId).then(setS);
     loadHistory(id).then(setHist);
+    loadCard(id).then(setCard);
   }, [id, myId]);
 
   const follow = async () => {
@@ -109,9 +120,20 @@ export default function PlayerPage({ id, myId, onBack, onEdit }: { id: string; m
     await setVote(myId, id, next);
   };
   const respect = p?.respect ?? START_RESPECT;
+  const prog = titleProgress(respect);
+  const accent = clan ? ACCENT[clan.id] ?? clan.color : LONE_ACCENT;
 
   return (
-    <div className={`page dim sub-page ${clan ? `profile-theme theme-${clan.id}` : ""}`}>
+    <div className={`page sub-page pv2 ${clan ? `theme-${clan.id}` : "theme-lone"}`} style={{ ["--acc" as string]: accent }}>
+      {clan && (
+        <div className="pv2-scene" aria-hidden="true">
+          <Suspense fallback={null}>
+            <Palace3D seed={clan.name} weather={clan.weather} style={clan.palace} zoom={1.65} still />
+          </Suspense>
+          <div className="theme-fx" />
+          <div className="pv2-fade" />
+        </div>
+      )}
       <div className="row page-top">
         {onBack ? <button className="back-btn" onClick={onBack}>‹ Back</button> : <div className="brush-title page-title">Profile</div>}
         {onEdit && <button className="back-btn" onClick={onEdit}>Edit profile</button>}
@@ -120,19 +142,64 @@ export default function PlayerPage({ id, myId, onBack, onEdit }: { id: string; m
         <div className="muted txt-center">Loading…</div>
       ) : (
         <>
-          <div className={`profile-hero ${clan ? "themed" : ""} ${p.legendary ? "legendary-card" : ""}`}>
-            {clan && <div className="theme-fx" />}
-            <Avatar url={p.avatar_url} color="neutral" size={104} legendary={p.legendary} />
-            <div className="brush-title profile-name">{p.username}</div>
-            {p.title && <div className="title-badge big">{p.title}</div>}
-            <div className="respect">{respect} <span className="respect-word">Respect</span> <span className="rank-title">{respectTitle(respect)}</span></div>
-            <div className="clan-chip">
-              {clan ? <><ClanLogo clan={clan} size={30} /><div><b>{clan.name}</b></div></> : <div><b>Lone Warrior</b></div>}
+          <div className={`pcard ${p.legendary ? "dev" : ""}`}>
+            <div className="pcard-side">
+              {clan ? <ClanLogo clan={clan} size={32} /> : <LoneMark size={32} />}
+              <div className="pcard-clan">{clan ? clan.name : "Lone Warrior"}</div>
             </div>
-            {p.bio && <p className="bio">{p.bio}</p>}
+            <div className="pcard-main">
+              <div className="pcard-head">
+                <Avatar url={p.avatar_url} color="neutral" size={88} legendary={p.legendary} />
+                <div className="pcard-id">
+                  <div className="brush-title pcard-name">{p.username}</div>
+                  {p.title && <div className="dev-badge">{p.title}</div>}
+                  <div className="pcard-respect"><b>{respect}</b> Respect</div>
+                  <div className="meter" title={prog.next ? `${prog.left} to ${prog.next}` : "Highest title"}>
+                    <div className="meter-fill" style={{ width: `${Math.max(4, prog.pct)}%` }} />
+                    {[25, 50, 75].map((x) => <i key={x} style={{ left: `${x}%` }} />)}
+                  </div>
+                  <div className="meter-note">{prog.next ? <>{prog.left} to <b>{prog.next}</b></> : "Highest title reached"}</div>
+                </div>
+              </div>
+              <div className="pcard-counts">
+                <button onClick={() => setSheet("followers")}><b>{s?.followers ?? "–"}</b><span>Followers</span></button>
+                <i />
+                <button onClick={() => setSheet("following")}><b>{s?.following ?? "–"}</b><span>Following</span></button>
+              </div>
+              {p.bio && <p className="pcard-bio">{p.bio}</p>}
+              <div className="rank-pill">
+                <span><b>{respect}</b> Respect · {respectTitle(respect)}</span>
+                {card && card.throne_rank > 0 && (
+                  <span className="rank-places">
+                    {clan && card.clan_rank > 0 && <>{ordinal(card.clan_rank)} {clan.name} · </>}{ordinal(card.throne_rank)} Throne
+                  </span>
+                )}
+              </div>
+              <div className="pcard-actions">
+                {!mine && (
+                  <button className={`game-btn ${s?.iFollow ? "wood" : "jade"}`} disabled={!s} onClick={follow}>
+                    {s?.iFollow ? "Following" : "Follow"}
+                  </button>
+                )}
+                <button className={`vote-btn ${s?.myVote === 1 ? "on" : ""}`} disabled={!s || mine} onClick={() => vote(1)} aria-label="Like">
+                  <ThumbUp /> {s?.likes ?? 0}
+                </button>
+                <button className={`vote-btn down ${s?.myVote === -1 ? "on" : ""}`} disabled={!s || mine} onClick={() => vote(-1)} aria-label="Dislike">
+                  <ThumbUp down /> {s?.dislikes ?? 0}
+                </button>
+              </div>
+            </div>
           </div>
-          <SocialRow s={s} mine={mine} onFollow={follow} onVote={vote} />
           {p.legendary && <ReportPanel />}
+          <div className="seg pv2-tabs">
+            <button className={tab === "achievements" ? "on" : ""} onClick={() => setTab("achievements")}>Achievements</button>
+            <button className={tab === "history" ? "on" : ""} onClick={() => setTab("history")}>History</button>
+          </div>
+          {tab === "achievements" ? <Achievements card={card} accent={accent} name={p.username} /> : <HistoryList rows={hist} />}
+          {sheet && (
+            <FollowSheet id={id} name={p.username} start={sheet} counts={{ followers: s?.followers ?? 0, following: s?.following ?? 0 }}
+              onClose={() => setSheet(null)} onPlayer={onPlayer ? (pid) => { setSheet(null); onPlayer(pid); } : undefined} />
+          )}
           {tease && (
             <div className="modal-back" onClick={() => setTease(false)}>
               <div className="modal panel tease" onClick={(e) => e.stopPropagation()}>
@@ -143,7 +210,6 @@ export default function PlayerPage({ id, myId, onBack, onEdit }: { id: string; m
               </div>
             </div>
           )}
-          <HistoryList rows={hist} />
         </>
       )}
     </div>
