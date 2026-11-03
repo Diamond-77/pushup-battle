@@ -32,11 +32,14 @@ export default function SongPlayer({ song, color = "#ffd27a", className = "" }: 
     a.volume = 0;
     a.addEventListener("loadedmetadata", () => { try { a.currentTime = start; } catch { /* not seekable yet */ } setTime({ now: a.currentTime, len: a.duration }); }, { once: true });
     a.addEventListener("ended", () => { a.currentTime = start; a.play().catch(() => {}); });
-    a.addEventListener("timeupdate", () => setTime({ now: a.currentTime, len: a.duration || 0 }));
+    a.addEventListener("timeupdate", () => {
+      if (song.end && a.currentTime >= song.end) a.currentTime = start; // loop just the chosen part
+      setTime({ now: a.currentTime, len: a.duration || 0 });
+    });
     a.addEventListener("error", () => setMissing(true));
     audio.current = a;
     return () => { a.pause(); a.removeAttribute("src"); a.load(); audio.current = null; };
-  }, [song.src, start]);
+  }, [song.src, start, song.end]);
 
   useEffect(() => {
     const a = audio.current;

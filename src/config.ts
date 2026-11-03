@@ -64,10 +64,10 @@ export const THEME_MUSIC: Record<string, string> = {};
 export const MUSIC_VOLUME = 0.28; // theme song
 // A player's own song, by username: plays (quietly, with a mute button) on the throne while they hold it,
 // and/or on their profile page. src is a file in public/music/ or a full https link (e.g. Supabase Storage).
-// start = where the song begins, in seconds.
-export type PlayerSong = { src: string; start?: number; title: string; artist: string; art?: string };
+// start = where the song begins and end = where it loops back to start, in seconds (end left out = play to the end).
+export type PlayerSong = { src: string; start?: number; end?: number; title: string; artist: string; art?: string };
 export const PLAYER_SONGS: Record<string, { throne?: PlayerSong; profile?: PlayerSong; celebrate?: boolean }> = {
-  Sadiq: { throne: { src: "/music/am-i-dreaming.mp3", title: "Am I Dreaming", artist: "Metro Boomin, A$AP Rocky, Roisee" }, celebrate: true },
+  Sadiq: { throne: { src: "/music/am-i-dreaming.mp3", start: 0, title: "Am I Dreaming", artist: "Metro Boomin, A$AP Rocky, Roisee" }, celebrate: true },
   "Diamond (dev)": { profile: { src: "/music/higher-ground.mp3", start: 50, title: "Higher Ground", artist: "ODESZA feat. Naomi Wild" } },
 };
 export const SONG_VOLUME = 0.3;
