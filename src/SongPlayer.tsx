@@ -69,7 +69,20 @@ export default function SongPlayer({ song, color = "#ffd27a", className = "" }: 
   }, [off, start]);
 
   const toggle = () => setOff((o) => { try { localStorage.setItem(key(song.src), o ? "0" : "1"); } catch { /* ignore */ } return !o; });
-  const pct = time.len ? Math.min(100, (time.now / time.len) * 100) : 0;
+  // the scrubber: hold the bar and slide to jump anywhere in the song (like the lock screen)
+  const [drag, setDrag] = useState<number | null>(null); // 0..1 while held
+  const fracAt = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+  };
+  const seekTo = (f: number) => {
+    const a = audio.current;
+    if (!a || !time.len) return;
+    a.currentTime = f * time.len;
+    setTime({ now: a.currentTime, len: time.len });
+  };
+  const shown = drag !== null ? drag * time.len : time.now;
+  const pct = time.len ? Math.min(100, (shown / time.len) * 100) : 0;
   return (
     <>
       <button className={`song-disc ${playing ? "spin" : ""} ${className}`} style={{ ["--c" as string]: color }} onClick={() => setOpen(true)} aria-label={`Now playing: ${song.title}`}>
@@ -86,8 +99,14 @@ export default function SongPlayer({ song, color = "#ffd27a", className = "" }: 
               </div>
               <div className={`now-eq ${playing ? "on" : ""}`}><i /><i /><i /><i /></div>
             </div>
-            <div className="now-bar"><i style={{ width: `${pct}%` }} /></div>
-            <div className="now-times"><span>{mmss(time.now)}</span><span>{missing ? "song file not added yet" : time.len ? `-${mmss(Math.max(0, time.len - time.now))}` : ""}</span></div>
+            <div className={`now-scrub ${drag !== null ? "held" : ""}`}
+              onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); setDrag(fracAt(e)); }}
+              onPointerMove={(e) => { if (drag !== null) setDrag(fracAt(e)); }}
+              onPointerUp={(e) => { if (drag !== null) seekTo(fracAt(e)); setDrag(null); }}
+              onPointerCancel={() => setDrag(null)}>
+              <div className="now-bar"><i style={{ width: `${pct}%` }} /></div>
+            </div>
+            <div className="now-times"><span>{mmss(shown)}</span><span>{missing ? "song file not added yet" : time.len ? `-${mmss(Math.max(0, time.len - shown))}` : ""}</span></div>
             <div className="now-controls">
               <button className="now-play" onClick={toggle} aria-label={off ? "Play" : "Pause"}>
                 {off
