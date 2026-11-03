@@ -187,10 +187,10 @@ function ArasakaFx() {
   );
 }
 
-export default function ArmorFrame({ clan, children }: { clan: string; children: ReactNode }) {
+export default function ArmorFrame({ clan, children, className = "" }: { clan: string; children: ReactNode; className?: string }) {
   const m = METALS[clan] ?? METALS.lone;
   return (
-    <div className={`armor armor-${clan}`} style={{ ["--m-dark" as string]: m.dark, ["--m-mid" as string]: m.mid, ["--m-glow" as string]: m.glow }}>
+    <div className={`armor armor-${clan} ${className}`} style={{ ["--m-dark" as string]: m.dark, ["--m-mid" as string]: m.mid, ["--m-glow" as string]: m.glow }}>
       <Crest clan={clan} m={m} />
       <Pauldron clan={clan} m={m} />
       <Pauldron clan={clan} m={m} right />

@@ -1,15 +1,28 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { SONG_VOLUME, type PlayerSong } from "./config";
 import { setSongActive, useSoundPrefs } from "./music";
 
 const key = (src: string) => `pb_song_off:${src}`;
 const readOff = (src: string) => { try { return localStorage.getItem(key(src)) === "1"; } catch { return false; } };
+const mmss = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
 
-// A small round speaker button that plays a player's song on loop (from its start point), quietly.
-export default function SongPlayer({ song, className = "" }: { song: PlayerSong; className?: string }) {
+// The song's "cover": the player's picture if given, otherwise a painted swirl in the clan colour.
+function Cover({ song, color, size }: { song: PlayerSong; color: string; size: number }) {
+  return song.art
+    ? <img className="song-cover" src={song.art} alt="" width={size} height={size} />
+    : <div className="song-cover painted" style={{ width: size, height: size, ["--c" as string]: color }}><span>{song.title.slice(0, 1)}</span></div>;
+}
+
+// A small spinning record that plays a player's song on loop (from its start point), quietly.
+// Tap it for a lock-screen style card with the song's name, artist, progress and play/pause.
+export default function SongPlayer({ song, color = "#ffd27a", className = "" }: { song: PlayerSong; color?: string; className?: string }) {
   const prefs = useSoundPrefs();
   const [off, setOff] = useState(() => readOff(song.src) || !prefs.music);
   const [playing, setPlaying] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [time, setTime] = useState({ now: 0, len: 0 });
+  const [missing, setMissing] = useState(false);
   const audio = useRef<HTMLAudioElement | null>(null);
   const start = song.start ?? 0;
 
@@ -17,8 +30,10 @@ export default function SongPlayer({ song, className = "" }: { song: PlayerSong;
     const a = new Audio(song.src);
     a.preload = "auto";
     a.volume = 0;
-    a.addEventListener("loadedmetadata", () => { try { a.currentTime = start; } catch { /* not seekable yet */ } }, { once: true });
+    a.addEventListener("loadedmetadata", () => { try { a.currentTime = start; } catch { /* not seekable yet */ } setTime({ now: a.currentTime, len: a.duration }); }, { once: true });
     a.addEventListener("ended", () => { a.currentTime = start; a.play().catch(() => {}); });
+    a.addEventListener("timeupdate", () => setTime({ now: a.currentTime, len: a.duration || 0 }));
+    a.addEventListener("error", () => setMissing(true));
     audio.current = a;
     return () => { a.pause(); a.removeAttribute("src"); a.load(); audio.current = null; };
   }, [song.src, start]);
@@ -27,15 +42,15 @@ export default function SongPlayer({ song, className = "" }: { song: PlayerSong;
     const a = audio.current;
     if (!a) return;
     let active = false, fadeT = 0, cancelled = false;
-    const fadeIn = () => {
-      let v = 0;
-      fadeT = window.setInterval(() => { v = Math.min(SONG_VOLUME, v + SONG_VOLUME / 20); a.volume = v; if (v >= SONG_VOLUME) clearInterval(fadeT); }, 60);
-    };
     const go = () => {
       if (cancelled) return;
       if (a.currentTime < start && a.readyState >= 1) { try { a.currentTime = start; } catch { /* ignore */ } }
-      a.play().then(() => { if (cancelled) return a.pause(); active = true; setSongActive(true); setPlaying(true); fadeIn(); })
-        .catch(() => window.addEventListener("pointerdown", go, { once: true })); // browsers wait for a first tap
+      a.play().then(() => {
+        if (cancelled) return a.pause();
+        active = true; setSongActive(true); setPlaying(true);
+        let v = 0;
+        fadeT = window.setInterval(() => { v = Math.min(SONG_VOLUME, v + SONG_VOLUME / 20); a.volume = v; if (v >= SONG_VOLUME) clearInterval(fadeT); }, 60);
+      }).catch(() => window.addEventListener("pointerdown", go, { once: true })); // browsers wait for a first tap
     };
     const hide = () => { if (document.hidden) a.pause(); else if (active) a.play().catch(() => {}); };
     if (!off) { go(); document.addEventListener("visibilitychange", hide); }
@@ -50,15 +65,37 @@ export default function SongPlayer({ song, className = "" }: { song: PlayerSong;
     };
   }, [off, start]);
 
-  const toggle = () => {
-    setOff((o) => { try { localStorage.setItem(key(song.src), o ? "0" : "1"); } catch { /* ignore */ } return !o; });
-  };
+  const toggle = () => setOff((o) => { try { localStorage.setItem(key(song.src), o ? "0" : "1"); } catch { /* ignore */ } return !o; });
+  const pct = time.len ? Math.min(100, (time.now / time.len) * 100) : 0;
   return (
-    <button className={`song-btn ${playing ? "on" : ""} ${className}`} onClick={toggle} aria-label={off ? "Play song" : "Mute song"}>
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" />
-        {off ? <path d="M16 9.5l5 5M21 9.5l-5 5" /> : <><path d="M15.5 9a4 4 0 0 1 0 6" /><path d="M18 6.5a7.5 7.5 0 0 1 0 11" /></>}
-      </svg>
-    </button>
+    <>
+      <button className={`song-disc ${playing ? "spin" : ""} ${className}`} style={{ ["--c" as string]: color }} onClick={() => setOpen(true)} aria-label={`Now playing: ${song.title}`}>
+        <span className="disc-label" />
+      </button>
+      {open && createPortal(
+        <div className="modal-back now-back" onClick={() => setOpen(false)}>
+          <div className="now-card" style={{ ["--c" as string]: color }} onClick={(e) => e.stopPropagation()}>
+            <div className="now-top">
+              <Cover song={song} color={color} size={64} />
+              <div className="now-text">
+                <b>{song.title}</b>
+                <span>{song.artist}</span>
+              </div>
+              <div className={`now-eq ${playing ? "on" : ""}`}><i /><i /><i /><i /></div>
+            </div>
+            <div className="now-bar"><i style={{ width: `${pct}%` }} /></div>
+            <div className="now-times"><span>{mmss(time.now)}</span><span>{missing ? "song file not added yet" : time.len ? `-${mmss(Math.max(0, time.len - time.now))}` : ""}</span></div>
+            <div className="now-controls">
+              <button className="now-play" onClick={toggle} aria-label={off ? "Play" : "Pause"}>
+                {off
+                  ? <svg viewBox="0 0 24 24" width="30" height="30"><path d="M7 4.5v15l13-7.5z" fill="currentColor" /></svg>
+                  : <svg viewBox="0 0 24 24" width="30" height="30"><path d="M6 4h4.5v16H6zM13.5 4H18v16h-4.5z" fill="currentColor" /></svg>}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }

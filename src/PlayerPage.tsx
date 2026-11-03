@@ -169,8 +169,8 @@ export default function PlayerPage({ id, myId, onBack, onEdit, onPlayer }: { id:
         <div className="muted txt-center">Loading…</div>
       ) : (
         <>
-          <ArmorFrame clan={clan?.id ?? "lone"}>
-          {PLAYER_SONGS[p.username]?.profile && <SongPlayer song={PLAYER_SONGS[p.username].profile!} className="profile-song" />}
+          <ArmorFrame clan={clan?.id ?? "lone"} className={PLAYER_SONGS[p.username]?.profile ? "assemble" : ""}>
+          {PLAYER_SONGS[p.username]?.profile && <SongPlayer song={PLAYER_SONGS[p.username].profile!} color={accent} className="profile-song" />}
           <div className={`pcard ${p.legendary ? "dev" : ""}`}>
             <Blossom color={accent} />
             <div className="pcard-side">

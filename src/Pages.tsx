@@ -175,23 +175,6 @@ export function ClanPage({ clan, preview, onPreview, onMembers }: { clan: ClanSt
 
 type Ranked = { id: string; username: string; avatar_url: string | null; respect: number; title?: string | null; legendary?: boolean; throne_motto?: string | null };
 
-// A short burst of petals and light when the throne page opens for a special king, gone in about 3.5 s.
-function ThroneCelebration({ color }: { color: string }) {
-  const [show, setShow] = useState(true);
-  useEffect(() => { const t = setTimeout(() => setShow(false), 3800); return () => clearTimeout(t); }, []);
-  if (!show) return null;
-  return (
-    <div className="throne-celebrate" style={{ ["--c" as string]: color }} aria-hidden="true">
-      <div className="tc-rays" />
-      {Array.from({ length: 34 }, (_, i) => {
-        const a = (i / 34) * Math.PI * 2 + (i % 3) * 0.2;
-        const d = 150 + (i * 37) % 120;
-        return <i key={i} style={{ ["--x" as string]: `${Math.cos(a) * d}px`, ["--y" as string]: `${Math.sin(a) * d - 40}px`, ["--r" as string]: `${(i * 53) % 360}deg`, animationDelay: `${(i % 6) * 0.05}s` }} className={i % 3 === 0 ? "gold" : ""} />;
-      })}
-    </div>
-  );
-}
-
 // The line the player on the throne writes. Only they can edit it, and only while they sit there.
 function ThroneMotto({ king, mine }: { king: Ranked; mine: boolean }) {
   const [text, setText] = useState(king.throne_motto ?? "");
@@ -256,7 +239,7 @@ export function ThronePage({ clanRespect, myId, onPlayer, onKingClan }: { clanRe
       </div>
       {view === "players" ? (
         <>
-          <div className="throne-wrap" style={{ ["--m-glow" as string]: METALS[kingClan?.id ?? "lone"].glow }}>
+          <div key={king?.id ?? "none"} className={`throne-wrap ${king && PLAYER_SONGS[king.username]?.celebrate ? "assemble" : ""}`} style={{ ["--m-glow" as string]: METALS[kingClan?.id ?? "lone"].glow }}>
           {king && <Crest clan={kingClan?.id ?? "lone"} m={METALS[kingClan?.id ?? "lone"]} />}
           {king && (
             <>
@@ -266,8 +249,7 @@ export function ThronePage({ clanRespect, myId, onPlayer, onKingClan }: { clanRe
               <Pauldron clan={kingClan?.id ?? "lone"} m={METALS[kingClan?.id ?? "lone"]} right />
             </>
           )}
-          {king && PLAYER_SONGS[king.username]?.celebrate && <ThroneCelebration key={king.id} color={METALS[kingClan?.id ?? "lone"].glow} />}
-          {king && PLAYER_SONGS[king.username]?.throne && <SongPlayer song={PLAYER_SONGS[king.username].throne!} className="throne-song" />}
+          {king && PLAYER_SONGS[king.username]?.throne && <SongPlayer song={PLAYER_SONGS[king.username].throne!} color={METALS[kingClan?.id ?? "lone"].glow} className="throne-song" />}
           <div className={`throne-seat ${kingClan ? `themed theme-${kingClan.id}` : ""} ${king && PLAYER_SONGS[king.username]?.celebrate ? "special" : ""}`}>
             {king && PLAYER_SONGS[king.username]?.celebrate && <div className="throne-sweep" />}
             {kingClan && <div className="theme-fx" />}
