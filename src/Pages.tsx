@@ -31,12 +31,14 @@ export function HomePage({ profile, clan, onBattle, onTrain, challenges }: { pro
             </div>
           </div>
         </div>
+        <div className="banner-col">
         <div className="clan-banner" style={clan ? { background: `linear-gradient(180deg, ${clan.color}, #2a1810)` } : undefined}>
           <span className="clan-glyph">{clan ? <ClanLogo clan={clan} size={34} /> : <FlagIcon />}</span>
           <span className="clan-banner-text">{clan ? clan.name : "Lone warrior"}</span>
         </div>
+        {challenges}
+        </div>
       </div>
-      {challenges}
       <div className="spacer" />
       <div className="home-actions">
         <button className="game-btn red big" onClick={onBattle}>

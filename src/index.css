@@ -1151,3 +1151,20 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .motto-edit { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--wood-rim); background: var(--wood); color: var(--parch); font-style: normal; }
 .composer .section-title { color: var(--parch); opacity: 0.75; font-size: 0.7rem; letter-spacing: 0.2em; }
 .composer .stake-note { color: #cdbf9f; }
+
+/* challenge banner beside the clan banner on Home */
+.banner-col { display: flex; gap: 8px; align-items: flex-start; flex-direction: row-reverse; }
+.challenge-banner { position: relative; border: 0; font: inherit; cursor: pointer; background: linear-gradient(180deg, #4a2c1d, #2a170f); color: var(--parch); pointer-events: auto; }
+.challenge-banner .clan-glyph { color: #ffcf8a; }
+.banner-ping { top: 4px; right: 4px; }
+.challenge-sheet .challenge-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.challenge-sheet .challenge-box { background: none; border: 0; box-shadow: none; padding: 0; }
+.challenge-sheet .cb-item { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.08); }
+.challenge-sheet .cb-item.hot { border-color: #df4b3f; background: rgba(223,75,63,0.1); }
+.challenge-sheet .cb-text .pl-name { color: #fff; }
+.challenge-sheet .cb-when { color: #ece6da; }
+.challenge-sheet .cb-when span, .challenge-sheet .cb-status, .challenge-sheet .muted { color: #8f8f9a; }
+.challenge-sheet .cb-empty { padding: 24px 8px; text-align: center; }
+.challenge-sheet .ping { border-color: #0b0b0e; }
+.seg-ping { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: #ff3b30; vertical-align: middle; }
+body:has(.challenge-sheet) .challenge-note { display: none; }

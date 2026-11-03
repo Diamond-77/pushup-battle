@@ -22,7 +22,7 @@ const Palace3D = lazy(() => import("./palace/Palace3D"));
 import { useMatch } from "./useMatch";
 import { usePushupLog } from "./stats";
 import { useChallenges, untilText } from "./challenges";
-import { ChallengeBox } from "./ChallengeUI";
+import { ChallengeButton, openChallenges } from "./ChallengeUI";
 import { setAmbienceOn, setMusicOn, setMusicScene, useSoundPrefs } from "./music";
 import { effectsOn, setEffectsOn } from "./sound";
 
@@ -223,7 +223,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
           </>
         )}
         {!inMatch && tab === "home" && <HomePage profile={profile} clan={myClan} onBattle={() => setTab("battle")} onTrain={() => setTab("train")}
-          challenges={<ChallengeBox list={ch.list} now={ch.now} online={lobby.players} onStart={(p, mode) => lobby.challenge(p, mode)} onChanged={ch.refresh} onPlayer={setViewPlayer} />} />}
+          challenges={<ChallengeButton list={ch.list} now={ch.now} online={lobby.players} onStart={(p, mode) => lobby.challenge(p, mode)} onChanged={ch.refresh} onPlayer={setViewPlayer} />} />}
         {menu && !viewPlayer && !(tab === "profile" && !editingProfile) && (
           <Suspense fallback={null}>
             {tab === "battle" ? (
@@ -310,7 +310,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
           </div>
         )}
         {note && !inMatch && (
-          <button className="challenge-note" onClick={() => { setNote(null); setViewPlayer(null); setTab("home"); }}>
+          <button className="challenge-note" onClick={() => { setNote(null); setViewPlayer(null); setTab("home"); openChallenges(); }}>
             <Avatar url={note.avatar} color="opp" size={38} />
             <span>{note.text}</span>
             <b>Open</b>
