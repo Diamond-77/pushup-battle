@@ -58,6 +58,13 @@ export const PALACE = {
 };
 
 export const SOUND_VOLUME = 0.7; // 0 = muted, 1 = loudest
+
+// Background music on the menu pages. Players can only turn it on or off; which song plays is set here.
+// Put an audio file in public/music/ (mp3, m4a or mp4) and name it below to replace a clan's built-in theme,
+// e.g. arasaka: "/music/arasaka.mp3". Leave a clan out to use the built-in synthesized theme.
+export const THEME_MUSIC: Record<string, string> = {};
+export const MUSIC_VOLUME = 0.32; // theme song
+export const AMBIENT_VOLUME = 0.22; // rain, wind, crickets
 export const CLAN_DAYS = 30; // a clan membership lasts this many days (also set in supabase/clans.sql)
 
 // "Report an issue" contacts on the Profile page

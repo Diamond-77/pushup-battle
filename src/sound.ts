@@ -18,6 +18,9 @@ function audio() {
   return ctx;
 }
 
+// shared with the music player (src/music.ts)
+export const audioOut = () => { const a = audio(); return a && master ? { ctx: a, out: master } : null; };
+
 if (typeof window !== "undefined") {
   const unlock = () => audio()?.resume();
   window.addEventListener("pointerdown", unlock, { passive: true });

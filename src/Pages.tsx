@@ -217,7 +217,7 @@ export function ThronePage({ clanRespect, myId, onPlayer, onKingClan }: { clanRe
               {(top ?? []).slice(1).map((p, i) => (
                 <li key={p.id} className={p.id === myId ? "me" : ""} onClick={() => onPlayer(p.id)}>
                   <span className="rank-no">{i + 2}</span>
-                  <Avatar url={p.avatar_url} color="neutral" size={34} legendary={p.legendary} />
+                  <Avatar url={p.avatar_url} color="neutral" size={46} legendary={p.legendary} />
                   <div className="pl-text">
                     <div className="pl-name">{p.username}</div>
                     <div className="pl-status">{respectTitle(p.respect)}</div>
@@ -230,17 +230,23 @@ export function ThronePage({ clanRespect, myId, onPlayer, onKingClan }: { clanRe
           </div>
         </>
       ) : (
-        <div className="parchment">
-          <ol className="rank-list">
-            {clans.map((c, i) => (
-              <li key={c.id}>
-                <span className="rank-no">{i + 1}</span>
-                <ClanLogo clan={c} size={34} />
-                <div className="pl-text"><div className="pl-name">{c.name}</div></div>
-                <b className="gold-text">{clanRespect[c.id] ?? 0}</b>
-              </li>
-            ))}
-          </ol>
+        <div className="clan-pyramid">
+          {[clans.slice(0, 1), clans.slice(1)].map((row, r) => (
+            <div key={r} className="cp-row">
+              {row.map((c) => {
+                const place = clans.indexOf(c) + 1;
+                return (
+                  <div key={c.id} className={`cp-card place-${place}`} style={{ ["--c" as string]: c.color }}>
+                    {place === 1 && <div className="cp-crown">THE THRONE</div>}
+                    <div className="cp-place">{place === 1 ? "1st" : place === 2 ? "2nd" : "3rd"}</div>
+                    <ClanLogo clan={c} size={place === 1 ? 88 : 60} />
+                    <div className="brush-title cp-name">{c.name}</div>
+                    <div className="cp-respect"><b>{clanRespect[c.id] ?? 0}</b> Respect</div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </div>
       )}
     </div>

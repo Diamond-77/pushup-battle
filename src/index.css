@@ -1020,3 +1020,34 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .lobby-page > * { flex-shrink: 0; }
 .lobby-page .field-track { touch-action: pan-x pan-y; }
 .throne-page > * { flex-shrink: 0; }
+
+/* ---------- top bar on every menu page: Respect on the left, music on/off on the right ---------- */
+.topbar { position: absolute; z-index: 30; top: max(10px, env(safe-area-inset-top)); left: 14px; right: 14px; display: flex; justify-content: space-between; align-items: center; pointer-events: none; }
+.topbar > * { pointer-events: auto; }
+.respect-chip { display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px 0 5px; border-radius: 99px; border: 2px solid var(--wood-rim); background: linear-gradient(180deg, #3a2618, #1d130d); color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,0.35); }
+.respect-coin { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-family: "Ma Shan Zheng", cursive; font-size: 1rem; color: #3a2408; background: radial-gradient(circle at 35% 30%, #fff1b8, #e8b84a 55%, #a8741e); box-shadow: inset 0 0 0 2px rgba(58,36,8,0.35); }
+.respect-chip b { font-size: 1.05rem; font-variant-numeric: tabular-nums; color: #ffe08a; }
+.respect-chip-word { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #c9b48f; }
+.music-btn { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--wood-rim); background: linear-gradient(180deg, #3a2618, #1d130d); color: #8f8270; }
+.music-btn.on { color: #ffe08a; box-shadow: 0 0 12px rgba(232,184,74,0.35); }
+.page { padding-top: calc(max(20px, env(safe-area-inset-top)) + 46px); }
+@media (max-height: 760px) { .page { padding-top: calc(max(12px, env(safe-area-inset-top)) + 44px); } }
+.sheet-back { padding-top: calc(max(12px, env(safe-area-inset-top)) + 46px); }
+.follow-sheet { height: calc(100vh - 170px); height: calc(100dvh - 170px - env(safe-area-inset-bottom) - env(safe-area-inset-top)); }
+.rank-list li { padding-top: 4px; padding-bottom: 4px; }
+
+/* clan throne: a pyramid, the leading clan on top */
+.clan-pyramid { display: flex; flex-direction: column; gap: 12px; flex-shrink: 0; }
+.cp-row { display: flex; justify-content: center; gap: 12px; }
+.cp-card { position: relative; flex: 1; max-width: 220px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 16px 10px 14px; border-radius: 20px;
+  background: radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--c) 45%, transparent), transparent 70%), linear-gradient(180deg, #24170f, #120b08);
+  border: 2px solid color-mix(in srgb, var(--c) 70%, #000); box-shadow: 0 0 24px color-mix(in srgb, var(--c) 30%, transparent), 0 5px 0 rgba(0,0,0,0.4); }
+.cp-card.place-1 { max-width: 260px; padding: 26px 16px 18px; border-radius: 130px 130px 22px 22px; box-shadow: 0 0 40px color-mix(in srgb, var(--c) 50%, transparent), 0 5px 0 rgba(0,0,0,0.4); }
+.cp-crown { font-size: 0.62rem; font-weight: 900; letter-spacing: 0.3em; color: #ffe08a; }
+.cp-place { position: absolute; top: 10px; left: 12px; font-family: "Ma Shan Zheng", cursive; font-size: 1.3rem; color: #ffe08a; }
+.cp-card.place-1 .cp-place { top: auto; bottom: 12px; left: 16px; }
+.cp-name { font-size: 1.4rem; color: #fff; text-align: center; line-height: 1.1; }
+.cp-card.place-1 .cp-name { font-size: 2rem; }
+.cp-respect { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: #c9b48f; }
+.cp-respect b { font-size: 1.1rem; letter-spacing: 0; color: #ffe08a; }
+.cp-card.place-1 .cp-respect b { font-size: 1.5rem; }

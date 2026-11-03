@@ -21,6 +21,7 @@ import { supabase } from "./supabase";
 const Palace3D = lazy(() => import("./palace/Palace3D"));
 import { useMatch } from "./useMatch";
 import { usePushupLog } from "./stats";
+import { setMusicOn, setMusicScene, useMusicOn } from "./music";
 
 export default function App() {
   const { session, profile, setProfile, loading, recovering, doneRecovering } = useAuth();
@@ -77,6 +78,14 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
   useEffect(() => {
     if (myClan) setPreview(myClan);
   }, [myClan?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Theme music + weather sounds on the menu pages (silent in battles and training)
+  const musicOn = useMusicOn();
+  useEffect(() => {
+    if (!menu) return setMusicScene(null, null);
+    const weather = tab === "battle" ? FIELDS.find((f) => f.id === field)!.weather : shown?.weather ?? "day";
+    setMusicScene(tab === "battle" ? myClan?.id ?? "lone" : shown?.id ?? "lone", weather);
+  }, [menu, tab, field, shown?.id, myClan?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sounds for the countdown and the result
   useEffect(() => {
@@ -235,6 +244,21 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
           </div>
         )}
 
+        {menu && (
+          <div className="topbar">
+            <button className="respect-chip" onClick={() => setTab("throne")} aria-label="Your Respect">
+              <span className="respect-coin">R</span>
+              <b>{respect}</b>
+              <span className="respect-chip-word">Respect</span>
+            </button>
+            <button className={`music-btn ${musicOn ? "on" : ""}`} onClick={() => setMusicOn(!musicOn)} aria-label={musicOn ? "Turn music off" : "Turn music on"}>
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 18V5l11-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="17" cy="16" r="3" />
+                {!musicOn && <path d="M3 3l18 18" />}
+              </svg>
+            </button>
+          </div>
+        )}
         <Dock tab={tab} onTab={setTab} locked={inMatch} />
         {showGuide && !inMatch && <Guide onDone={() => setShowGuide(false)} />}
       </PoseCounter>
