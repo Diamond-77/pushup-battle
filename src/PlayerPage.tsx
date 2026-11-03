@@ -9,6 +9,9 @@ import Achievements from "./Achievements";
 import ArmorFrame, { Blossom, METALS } from "./ArmorFrame";
 import FollowSheet from "./FollowSheet";
 import { loadCard, type PlayerCard } from "./stats";
+import { SendChallenge } from "./ChallengeUI";
+import { challengesChanged } from "./challenges";
+import type { ModeId } from "./config";
 import { beatInRank, loadHistory, loadProfile, loadSocial, modeName, setFollow, setVote, type HistoryRow, type Social } from "./social";
 
 export const ThumbUp = ({ down = false }: { down?: boolean }) => (
@@ -110,6 +113,8 @@ export default function PlayerPage({ id, myId, onBack, onEdit, onPlayer }: { id:
   const [tab, setTab] = useState<"achievements" | "history">("achievements");
   const [sheet, setSheet] = useState<"followers" | "following" | null>(null);
   const [tease, setTease] = useState(false); // "beat them in Rank first" popup
+  const [challenge, setChallenge] = useState<ModeId | "any" | null>(null);
+  const [sent, setSent] = useState(false);
   const mine = id === myId;
 
   useEffect(() => {
@@ -171,7 +176,7 @@ export default function PlayerPage({ id, myId, onBack, onEdit, onPlayer }: { id:
             </div>
             <div className="pcard-main">
               <div className="pcard-head">
-                <Avatar url={p.avatar_url} color="neutral" size={88} legendary={p.legendary} />
+                <Avatar url={p.avatar_url} color="neutral" size={88} legendary={p.legendary} glow={accent} />
                 <div className="pcard-id">
                   <div className="brush-title pcard-name">{p.username}</div>
                   {p.title && <div className="dev-badge">{p.title}</div>}
@@ -189,6 +194,9 @@ export default function PlayerPage({ id, myId, onBack, onEdit, onPlayer }: { id:
                 <button onClick={() => setSheet("following")}><b>{s?.following ?? "–"}</b><span>Following</span></button>
               </div>
               {p.bio && <p className="pcard-bio">{p.bio}</p>}
+              {!mine && (
+                <button className="game-btn red challenge-btn" onClick={() => setChallenge("any")}>{sent ? "Challenge sent ✓" : "Challenge"}</button>
+              )}
               <div className="pcard-actions">
                 {!mine && (
                   <button className={`game-btn ${s?.iFollow ? "wood" : "jade"}`} disabled={!s} onClick={follow}>
@@ -218,10 +226,14 @@ export default function PlayerPage({ id, myId, onBack, onEdit, onPlayer }: { id:
             <button className={tab === "achievements" ? "on" : ""} onClick={() => setTab("achievements")}>Achievements</button>
             <button className={tab === "history" ? "on" : ""} onClick={() => setTab("history")}>History</button>
           </div>
-          {tab === "achievements" ? <Achievements card={card} accent={accent} dark={metal.dark} mid={metal.mid} name={p.username} /> : <HistoryList rows={hist} me={p} onPlayer={onPlayer} />}
+          {tab === "achievements" ? <Achievements card={card} accent={accent} dark={metal.dark} mid={metal.mid} name={p.username} id={id} /> : <HistoryList rows={hist} me={p} onPlayer={onPlayer} />}
           {sheet && (
             <FollowSheet id={id} name={p.username} start={sheet} counts={{ followers: s?.followers ?? 0, following: s?.following ?? 0 }}
               onClose={() => setSheet(null)} onPlayer={onPlayer ? (pid) => { setSheet(null); onPlayer(pid); } : undefined} />
+          )}
+          {challenge && (
+            <SendChallenge id={id} name={p.username} avatar={p.avatar_url} mode={challenge === "any" ? undefined : challenge}
+              onClose={() => setChallenge(null)} onSent={() => { setSent(true); challengesChanged(); }} />
           )}
           {tease && (
             <div className="modal-back" onClick={() => setTease(false)}>
@@ -229,7 +241,7 @@ export default function PlayerPage({ id, myId, onBack, onEdit, onPlayer }: { id:
                 <Avatar url={p.avatar_url} color="opp" size={80} legendary={p.legendary} />
                 <div className="modal-title">Whoa, someone doesn't like {p.username}!</div>
                 <p className="modal-text">Words are cheap. Defeat <b>{p.username}</b> in a <b>Rank</b> match, then you've earned the right to dislike them.</p>
-                <button className="game-btn red" onClick={() => setTease(false)}>Challenge accepted</button>
+                <button className="game-btn red" onClick={() => { setTease(false); setChallenge("rank"); }}>Challenge accepted</button>
               </div>
             </div>
           )}

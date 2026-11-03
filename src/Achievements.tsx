@@ -1,5 +1,5 @@
-import { lazy, Suspense, useMemo, useState } from "react";
-import { EMPTY_CARD, type PlayerCard } from "./stats";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { EMPTY_CARD, loadDays, type DayReps, type PlayerCard } from "./stats";
 
 const Scroll3D = lazy(() => import("./palace/Scroll3D"));
 
@@ -67,9 +67,45 @@ const BADGES: { id: string; mark: string; name: string; got: (c: PlayerCard) => 
 
 // The Achievements tab: the rolled scroll with the streak month beside it. Tap the scroll and it unrolls
 // sideways over the panel while the streaks glide down underneath. Then wins and bests, then badges.
-export default function Achievements({ card, accent, dark, mid, name }: { card: PlayerCard | null; accent: string; dark: string; mid: string; name: string }) {
+// Every day's push-ups, as a big list.
+function DailyList({ id, name, onClose }: { id: string; name: string; onClose: () => void }) {
+  const [days, setDays] = useState<DayReps[] | null>(null);
+  useEffect(() => { loadDays(id).then(setDays); }, [id]);
+  const most = Math.max(1, ...(days ?? []).map((d) => d.reps));
+  const total = (days ?? []).reduce((n, d) => n + d.reps, 0);
+  const label = (iso: string) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: y === new Date().getFullYear() ? undefined : "numeric" });
+  };
+  return (
+    <div className="modal-back sheet-back" onClick={onClose}>
+      <div className="follow-sheet daily-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-top">
+          <div className="sheet-title">Daily push-ups</div>
+          <button className="sheet-x" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        <div className="muted small">{name} · <b>{days?.length ?? 0}</b> active days · <b>{total.toLocaleString()}</b> push-ups</div>
+        <ul className="sheet-list daily-list">
+          {days === null && <li className="muted">Loading…</li>}
+          {days?.length === 0 && <li className="muted">No push-ups yet.</li>}
+          {days?.map((d) => (
+            <li key={d.day}>
+              <span className="dl-day">{label(d.day)}</span>
+              <span className="dl-bar"><i style={{ width: `${Math.max(4, (d.reps / most) * 100)}%` }} /></span>
+              <b className="dl-reps">{d.reps}</b>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+export default function Achievements({ card, accent, dark, mid, name, id }: { card: PlayerCard | null; accent: string; dark: string; mid: string; name: string; id: string }) {
   const [open, setOpen] = useState(false);
+  const [daily, setDaily] = useState(false);
   const c = card ?? EMPTY_CARD;
+  const today = c.recent.find((r) => r.day === c.today)?.reps ?? 0;
   return (
     <div className="achv">
       <div className={`achv-panel ${open ? "open" : ""}`}>
@@ -81,11 +117,13 @@ export default function Achievements({ card, accent, dark, mid, name }: { card: 
           <StreakCalendar card={c} full={open} />
         </div>
       </div>
-      <div className="stat-tiles">
+      <div className="stat-tiles four">
+        <button className="stat-tile today-tile" onClick={() => setDaily(true)}><b>{today}</b><span>Today</span><em>See every day ›</em></button>
         <div className="stat-tile"><b>{c.wins}</b><span>Wins</span><em>{c.battles} battles</em></div>
         <div className="stat-tile"><b>{c.best_battle}</b><span>Personal best</span><em>in one battle</em></div>
         <div className="stat-tile"><b>{c.best_day}</b><span>Best day</span><em>{c.active_days} active days</em></div>
       </div>
+      {daily && <DailyList id={id} name={name} onClose={() => setDaily(false)} />}
       <div className="badge-grid">
         {BADGES.map((b) => {
           const got = !!card && b.got(card);

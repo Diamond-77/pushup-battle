@@ -1,7 +1,8 @@
 // Hexagon avatar: the player's picture, or a silhouette when they have none.
-export default function Avatar({ url, color, size = 38, legendary }: { url?: string | null; color: "me" | "opp" | "neutral"; size?: number; legendary?: boolean }) {
+// glow = a colour: a shining frame running round the avatar (everyone's profile, in their clan colour).
+export default function Avatar({ url, color, size = 38, legendary, glow }: { url?: string | null; color: "me" | "opp" | "neutral"; size?: number; legendary?: boolean; glow?: string }) {
   const hex = (
-    <div className={`hex ${color} ${legendary ? "legendary" : ""}`} style={{ width: size, height: size * 1.1 }}>
+    <div className={`hex ${color} ${legendary ? "legendary" : glow ? "glow" : ""}`} style={{ width: size, height: size * 1.1 }}>
       <div className="hex-inner">
         {url ? (
           <img src={url} alt="" className="hex-img" />
@@ -14,6 +15,13 @@ export default function Avatar({ url, color, size = 38, legendary }: { url?: str
       </div>
     </div>
   );
+  if (!legendary && glow)
+    return (
+      <div className="glow-wrap" style={{ width: size, height: size * 1.1, ["--g" as string]: glow }}>
+        <div className="glow-halo" />
+        {hex}
+      </div>
+    );
   if (!legendary) return hex;
   // Legendary (developer only): glowing halo, shimmering frame and sparks orbiting the avatar
   return (

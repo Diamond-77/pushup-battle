@@ -3,7 +3,7 @@ import ClanLogo from "./ClanLogo";
 import { CLANS, clanById, type Clan } from "./clans";
 import { CLAN_DAYS, START_RESPECT, respectTitle } from "./config";
 import { supabase } from "./supabase";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { daysLeft, type useClan } from "./useClan";
 import { Crest, METALS } from "./ArmorFrame";
 import type { Profile } from "./auth";
@@ -16,7 +16,7 @@ const FlagIcon = ({ size = 26 }: { size?: number }) => (
   </svg>
 );
 
-export function HomePage({ profile, clan, onBattle, onTrain }: { profile: Profile; clan: Clan | null; onBattle: () => void; onTrain: () => void }) {
+export function HomePage({ profile, clan, onBattle, onTrain, challenges }: { profile: Profile; clan: Clan | null; onBattle: () => void; onTrain: () => void; challenges?: ReactNode }) {
   return (
     <div className="page home-page clear">
       <div className="home-top">
@@ -36,8 +36,7 @@ export function HomePage({ profile, clan, onBattle, onTrain }: { profile: Profil
           <span className="clan-banner-text">{clan ? clan.name : "Lone warrior"}</span>
         </div>
       </div>
-      {/* Space for an event / news banner later */}
-      <div className="banner-slot">Event banner · reserved</div>
+      {challenges}
       <div className="spacer" />
       <div className="home-actions">
         <button className="game-btn red big" onClick={onBattle}>
@@ -171,7 +170,37 @@ export function ClanPage({ clan, preview, onPreview, onMembers }: { clan: ClanSt
   );
 }
 
-type Ranked = { id: string; username: string; avatar_url: string | null; respect: number; title?: string | null; legendary?: boolean };
+type Ranked = { id: string; username: string; avatar_url: string | null; respect: number; title?: string | null; legendary?: boolean; throne_motto?: string | null };
+
+// The line the player on the throne writes. Only they can edit it, and only while they sit there.
+function ThroneMotto({ king, mine }: { king: Ranked; mine: boolean }) {
+  const [text, setText] = useState(king.throne_motto ?? "");
+  const [saved, setSaved] = useState(king.throne_motto ?? "");
+  const [edit, setEdit] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { setText(king.throne_motto ?? ""); setSaved(king.throne_motto ?? ""); }, [king.id, king.throne_motto]);
+  const save = async () => {
+    if (!supabase) return;
+    const v = text.trim().slice(0, 80);
+    const { error } = await supabase.from("profiles").update({ throne_motto: v || null }).eq("id", king.id);
+    if (error) { setErr(/column|schema cache/i.test(error.message) ? "Run challenges.sql first" : error.message); return; }
+    setSaved(v); setText(v); setEdit(false); setErr(null);
+  };
+  if (edit) return (
+    <div className="throne-motto editing">
+      <input className="motto-input" maxLength={80} value={text} autoFocus placeholder="Words from the throne…" onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()} />
+      <div className="row"><button className="pill ghost" onClick={() => { setEdit(false); setText(saved); }}>Cancel</button><button className="pill" onClick={save}>Save</button></div>
+      {err && <div className="form-msg small">{err}</div>}
+    </div>
+  );
+  if (!saved && !mine) return null;
+  return (
+    <div className="throne-motto">
+      {saved ? <q>{saved}</q> : <span className="muted small">Write a line for the throne</span>}
+      {mine && <button className="motto-edit" onClick={() => setEdit(true)} aria-label="Edit throne words">✎</button>}
+    </div>
+  );
+}
 
 // The throne: the player with the most Respect sits on it. Clans are ranked by their members' total.
 // The throne takes on the king's clan: its colours here, its palace behind the page.
@@ -209,6 +238,7 @@ export function ThronePage({ clanRespect, myId, onPlayer, onKingClan }: { clanRe
             {king ? <button className="member-row center-row" onClick={() => onPlayer(king.id)}><Avatar url={king.avatar_url} color="me" size={84} legendary={king.legendary} /></button> : <div className="throne-empty">?</div>}
             <div className="throne-holder">{king ? king.username : failed ? "Respect isn't set up yet" : "…"}</div>
             {king && <div className="respect">{king.respect} <span className="respect-word">Respect</span> <span className="rank-title">{respectTitle(king.respect)}</span></div>}
+            {king && <ThroneMotto king={king} mine={king.id === myId} />}
             {king && (
               <div className="throne-clan">
                 {kingClan ? <><ClanLogo clan={kingClan} size={22} /><span>{kingClan.name}</span></> : <span>Lone Warrior</span>}

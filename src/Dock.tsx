@@ -1,9 +1,9 @@
 export type Tab = "home" | "battle" | "throne" | "train" | "clan" | "profile";
 
-type Props = { tab: Tab; onTab: (t: Tab) => void; locked: boolean };
+type Props = { tab: Tab; onTab: (t: Tab) => void; locked: boolean; ping?: number };
 
 // Bottom navigation: Home, Throne, Train (raised camera button), Clan, Profile.
-export default function Dock({ tab, onTab, locked }: Props) {
+export default function Dock({ tab, onTab, locked, ping = 0 }: Props) {
   const nav = (t: Tab) => () => !locked && onTab(t);
   const on = (...t: Tab[]) => (t.includes(tab) ? "active" : "");
   return (
@@ -12,6 +12,7 @@ export default function Dock({ tab, onTab, locked }: Props) {
         <button className={`dock-icon ${on("home", "battle")}`} aria-label="Home" onClick={nav("home")}>
           <svg viewBox="0 0 24 24"><path d="M3.5 10.5 12 3.5l8.5 7V20a1 1 0 0 1-1 1h-5v-6h-5v6h-5a1 1 0 0 1-1-1z" /></svg>
           <span>Home</span>
+          {ping > 0 && <i className="dock-ping">{ping}</i>}
         </button>
         <button className={`dock-icon ${on("throne")}`} aria-label="Throne" onClick={nav("throne")}>
           <svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3" /></svg>

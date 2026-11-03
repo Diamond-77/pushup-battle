@@ -1079,3 +1079,75 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .sound-back { background: rgba(0,0,0,0.72); }
 .sound-row { width: 100%; }
 .cam-promise { display: inline-block; margin-bottom: 4px; color: #9bf0c8; font-weight: 700; }
+/* everyone's profile avatar: a shining frame running round it in their clan colour */
+.glow-wrap { position: relative; flex-shrink: 0; }
+.glow-halo { position: absolute; inset: -16%; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--g) 50%, transparent), transparent 68%); animation: halo-pulse 2.2s ease-in-out infinite; pointer-events: none; }
+.hex.glow { position: relative; z-index: 1; padding: 4px; background: conic-gradient(from var(--spin, 0deg), #111014 0deg, #111014 190deg, color-mix(in srgb, var(--g) 55%, #000) 245deg, var(--g) 300deg, #ffffff 330deg, var(--g) 345deg, #111014 360deg); animation: legend-spin 2.4s linear infinite; }
+
+/* ---------- Challenges ---------- */
+.challenge-box { flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 20px; background: var(--parch); color: var(--ink); border: 2px solid #d5c6a6; box-shadow: 0 5px 0 #a8946c; }
+.challenge-box .section-title { color: var(--ink); margin: 0; }
+.challenge-box .muted { color: #6f6450; }
+.challenge-box .form-msg { color: #b22c22; margin: 0; font-size: 0.85rem; }
+.cb-head { display: flex; align-items: center; gap: 8px; }
+.cb-count { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 99px; background: #b22c22; color: #fff4e6; font-size: 0.75rem; font-weight: 800; display: grid; place-items: center; }
+.cb-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cb-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: 14px; background: rgba(0,0,0,0.04); border: 1.5px solid #e2d4b4; }
+.cb-item.hot { border-color: #df4b3f; background: rgba(223,75,63,0.08); }
+.cb-avatar { position: relative; flex-shrink: 0; padding: 0; border: 0; background: none; }
+.ping { position: absolute; top: 0; right: 0; width: 13px; height: 13px; border-radius: 50%; background: #ff3b30; border: 2px solid var(--parch); animation: ping-pulse 1.4s ease-in-out infinite; }
+@keyframes ping-pulse { 50% { box-shadow: 0 0 0 6px rgba(255,59,48,0); transform: scale(1.15); } 0%,100% { box-shadow: 0 0 0 0 rgba(255,59,48,0.6); } }
+.cb-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.cb-text .pl-name { font-weight: 800; color: var(--ink); }
+.cb-when { font-size: 0.8rem; }
+.cb-when span { color: #6f6450; }
+.cb-status { font-size: 0.78rem; color: #6f6450; }
+.cb-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.cb-actions .pill { padding: 7px 12px; font-size: 0.8rem; }
+
+.challenge-back { z-index: 60; }
+.composer { width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow-y: auto; display: flex; flex-direction: column; gap: 10px; text-align: left; }
+.composer-head { display: flex; align-items: center; gap: 12px; }
+.composer-head .modal-title { text-align: left; font-size: 1.7rem; }
+.composer .section-title { margin: 4px 0 0; }
+.mode-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.mode-chip { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border-radius: 14px; background: var(--wood); border: 2px solid var(--wood-rim); color: var(--parch); }
+.mode-chip span { font-size: 0.66rem; opacity: 0.75; }
+.mode-chip.on { background: linear-gradient(180deg, #df4b3f, #b22c22); border-color: #8f241b; color: #fff4e6; }
+.quick-times { display: flex; flex-wrap: wrap; gap: 6px; }
+.quick-times .pill { padding: 7px 12px; font-size: 0.8rem; }
+.quick-times .pill.ghost.on { background: linear-gradient(180deg, #df4b3f, #b22c22); color: #fff4e6; border-color: #8f241b; }
+.time-input { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 14px; border: 2px solid var(--wood-rim); background: rgba(0,0,0,0.35); color: var(--parch); font: inherit; color-scheme: dark; }
+.stake-note { margin: 0; }
+.composer .row.stretch { display: flex; gap: 8px; }
+.composer .row.stretch > * { flex: 1; }
+
+/* the reminder that shows on every page (not in battle) */
+.challenge-note { position: absolute; z-index: 35; top: calc(max(10px, env(safe-area-inset-top)) + 50px); left: 50%; transform: translateX(-50%); width: min(420px, calc(100% - 28px)); display: flex; align-items: center; gap: 10px; padding: 8px 12px 8px 8px; border-radius: 16px; background: var(--parch); color: var(--ink); border: 2px solid #df4b3f; box-shadow: 0 5px 0 #8f241b, 0 10px 30px rgba(0,0,0,0.5); text-align: left; font-size: 0.86rem; animation: note-in 0.35s ease-out; }
+.challenge-note span { flex: 1; min-width: 0; }
+.challenge-note b { flex-shrink: 0; padding: 6px 12px; border-radius: 10px; background: linear-gradient(180deg, #df4b3f, #b22c22); color: #fff4e6; font-size: 0.8rem; }
+@keyframes note-in { from { opacity: 0; transform: translate(-50%, -14px); } }
+
+.dock-icon { position: relative; }
+.dock-ping { position: absolute; top: -2px; right: -2px; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; border-radius: 99px; background: #ff3b30; color: #fff; font-style: normal; font-size: 0.68rem; font-weight: 800; display: grid; place-items: center; border: 2px solid #1b1a1f; }
+.challenge-btn { width: 100%; }
+
+/* ---------- Daily push-ups ---------- */
+.stat-tiles.four { grid-template-columns: repeat(2, 1fr); }
+.today-tile { font: inherit; cursor: pointer; border-color: color-mix(in srgb, var(--acc) 45%, transparent); }
+.today-tile em { color: var(--acc); }
+.daily-sheet .muted b { color: #fff; }
+.daily-list li:not(.muted) { display: grid; grid-template-columns: 7.5em 1fr 3em; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); }
+.dl-day { font-size: 0.82rem; color: #ece6da; white-space: nowrap; }
+.dl-bar { height: 8px; border-radius: 99px; background: rgba(255,255,255,0.06); overflow: hidden; }
+.dl-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #ff8a3d, #ffd27a); }
+.dl-reps { text-align: right; color: #ffd27a; }
+
+/* ---------- Throne words ---------- */
+.throne-motto { position: relative; z-index: 1; max-width: 90%; display: flex; align-items: center; gap: 8px; color: var(--parch); font-style: italic; text-align: center; font-size: 0.9rem; }
+.throne-motto q { quotes: "“" "”"; }
+.throne-motto.editing { flex-direction: column; width: 90%; font-style: normal; }
+.motto-input { width: 100%; box-sizing: border-box; padding: 9px 12px; border-radius: 12px; border: 2px solid var(--wood-rim); background: rgba(0,0,0,0.45); color: var(--parch); font: inherit; }
+.motto-edit { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--wood-rim); background: var(--wood); color: var(--parch); font-style: normal; }
+.composer .section-title { color: var(--parch); opacity: 0.75; font-size: 0.7rem; letter-spacing: 0.2em; }
+.composer .stake-note { color: #cdbf9f; }

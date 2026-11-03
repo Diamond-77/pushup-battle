@@ -21,6 +21,8 @@ import { supabase } from "./supabase";
 const Palace3D = lazy(() => import("./palace/Palace3D"));
 import { useMatch } from "./useMatch";
 import { usePushupLog } from "./stats";
+import { useChallenges, untilText } from "./challenges";
+import { ChallengeBox } from "./ChallengeUI";
 import { setAmbienceOn, setMusicOn, setMusicScene, useSoundPrefs } from "./music";
 import { effectsOn, setEffectsOn } from "./sound";
 
@@ -90,6 +92,31 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
     const weather = tab === "battle" ? FIELDS.find((f) => f.id === field)!.weather : shown?.weather ?? "day";
     setMusicScene(tab === "battle" ? field : shown?.id ?? "lone", weather);
   }, [menu, tab, field, shown?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Scheduled challenges: the mailbox on Home, a red ping on the dock and a notice on every page (not in battle)
+  const ch = useChallenges(profile.id);
+  const seenNotes = useRef(new Set<string>());
+  const [note, setNote] = useState<{ key: string; text: string; avatar: string | null } | null>(null);
+  useEffect(() => {
+    if (inMatch || note) return;
+    for (const c of ch.list) {
+      const ms = c.when.getTime() - ch.now;
+      const mode = MODES[c.mode].name;
+      const n =
+        c.myTurn ? { key: `ask-${c.id}-${c.proposer}-${c.at}-${c.mode}`, text: c.proposer === c.from_user && !c.mine ? `${c.other.username} challenged you to ${mode}!` : `${c.other.username} changed your challenge. Your answer?` } :
+        c.status === "accepted" && c.theyIn && !c.iIn ? { key: `here-${c.id}`, text: `${c.other.username} is here and waiting for your ${mode} battle!` } :
+        c.status === "accepted" && !c.iIn && ms <= 5 * 60000 && c.window !== "over" ? { key: `soon-${c.id}`, text: `Your ${mode} vs ${c.other.username} starts ${untilText(ms)}. Check in!` } :
+        c.status === "accepted" && !c.iIn && ms <= 60 * 60000 && ms > 50 * 60000 ? { key: `hour-${c.id}`, text: `Reminder: ${mode} vs ${c.other.username} ${untilText(ms)}.` } :
+        null;
+      if (n && !seenNotes.current.has(n.key)) {
+        seenNotes.current.add(n.key);
+        setNote({ ...n, avatar: c.other.avatar_url });
+        countdownSound();
+        break;
+      }
+    }
+  }, [ch.list, ch.now, inMatch, note]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!note) return; const t = setTimeout(() => setNote(null), 9000); return () => clearTimeout(t); }, [note]);
 
   // Sounds for the countdown and the result
   useEffect(() => {
@@ -195,7 +222,8 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
           <Training reps={practiceReps} onReset={() => setPracticeReps(0)} onBattle={() => setTab("battle")} onEarned={refreshProfile} />
           </>
         )}
-        {!inMatch && tab === "home" && <HomePage profile={profile} clan={myClan} onBattle={() => setTab("battle")} onTrain={() => setTab("train")} />}
+        {!inMatch && tab === "home" && <HomePage profile={profile} clan={myClan} onBattle={() => setTab("battle")} onTrain={() => setTab("train")}
+          challenges={<ChallengeBox list={ch.list} now={ch.now} online={lobby.players} onStart={(p, mode) => lobby.challenge(p, mode)} onChanged={ch.refresh} onPlayer={setViewPlayer} />} />}
         {menu && !viewPlayer && !(tab === "profile" && !editingProfile) && (
           <Suspense fallback={null}>
             {tab === "battle" ? (
@@ -281,7 +309,14 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
             </div>
           </div>
         )}
-        <Dock tab={tab} onTab={setTab} locked={inMatch} />
+        {note && !inMatch && (
+          <button className="challenge-note" onClick={() => { setNote(null); setViewPlayer(null); setTab("home"); }}>
+            <Avatar url={note.avatar} color="opp" size={38} />
+            <span>{note.text}</span>
+            <b>Open</b>
+          </button>
+        )}
+        <Dock tab={tab} onTab={setTab} locked={inMatch} ping={ch.ping} />
         {showGuide && !inMatch && <Guide onDone={() => setShowGuide(false)} />}
       </PoseCounter>
     </main>

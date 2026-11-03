@@ -81,3 +81,10 @@ export function usePushupLog() {
   const add = useCallback(() => { pending.current += 1; }, []);
   return { add, flush };
 }
+
+// Every day a player did push-ups, newest first (up to a year).
+export async function loadDays(id: string): Promise<DayReps[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase.from("pushup_days").select("day, reps").eq("user_id", id).gt("reps", 0).order("day", { ascending: false }).limit(366);
+  return error || !Array.isArray(data) ? [] : (data as DayReps[]);
+}
