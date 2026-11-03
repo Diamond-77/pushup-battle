@@ -4,18 +4,22 @@ import { supabase } from "./supabase";
 import type { ModeId } from "./config";
 
 export type PlayerStatus = "idle" | "searching" | "in_match";
-export type Player = { id: string; name: string; avatar: string | null; status: PlayerStatus; title?: string | null; legendary?: boolean; clan?: string | null; respect?: number; mode?: ModeId };
+export type Player = { id: string; tab?: string; name: string; avatar: string | null; status: PlayerStatus; title?: string | null; legendary?: boolean; clan?: string | null; respect?: number; mode?: ModeId };
 export type MatchInfo = { matchId: string; creator: boolean; opponent: Player; mode: ModeId };
 export type Challenge = Player & { mode: ModeId };
 
 type LobbyMsg =
   | { type: "challenge"; from: Player; to: string; mode: ModeId }
-  | { type: "accept"; from: Player; to: string; mode: ModeId }
-  | { type: "decline"; from: Player; to: string }
+  | { type: "accept"; from: Player; to: string; toTab?: string; mode: ModeId }
+  | { type: "decline"; from: Player; to: string; toTab?: string }
   | { type: "match"; matchId: string; a: Player; b: Player; mode: ModeId };
 
 // Presence channel "lobby": who is online, challenges, and pairing into a match.
 // Pairing rule: only the player with the smaller id creates the match.
+// The same account can be open in several tabs or devices: each tab has its own id, and only the tab
+// that sent/accepted the challenge (or was paired) joins the battle, so an idle tab can't report 0 reps.
+const TAB = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Math.random());
+const forMe = (tab?: string) => !tab || tab === TAB;
 export function useLobby(me: Omit<Player, "status">) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [status, setStatusState] = useState<PlayerStatus>("idle");
@@ -30,13 +34,13 @@ export function useLobby(me: Omit<Player, "status">) {
   const meRef = useRef(me);
   meRef.current = me;
 
-  const self = (): Player => ({ ...meRef.current, status: statusRef.current, mode: modeRef.current });
+  const self = (): Player => ({ ...meRef.current, tab: TAB, status: statusRef.current, mode: modeRef.current });
   const send = (msg: LobbyMsg) => channelRef.current?.send({ type: "broadcast", event: "msg", payload: msg });
 
   const setStatus = useCallback((s: PlayerStatus) => {
     statusRef.current = s;
     setStatusState(s);
-    channelRef.current?.track({ ...meRef.current, status: s, mode: modeRef.current });
+    channelRef.current?.track({ ...meRef.current, tab: TAB, status: s, mode: modeRef.current });
   }, []);
 
   const enterMatch = useCallback(
@@ -79,7 +83,7 @@ export function useLobby(me: Omit<Player, "status">) {
       .on("presence", { event: "sync" }, () => {
         const state = channel.presenceState<Player>();
         const list = Object.values(state)
-          .map((entries) => entries[0])
+          .map((entries) => entries.find((e) => e.status === "searching") ?? entries.find((e) => e.status === "idle") ?? entries[0])
           .filter((p) => p && p.id !== meRef.current.id);
         playersRef.current = list;
         setPlayers(list);
@@ -89,16 +93,17 @@ export function useLobby(me: Omit<Player, "status">) {
         const msg = payload as LobbyMsg;
         const meId = meRef.current.id;
         if (msg.type === "match") {
-          if (msg.b.id === meId && statusRef.current !== "in_match") enterMatch(msg.matchId, msg.a, msg.b, msg.mode ?? "classic");
+          if (msg.b.id === meId && forMe(msg.b.tab) && statusRef.current !== "in_match") enterMatch(msg.matchId, msg.a, msg.b, msg.mode ?? "classic");
           return;
         }
         if (msg.to !== meId) return;
         if (msg.type === "challenge") {
-          if (statusRef.current === "in_match") send({ type: "decline", from: self(), to: msg.from.id });
+          if (statusRef.current === "in_match") send({ type: "decline", from: self(), to: msg.from.id, toTab: msg.from.tab });
           else setIncoming({ ...msg.from, mode: msg.mode ?? "classic" });
         } else if (msg.type === "accept") {
-          if (meId < msg.from.id) createMatch(msg.from, msg.mode ?? "classic");
+          if (forMe(msg.toTab) && meId < msg.from.id) createMatch(msg.from, msg.mode ?? "classic");
         } else if (msg.type === "decline") {
+          if (!forMe(msg.toTab)) return;
           setNotice(`${msg.from.name} declined`);
           setStatus("idle");
         }
@@ -130,12 +135,12 @@ export function useLobby(me: Omit<Player, "status">) {
     },
     accept: () => {
       if (!incoming) return;
-      send({ type: "accept", from: self(), to: incoming.id, mode: incoming.mode });
+      send({ type: "accept", from: self(), to: incoming.id, toTab: incoming.tab, mode: incoming.mode });
       if (meRef.current.id < incoming.id) createMatch(incoming, incoming.mode);
       setIncoming(null);
     },
     decline: () => {
-      if (incoming) send({ type: "decline", from: self(), to: incoming.id });
+      if (incoming) send({ type: "decline", from: self(), to: incoming.id, toTab: incoming.tab });
       setIncoming(null);
     },
     findMatch: (mode: ModeId) => {
