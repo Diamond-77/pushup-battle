@@ -1250,3 +1250,13 @@ body:has(.challenge-sheet) .challenge-note { display: none; }
 .now-scrub .now-bar { margin-top: 0; transition: height 0.15s, transform 0.15s; }
 .now-scrub.held .now-bar { height: 10px; transform: scaleX(1.04); }
 .now-scrub.held .now-bar i { transition: none; }
+
+/* Find match: a red light running round the border, so it begs to be tapped */
+.find-glow { position: relative; isolation: isolate; overflow: visible; animation: find-breathe 2s ease-in-out infinite; }
+.find-glow::before { content: ""; position: absolute; inset: -5px; border-radius: inherit; z-index: -1; padding: 4px; filter: drop-shadow(0 0 6px #ff4a3a);
+  background: conic-gradient(from var(--find-a, 0deg), transparent 0 40%, #ff6b5a 60%, #fff1d6 72%, #ff3b30 84%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: find-spin 2.4s linear infinite; }
+@property --find-a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes find-spin { to { --find-a: 360deg; } }
+@keyframes find-breathe { 50% { box-shadow: 0 5px 0 var(--edge, #6e1a14), 0 0 22px rgba(255,70,50,0.55); } }

@@ -117,7 +117,7 @@ export default function LobbyPage({ players, status, notice, onChallenge, onFind
             Searching {M!.name}… tap to cancel
           </button>
         ) : (
-          <button className="game-btn red big wide" onClick={() => onFindMatch(field as ModeId)}>
+          <button className="game-btn red big wide find-glow" onClick={() => onFindMatch(field as ModeId)}>
             Find a {M!.name} match
           </button>
         )}
@@ -125,8 +125,8 @@ export default function LobbyPage({ players, status, notice, onChallenge, onFind
 
         {(
           <div className="parchment">
-            <div className="section-title">Online now · {shown.length}</div>
-            {shown.length === 0 && <div className="muted">Nobody else is online. Send your friend the link!</div>}
+            <div className="section-title">People in the lobby · {shown.length}</div>
+            {shown.length === 0 && <div className="muted">Tap Find match and you'll be paired with a warrior in a few seconds.</div>}
             <ul className="player-list">
               {shown.map((p) => (
                 <li key={p.id}>

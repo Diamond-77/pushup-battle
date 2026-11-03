@@ -319,6 +319,43 @@ $fn$ language plpgsql security definer set search_path = public;
 revoke all on function public._bot_accept(bigint) from public, anon, authenticated;
 revoke all on function public._create_bot_match(uuid, uuid, text) from public, anon, authenticated;
 
+
+-- 4c. Bots show up in the lobby's "online" list and can be challenged there.
+create or replace function public.lobby_extras()
+returns json
+as $fn$
+  select coalesce(json_agg(json_build_object(
+    'id', p.id, 'name', p.username, 'avatar', p.avatar_url, 'legendary', coalesce(p.legendary, false), 'title', p.title,
+    'respect', p.respect,
+    'clan', (select cm.clan_id from public.clan_members cm where cm.user_id = p.id and cm.expires_at > now() limit 1),
+    'busy', exists (select 1 from public.matches x where x.settled_at is null and p.id in (x.player_a, x.player_b) and x.started_at > now() - interval '10 minutes')
+  )), '[]'::json)
+  from public.bot_accounts b join public.profiles p on p.id = b.user_id
+  where (b.online_until is null or b.online_until < now()) and auth.uid() is not null and auth.uid() <> b.user_id;
+$fn$ language sql stable security definer set search_path = public;
+
+-- a live challenge to a bot in the lobby: it "accepts" and the battle starts
+create or replace function public.start_bot_vs(p_bot uuid, p_mode text)
+returns json
+as $fn$
+declare
+  me uuid := auth.uid();
+  bal integer;
+begin
+  if me is null then raise exception 'Please sign in again'; end if;
+  if public.mode_bet(p_mode) is null then raise exception 'Unknown battle mode'; end if;
+  if not exists (select 1 from public.bot_accounts where user_id = p_bot and (online_until is null or online_until < now())) then
+    raise exception 'They went offline';
+  end if;
+  if exists (select 1 from public.matches x where x.settled_at is null and p_bot in (x.player_a, x.player_b) and x.started_at > now() - interval '10 minutes') then
+    raise exception 'They''re in a battle right now';
+  end if;
+  select respect into bal from public.profiles where id = me for update;
+  if p_mode = 'rank' and bal < 120 then raise exception 'Rank needs at least 120 Respect'; end if;
+  return public._create_bot_match(me, p_bot, p_mode);
+end;
+$fn$ language plpgsql security definer set search_path = public;
+
 -- 5. YOUR SIDE: put in the bot accounts' emails and your own, then run this part.
 -- (Make each bot in Authentication > Users > Add user, then sign in as it once to pick its name and picture.)
 insert into public.bot_accounts (user_id, tier)

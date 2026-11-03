@@ -4,7 +4,7 @@ import { supabase } from "./supabase";
 import type { ModeId } from "./config";
 
 export type PlayerStatus = "idle" | "searching" | "in_match";
-export type Player = { id: string; tab?: string; name: string; avatar: string | null; status: PlayerStatus; title?: string | null; legendary?: boolean; clan?: string | null; respect?: number; mode?: ModeId };
+export type Player = { id: string; tab?: string; bot?: boolean; name: string; avatar: string | null; status: PlayerStatus; title?: string | null; legendary?: boolean; clan?: string | null; respect?: number; mode?: ModeId };
 export type MatchInfo = { matchId: string; creator: boolean; opponent: Player; mode: ModeId; bot?: { total: number; seed: number } };
 export type Challenge = Player & { mode: ModeId };
 export type BotMatch = { match_id: string; total: number; seed: number; opponent: { id: string; name: string; avatar: string | null; legendary: boolean; title: string | null } };
@@ -31,6 +31,7 @@ export function useLobby(me: Omit<Player, "status">) {
   const [incoming, setIncoming] = useState<Challenge | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [match, setMatch] = useState<MatchInfo | null>(null);
+  const [extras, setExtras] = useState<Player[]>([]); // bots, shown as online players
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const statusRef = useRef<PlayerStatus>("idle");
@@ -134,21 +135,45 @@ export function useLobby(me: Omit<Player, "status">) {
     };
   }, [me.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Bots: listed as online players (refreshed every 45 s)
+  useEffect(() => {
+    if (!supabase) return;
+    let stop = false;
+    const load = () => supabase!.rpc("lobby_extras").then(({ data, error }) => {
+      if (stop || error || !Array.isArray(data)) return;
+      setExtras((data as { id: string; name: string; avatar: string | null; legendary: boolean; title: string | null; respect: number; clan: string | null; busy: boolean }[])
+        .map((b) => ({ id: b.id, name: b.name, avatar: b.avatar, legendary: b.legendary, title: b.title, respect: b.respect, clan: b.clan, status: b.busy ? "in_match" : "idle", bot: true })));
+    });
+    load();
+    const t = setInterval(load, 45000);
+    return () => { stop = true; clearInterval(t); };
+  }, [me.id]);
+
   // Re-announce when the name or picture changes.
   useEffect(() => {
     channelRef.current?.track(self());
   }, [me.name, me.avatar, me.title, me.legendary, me.clan, me.respect]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
-    players,
+    players: [...players, ...extras.filter((b) => !players.some((p) => p.id === b.id))],
     status,
     incoming,
     notice,
     match,
     enterBotMatch,
     challenge: (p: Player, mode: ModeId) => {
-      send({ type: "challenge", from: self(), to: p.id, mode });
       setNotice(`Waiting for ${p.name} to accept…`);
+      if (p.bot) {
+        // a bot thinks for a moment, then says yes
+        setTimeout(async () => {
+          if (statusRef.current === "in_match" || !supabase) return;
+          const { data, error } = await supabase.rpc("start_bot_vs", { p_bot: p.id, p_mode: mode });
+          if (error || !data) { setNotice(error ? `${p.name}: ${error.message}` : null); return; }
+          enterBotMatch(data as BotMatch, mode);
+        }, 2000 + Math.random() * 3000);
+        return;
+      }
+      send({ type: "challenge", from: self(), to: p.id, mode });
     },
     accept: () => {
       if (!incoming) return;
