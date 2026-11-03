@@ -40,12 +40,10 @@ export const BAR_STEP = 5;
 export const MATCH_SECONDS = 30;
 export const COUNTDOWN_SECONDS = 3;
 
-// MediaPipe assets (from the official Pose Landmarker web guide).
-// WASM version is pinned to the installed @mediapipe/tasks-vision version.
-export const MEDIAPIPE_WASM_URL =
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.0/wasm";
-export const POSE_MODEL_URL =
-  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
+// MediaPipe assets, served from our own site (copied from node_modules by scripts/copy-mediapipe.mjs;
+// the model file is checked in), so no outside server can change the code that sees the camera.
+export const MEDIAPIPE_WASM_URL = "/mediapipe/wasm";
+export const POSE_MODEL_URL = "/mediapipe/pose_landmarker_lite.task";
 
 // 3D clan palace (menu backgrounds)
 export const PALACE = {

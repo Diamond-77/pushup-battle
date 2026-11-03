@@ -171,7 +171,8 @@ export function AuthScreen() {
           </button>
           {message && <p className="form-msg">{message}</p>}
           <p className="fine">
-            By continuing you agree to our <a href="/privacy.html">privacy policy</a>.
+            <b className="cam-promise">Your camera never leaves your phone. Only your rep count is shared.</b>
+            <br />By continuing you agree to our <a href="/privacy.html">privacy policy</a>.
           </p>
         </div>
       </div>
@@ -248,7 +249,8 @@ export function AuthScreen() {
           </button>
         )}
         <p className="fine">
-          By continuing you agree to our <a href="/privacy.html">privacy policy</a>.
+          <b className="cam-promise">Your camera never leaves your phone. Only your rep count is shared.</b>
+            <br />By continuing you agree to our <a href="/privacy.html">privacy policy</a>.
         </p>
       </div>
     </div>
