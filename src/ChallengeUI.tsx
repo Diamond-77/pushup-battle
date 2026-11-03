@@ -171,11 +171,13 @@ export function ChallengeButton({ list, now, online, onStart, onChanged, onPlaye
   const shown = tab === "in" ? theirs : mine;
   return (
     <>
+<div className="challenge-flag">
       <button className="clan-banner challenge-banner" onClick={() => { askBadgePermission(); setOpen(true); setTab(theirs.some(hot) || !mine.some(hot) ? "in" : "out"); }} aria-label="Challenges">
         <span className="clan-glyph"><SwordsIcon /></span>
         <span className="clan-banner-text">Challenges</span>
-        {ping > 0 && <i className="dock-ping banner-ping">{ping}</i>}
       </button>
+        {ping > 0 && <i className="flag-ping">{ping}</i>}
+      </div>
       {open && (
         <div className="modal-back sheet-back" onClick={() => setOpen(false)}>
           <div className="follow-sheet challenge-sheet" onClick={(e) => e.stopPropagation()}>

@@ -1168,3 +1168,6 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .challenge-sheet .ping { border-color: #0b0b0e; }
 .seg-ping { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: #ff3b30; vertical-align: middle; }
 body:has(.challenge-sheet) .challenge-note { display: none; }
+.challenge-flag { position: relative; pointer-events: auto; }
+.flag-ping { position: absolute; z-index: 2; top: -8px; right: -8px; min-width: 24px; height: 24px; padding: 0 6px; box-sizing: border-box; border-radius: 99px; background: #ff3b30; color: #fff; font-style: normal; font-size: 0.8rem; font-weight: 800; display: grid; place-items: center; border: 2px solid #fff4e6; box-shadow: 0 2px 6px rgba(0,0,0,0.5); animation: flag-ping 1.6s ease-in-out infinite; }
+@keyframes flag-ping { 50% { transform: scale(1.15); } }
