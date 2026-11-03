@@ -48,6 +48,34 @@ begin
 end;
 $fn$ language plpgsql;
 
+-- Makes the battle against a chosen bot: pays both bets and decides the bot's count.
+create or replace function public._create_bot_match(p_me uuid, p_bot uuid, p_mode text)
+returns json
+as $fn$
+declare
+  bet integer := public.mode_bet(p_mode);
+  bot record;
+  mid uuid := gen_random_uuid();
+  tot integer;
+  sd integer := floor(random() * 2147483647)::integer;
+begin
+  select p.id, p.username, p.avatar_url, p.legendary, p.title, p.respect, b.tier into bot
+    from public.bot_accounts b join public.profiles p on p.id = b.user_id where b.user_id = p_bot for update of p;
+  if bot.id is null then raise exception 'not a bot'; end if;
+  if (select respect from public.profiles where id = p_me) < bet then raise exception 'You need % Respect for this mode. Train to earn it back.', bet; end if;
+  -- the bot always has enough for its bet
+  if bot.respect < bet then perform public._add_respect(bot.id, bet - bot.respect, 'refill', null); end if;
+  insert into public.matches (id, mode, player_a, player_b, bet, a_paid, b_paid)
+  values (mid, p_mode, least(p_me, bot.id), greatest(p_me, bot.id), bet, true, true);
+  perform public._add_respect(p_me, -bet, 'bet ' || p_mode, mid);
+  perform public._add_respect(bot.id, -bet, 'bet ' || p_mode, mid);
+  tot := public._bot_total(bot.tier, p_mode);
+  insert into public.bot_matches (match_id, bot_id, total, seed) values (mid, bot.id, tot, sd);
+  return json_build_object('match_id', mid, 'total', tot, 'seed', sd,
+    'opponent', json_build_object('id', bot.id, 'name', bot.username, 'avatar', bot.avatar_url, 'legendary', coalesce(bot.legendary, false), 'title', bot.title));
+end;
+$fn$ language plpgsql security definer set search_path = public;
+
 -- 3. Start a battle against a bot (called when nobody else is searching). Pays both bets.
 create or replace function public.start_bot_match(p_mode text)
 returns json
@@ -86,17 +114,7 @@ begin
    order by (b.tier = want) desc, random() limit 1;
   if bot.user_id is null then raise exception 'No opponent found right now. Try again in a moment.'; end if;
 
-  -- the bot always has enough for its bet
-  if bot.respect < bet then perform public._add_respect(bot.user_id, bet - bot.respect, 'refill', null); end if;
-  insert into public.matches (id, mode, player_a, player_b, bet, a_paid, b_paid)
-  values (mid, p_mode, least(me, bot.user_id), greatest(me, bot.user_id), bet, true, true);
-  perform public._add_respect(me, -bet, 'bet ' || p_mode, mid);
-  perform public._add_respect(bot.user_id, -bet, 'bet ' || p_mode, mid);
-  tot := public._bot_total((select tier from public.bot_accounts where user_id = bot.user_id), p_mode);
-  insert into public.bot_matches (match_id, bot_id, total, seed) values (mid, bot.user_id, tot, sd);
-
-  return json_build_object('match_id', mid, 'total', tot, 'seed', sd,
-    'opponent', json_build_object('id', bot.user_id, 'name', bot.username, 'avatar', bot.avatar_url, 'legendary', coalesce(bot.legendary, false), 'title', bot.title));
+  return public._create_bot_match(me, bot.user_id, p_mode);
 end;
 $fn$ language plpgsql security definer set search_path = public;
 
@@ -184,6 +202,92 @@ $fn$ language plpgsql security definer set search_path = public;
 revoke all on function public._bot_total(text, text) from public, anon, authenticated;
 revoke all on function public._fill_bot_reps(uuid) from public, anon, authenticated;
 revoke all on function public._settle_match(uuid) from public, anon, authenticated;
+
+
+-- 4b. Bots take challenges too (needs challenges.sql).
+-- A bot answers a challenge a few minutes after it arrives (like a person would), always says yes,
+-- checks in when the time comes, and battles when you tap Start.
+alter table public.challenges add column if not exists bot_match uuid;
+
+create or replace function public._bot_accept(p_id bigint)
+returns void
+as $fn$
+declare
+  c public.challenges;
+  human uuid;
+  bot uuid;
+begin
+  select * into c from public.challenges where id = p_id for update;
+  if c.status <> 'pending' then return; end if;
+  bot := case when c.proposer = c.from_user then c.to_user else c.from_user end;
+  human := c.proposer;
+  perform 1 from public.profiles where id in (c.from_user, c.to_user) for update;
+  if (select respect from public.profiles where id = human) < 4 then
+    perform public._refund_challenge(c);
+    update public.challenges set status = 'declined', updated_at = now() where id = p_id;
+    return;
+  end if;
+  if (select respect from public.profiles where id = bot) < 4 then perform public._add_respect(bot, 4, 'refill', null); end if;
+  if not c.from_paid then perform public._add_respect(c.from_user, -4, 'challenge stake', null); end if;
+  if not c.to_paid then perform public._add_respect(c.to_user, -4, 'challenge stake', null); end if;
+  update public.challenges set from_paid = true, to_paid = true, status = 'accepted', updated_at = now() where id = p_id;
+end;
+$fn$ language plpgsql security definer set search_path = public;
+
+create or replace function public.settle_my_challenges()
+returns void
+as $fn$
+declare r record;
+begin
+  -- bots answer: 1 to 12 minutes after the offer
+  for r in select c.id from public.challenges c
+           join public.bot_accounts b on b.user_id = case when c.proposer = c.from_user then c.to_user else c.from_user end
+           where c.status = 'pending' and auth.uid() in (c.from_user, c.to_user) and c.at > now()
+             and c.updated_at < now() - make_interval(mins => 1 + abs(hashtext(c.id::text || c.updated_at::text)) % 12)
+  loop
+    perform public._bot_accept(r.id);
+  end loop;
+  -- bots check in as soon as the check-in opens
+  update public.challenges c set from_in = coalesce(c.from_in, c.at - interval '10 minutes' + make_interval(secs => abs(hashtext(c.id::text)) % 300))
+   where c.status = 'accepted' and auth.uid() in (c.from_user, c.to_user) and now() >= c.at - interval '10 minutes'
+     and exists (select 1 from public.bot_accounts b where b.user_id = c.from_user);
+  update public.challenges c set to_in = coalesce(c.to_in, c.at - interval '10 minutes' + make_interval(secs => abs(hashtext(c.id::text)) % 300))
+   where c.status = 'accepted' and auth.uid() in (c.from_user, c.to_user) and now() >= c.at - interval '10 minutes'
+     and exists (select 1 from public.bot_accounts b where b.user_id = c.to_user);
+  -- then settle as before
+  for r in select id from public.challenges
+           where auth.uid() in (from_user, to_user)
+             and ((status = 'pending' and now() > at) or (status = 'accepted' and now() > at + interval '15 minutes'))
+  loop
+    perform public._settle_challenge(r.id);
+  end loop;
+end;
+$fn$ language plpgsql security definer set search_path = public;
+
+-- Start the battle of a challenge when the other side isn't in the lobby (works only if it's a bot).
+create or replace function public.start_challenge_match(p_id bigint)
+returns json
+as $fn$
+declare
+  me uuid := auth.uid();
+  c public.challenges;
+  other uuid;
+  res json;
+begin
+  select * into c from public.challenges where id = p_id for update;
+  if c.id is null or me not in (c.from_user, c.to_user) then raise exception 'This is not your challenge'; end if;
+  other := case when me = c.from_user then c.to_user else c.from_user end;
+  if not exists (select 1 from public.bot_accounts where user_id = other) then raise exception 'waiting'; end if;
+  if c.status <> 'accepted' or now() < c.at - interval '10 minutes' or now() > c.at + interval '15 minutes' then raise exception 'It''s not time yet'; end if;
+  if c.bot_match is not null then raise exception 'You already battled this challenge'; end if;
+  res := public._create_bot_match(me, other, c.mode);
+  update public.challenges set bot_match = (res->>'match_id')::uuid,
+    from_in = coalesce(from_in, now()), to_in = coalesce(to_in, now()) where id = p_id;
+  return res;
+end;
+$fn$ language plpgsql security definer set search_path = public;
+revoke all on function public._bot_accept(bigint) from public, anon, authenticated;
+revoke all on function public._create_bot_match(uuid, uuid, text) from public, anon, authenticated;
 
 -- 5. YOUR SIDE: put in the bot accounts' emails and your own, then run this part.
 -- (Make each bot in Authentication > Users > Add user, then sign in as it once to pick its name and picture.)

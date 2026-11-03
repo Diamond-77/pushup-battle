@@ -7,6 +7,7 @@ export type PlayerStatus = "idle" | "searching" | "in_match";
 export type Player = { id: string; tab?: string; name: string; avatar: string | null; status: PlayerStatus; title?: string | null; legendary?: boolean; clan?: string | null; respect?: number; mode?: ModeId };
 export type MatchInfo = { matchId: string; creator: boolean; opponent: Player; mode: ModeId; bot?: { total: number; seed: number } };
 export type Challenge = Player & { mode: ModeId };
+export type BotMatch = { match_id: string; total: number; seed: number; opponent: { id: string; name: string; avatar: string | null; legendary: boolean; title: string | null } };
 
 type LobbyMsg =
   | { type: "challenge"; from: Player; to: string; mode: ModeId }
@@ -58,6 +59,15 @@ export function useLobby(me: Omit<Player, "status">) {
     },
     [setStatus],
   );
+
+  // A battle the server set up against a bot (no lobby messages needed).
+  const enterBotMatch = useCallback((d: BotMatch, mode: ModeId) => {
+    setStatus("in_match");
+    setNotice(null);
+    setIncoming(null);
+    setMatch({ matchId: d.match_id, creator: true, mode, bot: { total: d.total, seed: d.seed },
+      opponent: { id: d.opponent.id, name: d.opponent.name, avatar: d.opponent.avatar, legendary: d.opponent.legendary, title: d.opponent.title, status: "in_match" } });
+  }, [setStatus]);
 
   // Called only by the player with the smaller id.
   const createMatch = useCallback(
@@ -135,6 +145,7 @@ export function useLobby(me: Omit<Player, "status">) {
     incoming,
     notice,
     match,
+    enterBotMatch,
     challenge: (p: Player, mode: ModeId) => {
       send({ type: "challenge", from: self(), to: p.id, mode });
       setNotice(`Waiting for ${p.name} to accept…`);
@@ -165,11 +176,7 @@ export function useLobby(me: Omit<Player, "status">) {
           if (error && !/function|schema cache/i.test(error.message)) { setNotice(error.message); setStatus("idle"); }
           return;
         }
-        const d = data as { match_id: string; total: number; seed: number; opponent: { id: string; name: string; avatar: string | null; legendary: boolean; title: string | null } };
-        setNotice(null);
-        setIncoming(null);
-        setMatch({ matchId: d.match_id, creator: true, mode, bot: { total: d.total, seed: d.seed },
-          opponent: { id: d.opponent.id, name: d.opponent.name, avatar: d.opponent.avatar, legendary: d.opponent.legendary, title: d.opponent.title, status: "in_match" } });
+        enterBotMatch(data as BotMatch, mode);
       }, meRef.current.legendary ? TESTER_WAIT_MS : BOT_WAIT_MS());
     },
     cancel: () => {

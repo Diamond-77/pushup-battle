@@ -234,7 +234,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
           </>
         )}
         {!inMatch && tab === "home" && <HomePage profile={profile} clan={myClan} onBattle={() => setTab("battle")} onTrain={() => setTab("train")}
-          challenges={<ChallengeButton list={ch.list} now={ch.now} online={lobby.players} onStart={(p, mode) => lobby.challenge(p, mode)} onChanged={ch.refresh} onPlayer={setViewPlayer} />} />}
+          challenges={<ChallengeButton list={ch.list} now={ch.now} online={lobby.players} onStart={(p, mode) => lobby.challenge(p, mode)} onBot={(d, mode) => lobby.enterBotMatch(d, mode)} onChanged={ch.refresh} onPlayer={setViewPlayer} />} />}
         {menu && !viewPlayer && !(tab === "profile" && !editingProfile) && (
           <Suspense fallback={null}>
             {tab === "battle" ? (

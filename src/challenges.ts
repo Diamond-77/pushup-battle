@@ -121,3 +121,12 @@ export function untilText(ms: number) {
 
 // tell the mailbox something changed (e.g. a challenge was sent from a profile)
 export const challengesChanged = () => window.dispatchEvent(new Event("pb:challenges"));
+
+// Start a challenge's battle when the other player isn't in the lobby. The server only allows it for bots;
+// for a real player it answers "waiting".
+export async function startChallengeMatch(id: number): Promise<{ data?: import("./lobby").BotMatch; error?: string }> {
+  if (!supabase) return { error: "Not connected" };
+  const { data, error } = await supabase.rpc("start_challenge_match", { p_id: id });
+  if (error) return { error: /waiting/i.test(error.message) ? "waiting" : error.message };
+  return { data };
+}

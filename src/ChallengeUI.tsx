@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import Avatar from "./Avatar";
 import { MODES, type ModeId } from "./config";
-import type { Player } from "./lobby";
+import type { BotMatch, Player } from "./lobby";
 import { askBadgePermission } from "./badge";
 import {
-  answerChallenge, cancelChallenge, checkInChallenge, isHot, markAcceptedSeen, sendChallenge, untilText, whenText,
+  answerChallenge, cancelChallenge, checkInChallenge, isHot, startChallengeMatch, markAcceptedSeen, sendChallenge, untilText, whenText,
   CHALLENGE_STAKE, type ChallengeView,
 } from "./challenges";
 
@@ -83,8 +83,8 @@ export function SendChallenge({ id, name, avatar, mode, onClose, onSent }: { id:
 }
 
 // The challenge mailbox on Home.
-export function ChallengeBox({ list, now, online, onStart, onChanged, onPlayer, empty = "No challenges yet. Open a player's profile and tap Challenge." }: {
-  list: ChallengeView[]; now: number; online: Player[]; empty?: string;
+export function ChallengeBox({ list, now, online, onStart, onBot, onChanged, onPlayer, empty = "No challenges yet. Open a player's profile and tap Challenge." }: {
+  list: ChallengeView[]; now: number; online: Player[]; empty?: string; onBot?: (d: BotMatch, mode: ModeId) => void;
   onStart: (p: Player, mode: ModeId) => void; onChanged: () => void; onPlayer: (id: string) => void;
 }) {
   const [editing, setEditing] = useState<ChallengeView | null>(null);
@@ -110,7 +110,7 @@ export function ChallengeBox({ list, now, online, onStart, onChanged, onPlayer, 
                 <div className="cb-status">
                   {c.status === "pending" && (c.myTurn ? (c.proposer === c.from_user && !c.mine ? "Waiting for your answer" : "They changed it. Your answer?") : `Waiting for ${c.other.username}`)}
                   {c.status === "accepted" && c.window === "early" && (c.proposer === (c.mine ? c.from_user : c.to_user) ? `${c.other.username} accepted! You'll be reminded.` : "Accepted. You'll be reminded.")}
-                  {c.status === "accepted" && c.window === "open" && (c.iIn ? (c.theyIn ? (opp ? "Both here. Start!" : `${c.other.username} checked in, waiting for them to come online`) : `Waiting for ${c.other.username} to check in`) : "It's time! Check in.")}
+                  {c.status === "accepted" && c.window === "open" && (c.iIn ? (c.theyIn ? "Both here. Start!" : `Waiting for ${c.other.username} to check in`) : "It's time! Check in.")}
                 </div>
                 <div className="cb-actions">
                   {c.status === "pending" && c.myTurn && (
@@ -122,8 +122,13 @@ export function ChallengeBox({ list, now, online, onStart, onChanged, onPlayer, 
                   )}
                   {c.status === "pending" && !c.myTurn && <button className="pill ghost" onClick={() => act(cancelChallenge(c.id))}>Call off</button>}
                   {c.status === "accepted" && c.window === "open" && !c.iIn && <button className="pill" onClick={() => act(checkInChallenge(c.id))}>I'm here</button>}
-                  {c.status === "accepted" && c.window === "open" && c.iIn && c.theyIn && opp && (
-                    <button className="pill" onClick={() => onStart(opp, c.mode)}>Start battle</button>
+                  {c.status === "accepted" && c.window === "open" && c.iIn && c.theyIn && (
+                    <button className="pill" onClick={async () => {
+                      if (opp) return onStart(opp, c.mode);
+                      const r = await startChallengeMatch(c.id);
+                      if (r.data) { onBot?.(r.data, c.mode); onChanged(); }
+                      else setMsg(r.error === "waiting" ? `${c.other.username} isn't online yet. Ask them to open the game.` : r.error ?? null);
+                    }}>Start battle</button>
                   )}
                 </div>
               </div>
@@ -152,8 +157,8 @@ let pendingOpen = false; // asked while Home wasn't on screen: open as soon as i
 export const openChallenges = () => { pendingOpen = true; window.dispatchEvent(new Event("pb:open-challenges")); };
 
 // The challenge banner on Home (beside the clan banner). Tap it for the window with both lists.
-export function ChallengeButton({ list, now, online, onStart, onChanged, onPlayer }: {
-  list: ChallengeView[]; now: number; online: Player[];
+export function ChallengeButton({ list, now, online, onStart, onBot, onChanged, onPlayer }: {
+  list: ChallengeView[]; now: number; online: Player[]; onBot?: (d: BotMatch, mode: ModeId) => void;
   onStart: (p: Player, mode: ModeId) => void; onChanged: () => void; onPlayer: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -196,7 +201,7 @@ export function ChallengeButton({ list, now, online, onStart, onChanged, onPlaye
             <div className="challenge-scroll">
               <ChallengeBox list={shown} now={now} online={online} onChanged={onChanged}
                 empty={tab === "in" ? "Nobody has challenged you yet." : "You haven't sent any challenges. Open a player's profile and tap Challenge."}
-                onStart={(p, m) => { setOpen(false); onStart(p, m); }} onPlayer={(id) => { setOpen(false); onPlayer(id); }} />
+                onStart={(p, m) => { setOpen(false); onStart(p, m); }} onBot={(d, m) => { setOpen(false); onBot?.(d, m); }} onPlayer={(id) => { setOpen(false); onPlayer(id); }} />
             </div>
           </div>
         </div>
