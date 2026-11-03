@@ -54,7 +54,7 @@ export function useMatch(info: MatchInfo | null, myId: string, onSettled?: () =>
     setCancelReason(null);
     // a bot battle: the server already paid both bets; start after a short "joined" pause
     if (info.bot) {
-      const t = setTimeout(() => start(), 1200 + Math.random() * 1500);
+      const t = setTimeout(() => start(), 1500 + Math.random() * 500);
       return () => clearTimeout(t);
     }
     const channel = supabase.channel(`match:${info.matchId}`, {
@@ -137,11 +137,11 @@ export function useMatch(info: MatchInfo | null, myId: string, onSettled?: () =>
     return () => clearInterval(t);
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The match ends early when the bar hits either end (not against a bot: its count runs the full time).
+  // The match ends early when the bar hits either end (against a bot too: the server stops its count there).
   const bar = barValue(myReps, oppReps, mode.barStep);
   useEffect(() => {
-    if (phase === "match" && !info?.bot && (bar <= 0 || bar >= 100)) setPhase("result");
-  }, [phase, bar]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (phase === "match" && (bar <= 0 || bar >= 100)) setPhase("result");
+  }, [phase, bar]);
 
   const addMyRep = useCallback(() => {
     if (phaseRef.current !== "match") return;

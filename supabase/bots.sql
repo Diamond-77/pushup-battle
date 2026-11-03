@@ -125,22 +125,52 @@ as $fn$
   update public.bot_accounts set online_until = now() + interval '2 minutes' where user_id = auth.uid();
 $fn$ language sql security definer set search_path = public;
 
--- the bot's count goes into the match once the player has reported, or the battle is long over
+-- the bot's count goes into the match once the player has reported, or the battle is long over.
+-- A battle can end early by knockout (the tug-of-war bar reaching an end): then the bot's count is
+-- what it had done by that moment, worked out here from the server clock.
+create or replace function public._bot_count_at(p_total integer, p_mode text, p_secs numeric)
+returns integer
+as $fn$
+declare d numeric := public.mode_seconds(p_mode);
+begin
+  if p_secs >= d then return p_total; end if;
+  if p_secs <= 0 then return 0; end if;
+  -- same tiring pace as _bot_total: share of the total done after p_secs
+  return floor(p_total * (1 - power(0.86, p_secs / 60)) / (1 - power(0.86, d / 60)))::integer;
+end;
+$fn$ language plpgsql immutable;
+
 create or replace function public._fill_bot_reps(p_match uuid)
 returns void
 as $fn$
 declare
   m public.matches;
   bm public.bot_matches;
-  human_in boolean;
+  human integer;
+  secs numeric;
+  at_now integer;
+  ko integer;
+  bot_reps integer;
 begin
   select * into m from public.matches where id = p_match for update;
   select * into bm from public.bot_matches where match_id = p_match;
   if m.id is null or bm.match_id is null then return; end if;
-  human_in := case when bm.bot_id = m.player_a then m.b_reps is not null else m.a_reps is not null end;
-  if not human_in and now() < m.started_at + make_interval(secs => public.mode_seconds(m.mode) + 90) then return; end if;
-  if bm.bot_id = m.player_a and m.a_reps is null then update public.matches set a_reps = bm.total where id = p_match; end if;
-  if bm.bot_id = m.player_b and m.b_reps is null then update public.matches set b_reps = bm.total where id = p_match; end if;
+  human := case when bm.bot_id = m.player_a then m.b_reps else m.a_reps end;
+  if human is null and now() < m.started_at + make_interval(secs => public.mode_seconds(m.mode) + 90) then return; end if;
+  if (case when bm.bot_id = m.player_a then m.a_reps else m.b_reps end) is not null then return; end if;
+
+  bot_reps := bm.total;
+  if human is not null then
+    secs := extract(epoch from now() - m.started_at) - 5; -- about 5 s of "joined" + countdown before the bell
+    if secs < public.mode_seconds(m.mode) - 2 then
+      at_now := public._bot_count_at(bm.total, m.mode, secs);
+      ko := ceil(50 / (case m.mode when 'brawl' then 5 when 'classic' then 2.5 else 1.5 end))::integer;
+      -- a knockout either way stops the bot where it was; leaving early without one, the bot keeps going
+      if abs(human - at_now) >= ko - 2 then bot_reps := at_now; end if;
+    end if;
+  end if;
+  if bm.bot_id = m.player_a then update public.matches set a_reps = bot_reps where id = p_match;
+  else update public.matches set b_reps = bot_reps where id = p_match; end if;
 end;
 $fn$ language plpgsql security definer set search_path = public;
 
