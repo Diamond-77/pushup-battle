@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo, useState } from "react";
-import type { PlayerCard } from "./stats";
+import { EMPTY_CARD, type PlayerCard } from "./stats";
 
 const Scroll3D = lazy(() => import("./palace/Scroll3D"));
 
@@ -15,7 +15,7 @@ const Flame = () => (
 );
 
 // A month of dots: orange for days with push-ups, dim for missed days, hollow for days still to come.
-export function StreakCalendar({ card }: { card: PlayerCard }) {
+export function StreakCalendar({ card, full }: { card: PlayerCard; full: boolean }) {
   const [ty, tm, td] = card.today.split("-").map(Number);
   const [back, setBack] = useState(0); // 0 = this month, 1 = last month
   const y = tm - 1 - back < 0 ? ty - 1 : ty;
@@ -25,40 +25,31 @@ export function StreakCalendar({ card }: { card: PlayerCard }) {
   const lead = (new Date(Date.UTC(y, m, 1)).getUTCDay() + 6) % 7; // Monday first
   const todayKey = iso(ty, tm - 1, td);
   const active = Array.from({ length: days }, (_, i) => byDay.get(iso(y, m, i + 1)) ?? 0).filter((r) => r > 0).length;
-  const most = Math.max(1, ...card.recent.map((r) => r.reps));
 
   return (
     <div className="streak-card">
       <div className="streak-head">
-        <div>
-          <div className="streak-label">Active days in {MONTHS[m]}</div>
-          <div className="streak-big">{active} <span>{active === 1 ? "day" : "days"}</span></div>
-        </div>
-        <div className="streak-now">
-          <Flame />
-          <b>{card.streak}</b>
-          <span>day streak</span>
-        </div>
+        <div className="brush-title streak-title">Streaks</div>
+        <div className="streak-now"><Flame /><b>{card.streak}</b></div>
       </div>
       <div className="streak-grid">
-        {WEEK.map((d, i) => <div key={i} className="streak-wd">{d}</div>)}
-        {Array.from({ length: lead }, (_, i) => <div key={`e${i}`} />)}
+        {full && WEEK.map((d, i) => <div key={i} className="streak-wd">{d}</div>)}
+        {full && Array.from({ length: lead }, (_, i) => <div key={`e${i}`} />)}
         {Array.from({ length: days }, (_, i) => {
           const k = iso(y, m, i + 1);
           const reps = byDay.get(k) ?? 0;
-          const future = k > todayKey;
-          const cls = reps > 0 ? "on" : future ? "future" : "off";
-          const glow = reps > 0 ? 0.55 + 0.45 * Math.min(1, reps / most) : 0;
-          return (
-            <div key={k} className={`streak-dot ${cls} ${k === todayKey ? "today" : ""}`} style={{ ["--i" as string]: lead + i, ...(reps ? { opacity: glow } : {}) }} title={`${i + 1} ${MONTHS[m]}: ${reps} push-ups`} />
-          );
+          const cls = reps > 0 ? "on" : k > todayKey ? "future" : "off";
+          return <div key={k} className={`streak-dot ${cls} ${k === todayKey ? "today" : ""}`} title={`${i + 1} ${MONTHS[m]}: ${reps} push-ups`} />;
         })}
       </div>
-      <div className="streak-foot">
-        <button className="streak-nav" disabled={back === 1} onClick={() => setBack(1)}>‹ {MONTHS[(tm - 2 + 12) % 12].slice(0, 3)}</button>
-        <span>Best streak <b>{card.best_streak}</b></span>
-        <button className="streak-nav" disabled={back === 0} onClick={() => setBack(0)}>{MONTHS[tm - 1].slice(0, 3)} ›</button>
-      </div>
+      <div className="streak-sub"><b>{active}</b> active {active === 1 ? "day" : "days"} in {MONTHS[m]}</div>
+      {full && (
+        <div className="streak-foot">
+          <button className="streak-nav" disabled={back === 1} onClick={() => setBack(1)}>‹ {MONTHS[(tm - 2 + 12) % 12].slice(0, 3)}</button>
+          <span>Best streak <b>{card.best_streak}</b></span>
+          <button className="streak-nav" disabled={back === 0} onClick={() => setBack(0)}>{MONTHS[tm - 1].slice(0, 3)} ›</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -74,28 +65,30 @@ const BADGES: { id: string; mark: string; name: string; got: (c: PlayerCard) => 
   { id: "b50", mark: "50", name: "50 in a battle", got: (c) => c.best_battle >= 50 },
 ];
 
-// The Achievements tab: the scroll with lifetime push-ups, the streak month, wins and bests, badges.
-export default function Achievements({ card, accent, name }: { card: PlayerCard | null; accent: string; name: string }) {
+// The Achievements tab: the rolled scroll with the streak month beside it. Tap the scroll and it unrolls
+// sideways over the panel while the streaks glide down underneath. Then wins and bests, then badges.
+export default function Achievements({ card, accent, dark, mid, name }: { card: PlayerCard | null; accent: string; dark: string; mid: string; name: string }) {
   const [open, setOpen] = useState(false);
-  const c = card;
+  const c = card ?? EMPTY_CARD;
   return (
     <div className="achv">
-      <Suspense fallback={<div className="scroll3d" style={{ height: 150 }} />}>
-        <Scroll3D total={c?.total ?? 0} accent={accent} name={name} open={open} onToggle={() => setOpen((o) => !o)} />
-      </Suspense>
-      {open && c && (
-        <div className="achv-reveal">
-          <StreakCalendar card={c} />
-          <div className="stat-tiles">
-            <div className="stat-tile"><b>{c.wins}</b><span>Wins</span><em>{c.battles} battles</em></div>
-            <div className="stat-tile"><b>{c.best_battle}</b><span>Personal best</span><em>in one battle</em></div>
-            <div className="stat-tile"><b>{c.best_day}</b><span>Best day</span><em>{c.active_days} active days</em></div>
-          </div>
+      <div className={`achv-panel ${open ? "open" : ""}`}>
+        <Suspense fallback={<div className="scroll3d" />}>
+          <Scroll3D total={c.total} accent={accent} dark={dark} mid={mid} name={name} open={open} onToggle={() => setOpen((o) => !o)} />
+        </Suspense>
+        {!open && <div className="scroll-hint">Tap the scroll</div>}
+        <div className="achv-streak">
+          <StreakCalendar card={c} full={open} />
         </div>
-      )}
+      </div>
+      <div className="stat-tiles">
+        <div className="stat-tile"><b>{c.wins}</b><span>Wins</span><em>{c.battles} battles</em></div>
+        <div className="stat-tile"><b>{c.best_battle}</b><span>Personal best</span><em>in one battle</em></div>
+        <div className="stat-tile"><b>{c.best_day}</b><span>Best day</span><em>{c.active_days} active days</em></div>
+      </div>
       <div className="badge-grid">
         {BADGES.map((b) => {
-          const got = !!c && b.got(c);
+          const got = !!card && b.got(card);
           return (
             <div key={b.id} className={`badge ${got ? "got" : ""}`}>
               <div className="badge-hex">{b.mark}</div>

@@ -6,6 +6,7 @@ import type { Clan } from "./clans";
 const Palace3D = lazy(() => import("./palace/Palace3D"));
 import { CONTACT_EMAIL, CONTACT_WHATSAPP, RESPECT_TITLES, START_RESPECT, respectTitle } from "./config";
 import Achievements from "./Achievements";
+import ArmorFrame, { Blossom, METALS } from "./ArmorFrame";
 import FollowSheet from "./FollowSheet";
 import { loadCard, type PlayerCard } from "./stats";
 import { beatInRank, loadHistory, loadProfile, loadSocial, modeName, setFollow, setVote, type HistoryRow, type Social } from "./social";
@@ -61,8 +62,8 @@ export const ordinal = (n: number) => {
 };
 
 // Each clan's colour on the profile card (lone warriors get steel).
-const ACCENT: Record<string, string> = { arasaka: "#e0453a", "soraran-gate": "#f2a541", sleepbuilders: "#9a8cff" };
-const LONE_ACCENT = "#9fb3c8";
+const ACCENT: Record<string, string> = Object.fromEntries(Object.entries(METALS).map(([k, m]) => [k, m.glow]));
+const LONE_ACCENT = METALS.lone.glow;
 
 // How far through the current Respect title, toward the next one.
 function titleProgress(respect: number) {
@@ -122,6 +123,7 @@ export default function PlayerPage({ id, myId, onBack, onEdit, onPlayer }: { id:
   const respect = p?.respect ?? START_RESPECT;
   const prog = titleProgress(respect);
   const accent = clan ? ACCENT[clan.id] ?? clan.color : LONE_ACCENT;
+  const metal = METALS[clan?.id ?? "lone"] ?? METALS.lone;
 
   return (
     <div className={`page sub-page pv2 ${clan ? `theme-${clan.id}` : "theme-lone"}`} style={{ ["--acc" as string]: accent }}>
@@ -142,7 +144,9 @@ export default function PlayerPage({ id, myId, onBack, onEdit, onPlayer }: { id:
         <div className="muted txt-center">Loading…</div>
       ) : (
         <>
+          <ArmorFrame clan={clan?.id ?? "lone"}>
           <div className={`pcard ${p.legendary ? "dev" : ""}`}>
+            <Blossom color={accent} />
             <div className="pcard-side">
               {clan ? <ClanLogo clan={clan} size={32} /> : <LoneMark size={32} />}
               <div className="pcard-clan">{clan ? clan.name : "Lone Warrior"}</div>
@@ -167,14 +171,6 @@ export default function PlayerPage({ id, myId, onBack, onEdit, onPlayer }: { id:
                 <button onClick={() => setSheet("following")}><b>{s?.following ?? "–"}</b><span>Following</span></button>
               </div>
               {p.bio && <p className="pcard-bio">{p.bio}</p>}
-              <div className="rank-pill">
-                <span><b>{respect}</b> Respect · {respectTitle(respect)}</span>
-                {card && card.throne_rank > 0 && (
-                  <span className="rank-places">
-                    {clan && card.clan_rank > 0 && <>{ordinal(card.clan_rank)} {clan.name} · </>}{ordinal(card.throne_rank)} Throne
-                  </span>
-                )}
-              </div>
               <div className="pcard-actions">
                 {!mine && (
                   <button className={`game-btn ${s?.iFollow ? "wood" : "jade"}`} disabled={!s} onClick={follow}>
@@ -190,12 +186,21 @@ export default function PlayerPage({ id, myId, onBack, onEdit, onPlayer }: { id:
               </div>
             </div>
           </div>
+          </ArmorFrame>
+          <div className="rank-pill">
+            <span><b>{respect}</b> Respect · {respectTitle(respect)}</span>
+            {card && card.throne_rank > 0 && (
+              <span className="rank-places">
+                {clan && card.clan_rank > 0 && <>{ordinal(card.clan_rank)} {clan.name} · </>}{ordinal(card.throne_rank)} Throne
+              </span>
+            )}
+          </div>
           {p.legendary && <ReportPanel />}
           <div className="seg pv2-tabs">
             <button className={tab === "achievements" ? "on" : ""} onClick={() => setTab("achievements")}>Achievements</button>
             <button className={tab === "history" ? "on" : ""} onClick={() => setTab("history")}>History</button>
           </div>
-          {tab === "achievements" ? <Achievements card={card} accent={accent} name={p.username} /> : <HistoryList rows={hist} />}
+          {tab === "achievements" ? <Achievements card={card} accent={accent} dark={metal.dark} mid={metal.mid} name={p.username} /> : <HistoryList rows={hist} />}
           {sheet && (
             <FollowSheet id={id} name={p.username} start={sheet} counts={{ followers: s?.followers ?? 0, following: s?.following ?? 0 }}
               onClose={() => setSheet(null)} onPlayer={onPlayer ? (pid) => { setSheet(null); onPlayer(pid); } : undefined} />
