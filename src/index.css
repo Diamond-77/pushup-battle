@@ -1051,3 +1051,6 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .cp-respect { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: #c9b48f; }
 .cp-respect b { font-size: 1.1rem; letter-spacing: 0; color: #ffe08a; }
 .cp-card.place-1 .cp-respect b { font-size: 1.5rem; }
+/* battle page: leave room for the dock and the raised Train button so the online list is never under them */
+.lobby-page { padding-bottom: calc(150px + env(safe-area-inset-bottom)) !important; overscroll-behavior: contain; }
+.lobby-page .lobby-bottom { padding-bottom: 6px; }
