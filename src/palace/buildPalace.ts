@@ -159,7 +159,7 @@ function toonRamp() {
   return ramp;
 }
 const toon = (color: number, map?: THREE.Texture, extra: Partial<THREE.MeshToonMaterialParameters> = {}) =>
-  new THREE.MeshToonMaterial({ color: map ? 0xffffff : color, map, gradientMap: toonRamp(), ...extra });
+  new THREE.MeshToonMaterial({ color: map ? 0xffffff : color, gradientMap: toonRamp(), ...(map ? { map } : {}), ...extra });
 
 function materials(s: PalaceStyle, env: Env) {
   return {

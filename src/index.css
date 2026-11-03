@@ -998,3 +998,25 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .armor-arasaka .knot { animation: knot-sway 3.6s ease-in-out infinite; transform-origin: 50% 20%; }
 @keyframes knot-sway { 0%, 100% { transform: translateX(-50%) rotate(0); } 50% { transform: translateX(-50%) rotate(2.5deg); } }
 @media (prefers-reduced-motion: reduce) { .ara-fx * , .armor-arasaka * { animation: none !important; } }
+
+/* throne in the king's clan colours */
+.throne-seat { position: relative; overflow: hidden; }
+.throne-seat > * { position: relative; z-index: 1; }
+.throne-seat > .theme-fx { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.throne-seat > .ara-run { position: absolute; inset: 0; border-radius: inherit; z-index: 2; pointer-events: none; }
+.throne-seat.theme-arasaka { --t1: #e0453a; --t2: #1a0e10; }
+.throne-seat.theme-soraran-gate { --t1: #f2a541; --t2: #3a1f10; }
+.throne-seat.theme-sleepbuilders { --t1: #a98bff; --t2: #120e24; }
+.throne-seat.themed { width: 240px; border-color: var(--t1); background: radial-gradient(100% 70% at 50% 0%, color-mix(in srgb, var(--t1) 45%, transparent), transparent 70%), linear-gradient(180deg, var(--t2), #0a0708);
+  box-shadow: 0 0 0 1px #000, 0 0 30px color-mix(in srgb, var(--t1) 45%, transparent); }
+.throne-seat.themed .throne-label { color: var(--t1); opacity: 1; font-weight: 900; }
+.throne-seat.themed .throne-holder { background: color-mix(in srgb, var(--t1) 22%, #0d0b0c); color: #fff; border: 1px solid var(--t1); }
+.throne-seat.themed .respect { color: var(--t1); }
+.throne-clan { display: flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 99px; background: rgba(0,0,0,0.45); color: #f1ece2; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.06em; }
+.throne-seat.themed .throne-clan { border: 1px solid color-mix(in srgb, var(--t1) 60%, transparent); }
+
+/* battle page scrolls in a browser instead of squeezing */
+.lobby-page { pointer-events: auto !important; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+.lobby-page > * { flex-shrink: 0; }
+.lobby-page .field-track { touch-action: pan-x pan-y; }
+.throne-page > * { flex-shrink: 0; }

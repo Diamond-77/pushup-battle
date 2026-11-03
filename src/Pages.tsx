@@ -1,6 +1,6 @@
 import Avatar from "./Avatar";
 import ClanLogo from "./ClanLogo";
-import { CLANS, type Clan } from "./clans";
+import { CLANS, clanById, type Clan } from "./clans";
 import { CLAN_DAYS, START_RESPECT, respectTitle } from "./config";
 import { supabase } from "./supabase";
 import { useEffect, useState } from "react";
@@ -173,7 +173,8 @@ export function ClanPage({ clan, preview, onPreview, onMembers }: { clan: ClanSt
 type Ranked = { id: string; username: string; avatar_url: string | null; respect: number; title?: string | null; legendary?: boolean };
 
 // The throne: the player with the most Respect sits on it. Clans are ranked by their members' total.
-export function ThronePage({ clanRespect, myId, onPlayer }: { clanRespect: Record<string, number>; myId: string; onPlayer: (id: string) => void }) {
+// The throne takes on the king's clan: its colours here, its palace behind the page.
+export function ThronePage({ clanRespect, myId, onPlayer, onKingClan }: { clanRespect: Record<string, number>; myId: string; onPlayer: (id: string) => void; onKingClan?: (c: Clan | null) => void }) {
   const [view, setView] = useState<"players" | "clans">("players");
   const [top, setTop] = useState<Ranked[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -182,9 +183,15 @@ export function ThronePage({ clanRespect, myId, onPlayer }: { clanRespect: Recor
       .then(({ data, error }) => (error ? setFailed(true) : setTop((data ?? []) as Ranked[])));
   }, []);
   const king = top?.[0];
+  const [kingClan, setKingClan] = useState<Clan | null>(null);
+  useEffect(() => {
+    if (!king || !supabase) return;
+    supabase.from("clan_members").select("clan_id").eq("user_id", king.id).gt("expires_at", new Date().toISOString()).maybeSingle()
+      .then(({ data }) => { const c = clanById(data?.clan_id); setKingClan(c); onKingClan?.(c); });
+  }, [king?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const clans = [...CLANS].sort((a, b) => (clanRespect[b.id] ?? 0) - (clanRespect[a.id] ?? 0));
   return (
-    <div className="page dim">
+    <div className="page dim throne-page">
       <div className="brush-title page-title">Throne</div>
       <div className="seg">
         <button className={view === "players" ? "on" : ""} onClick={() => setView("players")}>Warriors</button>
@@ -192,11 +199,18 @@ export function ThronePage({ clanRespect, myId, onPlayer }: { clanRespect: Recor
       </div>
       {view === "players" ? (
         <>
-          <div className="throne-seat">
+          <div className={`throne-seat ${kingClan ? `themed theme-${kingClan.id}` : ""}`}>
+            {kingClan && <div className="theme-fx" />}
+            {kingClan?.id === "arasaka" && <div className="ara-run" />}
             <div className="throne-label">THE THRONE</div>
             {king ? <button className="member-row center-row" onClick={() => onPlayer(king.id)}><Avatar url={king.avatar_url} color="me" size={84} legendary={king.legendary} /></button> : <div className="throne-empty">?</div>}
             <div className="throne-holder">{king ? king.username : failed ? "Respect isn't set up yet" : "…"}</div>
             {king && <div className="respect">{king.respect} <span className="respect-word">Respect</span> <span className="rank-title">{respectTitle(king.respect)}</span></div>}
+            {king && (
+              <div className="throne-clan">
+                {kingClan ? <><ClanLogo clan={kingClan} size={22} /><span>{kingClan.name}</span></> : <span>Lone Warrior</span>}
+              </div>
+            )}
           </div>
           <div className="parchment">
             <ol className="rank-list">

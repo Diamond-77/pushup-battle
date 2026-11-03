@@ -71,7 +71,8 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
   const menu = !inMatch && tab !== "train"; // a full page covers the camera
   const [preview, setPreview] = useState<Clan>(CLANS[0]);
   // Background palace: the clan being browsed on the Clan tab, otherwise your own clan's (lone warriors get a clear day)
-  const shown = tab === "clan" ? preview : myClan;
+  const [kingClan, setKingClan] = useState<Clan | null | undefined>(undefined); // the throne holder's clan
+  const shown = tab === "clan" ? preview : tab === "throne" && kingClan !== undefined ? kingClan : myClan;
   // open the Clan tab on your own clan
   useEffect(() => {
     if (myClan) setPreview(myClan);
@@ -191,7 +192,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
             )}
           </Suspense>
         )}
-        {!inMatch && tab === "throne" && <ThronePage clanRespect={clan.respect} myId={profile.id} onPlayer={setViewPlayer} />}
+        {!inMatch && tab === "throne" && <ThronePage clanRespect={clan.respect} myId={profile.id} onPlayer={setViewPlayer} onKingClan={setKingClan} />}
         {!inMatch && tab === "clan" && <ClanPage clan={clan} preview={preview} onPreview={setPreview} onMembers={setViewMembers} />}
         {!inMatch && tab === "battle" && (
           <LobbyPage
