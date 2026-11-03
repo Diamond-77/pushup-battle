@@ -4,7 +4,7 @@ import { MODES, type ModeId } from "./config";
 import type { Player } from "./lobby";
 import { askBadgePermission } from "./badge";
 import {
-  answerChallenge, cancelChallenge, checkInChallenge, sendChallenge, untilText, whenText,
+  answerChallenge, cancelChallenge, checkInChallenge, isHot, markAcceptedSeen, sendChallenge, untilText, whenText,
   CHALLENGE_STAKE, type ChallengeView,
 } from "./challenges";
 
@@ -61,7 +61,7 @@ export function ChallengeComposer({ name, avatar, start, onSend, onClose, title 
         </div>
         <input className="time-input" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
         <p className="muted small stake-note">
-          You put down <b>{CHALLENGE_STAKE} Respect</b>. If you don't show up, the other player gets it. Both show up and you get it back.
+          Nothing is taken now. Once it's accepted, you both put down <b>{CHALLENGE_STAKE} Respect</b>. Don't show up and the other player gets it. Both show up and you get it back.
         </p>
         {err && <p className="form-msg">{err}</p>}
         <div className="row stretch">
@@ -99,17 +99,17 @@ export function ChallengeBox({ list, now, online, onStart, onChanged, onPlayer, 
           const opp = online.find((p) => p.id === c.other.id);
           const ms = c.when.getTime() - now;
           return (
-            <li key={c.id} className={`cb-item ${c.myTurn || (c.status === "accepted" && c.window === "open") ? "hot" : ""}`}>
+            <li key={c.id} className={`cb-item ${isHot(c) ? "hot" : ""}`}>
               <button className="cb-avatar" onClick={() => onPlayer(c.other.id)} aria-label={`Open ${c.other.username}'s profile`}>
                 <Avatar url={c.other.avatar_url} color="opp" size={46} legendary={c.other.legendary} />
-                {(c.myTurn || (c.status === "accepted" && c.window === "open" && !c.iIn)) && <i className="ping" />}
+                {isHot(c) && <i className="ping" />}
               </button>
               <div className="cb-text">
                 <div className="pl-name">{c.mine ? `You vs ${c.other.username}` : `${c.other.username} challenges you`}</div>
                 <div className="cb-when"><b>{MODES[c.mode].name}</b> · {whenText(c.when)} <span>({untilText(ms)})</span></div>
                 <div className="cb-status">
                   {c.status === "pending" && (c.myTurn ? (c.proposer === c.from_user && !c.mine ? "Waiting for your answer" : "They changed it. Your answer?") : `Waiting for ${c.other.username}`)}
-                  {c.status === "accepted" && c.window === "early" && "Accepted. You'll be reminded."}
+                  {c.status === "accepted" && c.window === "early" && (c.proposer === (c.mine ? c.from_user : c.to_user) ? `${c.other.username} accepted! You'll be reminded.` : "Accepted. You'll be reminded.")}
                   {c.status === "accepted" && c.window === "open" && (c.iIn ? (c.theyIn ? (opp ? "Both here. Start!" : `${c.other.username} checked in, waiting for them to come online`) : `Waiting for ${c.other.username} to check in`) : "It's time! Check in.")}
                 </div>
                 <div className="cb-actions">
@@ -159,8 +159,12 @@ export function ChallengeButton({ list, now, online, onStart, onChanged, onPlaye
   const [open, setOpen] = useState(false);
   const theirs = list.filter((c) => !c.mine);
   const mine = list.filter((c) => c.mine);
-  const hot = (c: ChallengeView) => c.myTurn || (c.status === "accepted" && c.window === "open" && !c.iIn);
   const [tab, setTab] = useState<"in" | "out">("in");
+  const hot = isHot;
+  // looking at the Sent tab clears the "they said yes" ping
+  useEffect(() => {
+    if (open && tab === "out") markAcceptedSeen(mine.filter((c) => c.justAccepted).map((c) => c.id));
+  }, [open, tab, mine.map((c) => c.id + (c.justAccepted ? "y" : "")).join()]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const ev = () => { pendingOpen = false; setOpen(true); setTab(list.some((c) => c.mine && hot(c)) && !list.some((c) => !c.mine && hot(c)) ? "out" : "in"); };
     window.addEventListener("pb:open-challenges", ev);

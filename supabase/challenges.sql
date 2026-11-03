@@ -2,9 +2,11 @@
 -- (after economy.sql, social.sql and pushups.sql).
 --
 -- A challenge is a battle booked for a set time:
---   * The sender picks the mode and time and puts down 4 Respect.
---   * The other player can accept (and puts down 4 Respect too), decline, or change the mode/time and
---     send it back. Whoever didn't make the latest offer is the one who answers.
+--   * The sender picks the mode and time (needs at least 4 Respect, nothing is taken yet).
+--   * The other player can accept, decline, or change the mode/time and send it back.
+--     Whoever didn't make the latest offer is the one who answers.
+--   * Only when it's accepted do both players put down 4 Respect.
+-- Safe to run again: it gives back stakes taken by the older version for challenges not yet accepted.
 --   * From 10 minutes before until 15 minutes after the time, both players check in and battle.
 --   * Afterwards: both showed up = both get their 4 back. Only one showed up = that player gets all 8.
 --     Nobody showed up = the 8 go to a random recent battle winner as a "bonus from community respect".
@@ -60,11 +62,10 @@ begin
   if (select count(*) from public.challenges where from_user = me and status in ('pending', 'accepted')) >= 10 then
     raise exception 'You already have 10 open challenges';
   end if;
-  select respect into bal from public.profiles where id = me for update;
+  select respect into bal from public.profiles where id = me;
   if bal < 4 then raise exception 'You need 4 Respect to send a challenge'; end if;
-  perform public._add_respect(me, -4, 'challenge stake', null);
-  insert into public.challenges (from_user, to_user, mode, at, proposer, from_paid)
-  values (me, p_to, p_mode, p_at, me, true) returning id into cid;
+  insert into public.challenges (from_user, to_user, mode, at, proposer)
+  values (me, p_to, p_mode, p_at, me) returning id into cid;
   return cid;
 end;
 $fn$ language plpgsql security definer set search_path = public;
@@ -85,7 +86,6 @@ as $fn$
 declare
   me uuid := auth.uid();
   c public.challenges;
-  bal integer;
 begin
   select * into c from public.challenges where id = p_id for update;
   if c.id is null or me not in (c.from_user, c.to_user) then raise exception 'This is not your challenge'; end if;
@@ -98,28 +98,17 @@ begin
     update public.challenges set status = 'declined', updated_at = now() where id = p_id;
   elsif p_action = 'counter' then
     perform public._check_challenge_slot(coalesce(p_mode, c.mode), coalesce(p_at, c.at));
-    -- sending back a new offer puts your 4 Respect down too
-    if (me = c.to_user and not c.to_paid) or (me = c.from_user and not c.from_paid) then
-      select respect into bal from public.profiles where id = me for update;
-      if bal < 4 then raise exception 'You need 4 Respect to answer a challenge'; end if;
-      perform public._add_respect(me, -4, 'challenge stake', null);
-      if me = c.to_user then update public.challenges set to_paid = true where id = p_id;
-      else update public.challenges set from_paid = true where id = p_id; end if;
-    end if;
     update public.challenges set mode = coalesce(p_mode, c.mode), at = coalesce(p_at, c.at), proposer = me, updated_at = now() where id = p_id;
   elsif p_action = 'accept' then
-    if me = c.to_user and not c.to_paid then
-      select respect into bal from public.profiles where id = me for update;
-      if bal < 4 then raise exception 'You need 4 Respect to accept'; end if;
-      perform public._add_respect(me, -4, 'challenge stake', null);
-      update public.challenges set to_paid = true where id = p_id;
+    -- now both players put down their 4 Respect
+    perform 1 from public.profiles where id in (c.from_user, c.to_user) for update;
+    if (select respect from public.profiles where id = me) < 4 then raise exception 'You need 4 Respect to accept'; end if;
+    if (select respect from public.profiles where id = case when me = c.from_user then c.to_user else c.from_user end) < 4 then
+      raise exception 'The other player doesn''t have 4 Respect right now';
     end if;
-    if me = c.from_user and not c.from_paid then
-      select respect into bal from public.profiles where id = me for update;
-      if bal < 4 then raise exception 'You need 4 Respect to accept'; end if;
-      perform public._add_respect(me, -4, 'challenge stake', null);
-      update public.challenges set from_paid = true where id = p_id;
-    end if;
+    if not c.from_paid then perform public._add_respect(c.from_user, -4, 'challenge stake', null); end if;
+    if not c.to_paid then perform public._add_respect(c.to_user, -4, 'challenge stake', null); end if;
+    update public.challenges set from_paid = true, to_paid = true where id = p_id;
     update public.challenges set status = 'accepted', updated_at = now() where id = p_id;
   else
     raise exception 'Unknown answer';
@@ -215,3 +204,14 @@ revoke all on function public._settle_challenge(bigint) from public, anon, authe
 -- 2. Throne motto: the player on the throne can write a line shown on the throne (80 characters).
 alter table public.profiles add column if not exists throne_motto text check (char_length(throne_motto) <= 80);
 grant update (username, avatar_url, bio, throne_motto) on public.profiles to authenticated;
+
+-- 3. Give back stakes the older version took before a challenge was accepted
+do $mig$
+declare c public.challenges;
+begin
+  for c in select * from public.challenges where status = 'pending' and (from_paid or to_paid) for update loop
+    perform public._refund_challenge(c);
+    update public.challenges set from_paid = false, to_paid = false where id = c.id;
+  end loop;
+end;
+$mig$;

@@ -106,6 +106,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
       const mode = MODES[c.mode].name;
       const n =
         c.myTurn ? { key: `ask-${c.id}-${c.proposer}-${c.at}-${c.mode}`, text: c.proposer === c.from_user && !c.mine ? `${c.other.username} challenged you to ${mode}!` : `${c.other.username} changed your challenge. Your answer?` } :
+        c.justAccepted ? { key: `acc-${c.id}`, text: `${c.other.username} accepted your ${mode} challenge!` } :
         c.status === "accepted" && c.theyIn && !c.iIn ? { key: `here-${c.id}`, text: `${c.other.username} is here and waiting for your ${mode} battle!` } :
         c.status === "accepted" && !c.iIn && ms <= 5 * 60000 && c.window !== "over" ? { key: `soon-${c.id}`, text: `Your ${mode} vs ${c.other.username} starts ${untilText(ms)}. Check in!` } :
         c.status === "accepted" && !c.iIn && ms <= 60 * 60000 && ms > 50 * 60000 ? { key: `hour-${c.id}`, text: `Reminder: ${mode} vs ${c.other.username} ${untilText(ms)}.` } :

@@ -29,7 +29,21 @@ export type ChallengeView = ChallengeRow & {
   iIn: boolean;
   theyIn: boolean;
   window: "early" | "open" | "over";
+  justAccepted: boolean; // the other player accepted my offer and I haven't looked yet
 };
+
+// Accepted challenges I've already seen in the window (kept on this device).
+const SEEN_KEY = "pb_seen_accepted";
+const seen = new Set<number>((() => { try { return JSON.parse(localStorage.getItem(SEEN_KEY) ?? "[]") as number[]; } catch { return []; } })());
+export function markAcceptedSeen(ids: number[]) {
+  const before = seen.size;
+  ids.forEach((i) => seen.add(i));
+  if (seen.size === before) return;
+  try { localStorage.setItem(SEEN_KEY, JSON.stringify([...seen].slice(-200))); } catch { /* ignore */ }
+  challengesChanged();
+}
+// needs my attention: my answer, their yes, or time to check in
+export const isHot = (c: ChallengeView) => c.myTurn || c.justAccepted || (c.status === "accepted" && c.window === "open" && !c.iIn);
 
 const one = <T,>(x: T | T[]) => (Array.isArray(x) ? x[0] : x);
 
@@ -43,6 +57,7 @@ export function viewOf(c: ChallengeRow, me: string, now = Date.now()): Challenge
     myTurn: c.status === "pending" && c.proposer !== me,
     iIn: !!(mine ? c.from_in : c.to_in),
     theyIn: !!(mine ? c.to_in : c.from_in),
+    justAccepted: c.status === "accepted" && c.proposer === me && !seen.has(c.id),
   };
 }
 
@@ -81,13 +96,13 @@ export function useChallenges(me: string) {
     refresh();
     const t = setInterval(refresh, 30000);
     const tick = setInterval(() => setNow(Date.now()), 15000);
-    const ev = () => refresh();
+    const ev = () => { setNow(Date.now()); refresh(); };
     window.addEventListener("pb:challenges", ev);
     return () => { clearInterval(t); clearInterval(tick); window.removeEventListener("pb:challenges", ev); };
   }, [refresh]);
   const list = rows.map((r) => viewOf(r, me, now)).filter((c) => c.window !== "over" || c.status === "pending");
   // red ping: challenges waiting for my answer, or ready to check in
-  const ping = list.filter((c) => c.myTurn || (c.status === "accepted" && c.window === "open" && !c.iIn)).length;
+  const ping = list.filter(isHot).length;
   return { list, ping, refresh, now };
 }
 
