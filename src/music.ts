@@ -281,10 +281,17 @@ function fade(g: GainNode | null, to: number, s = 0.8) {
   g.gain.linearRampToValueAtTime(to, now + s);
 }
 
+// a player's song is playing (throne / profile): the clan theme steps aside, the weather stays
+let songs = 0;
+export function setSongActive(on: boolean) {
+  songs = Math.max(0, songs + (on ? 1 : -1));
+  apply();
+}
+
 function apply() {
   const b = buses();
   const wantAmb = prefs.ambience ? scene : null;
-  const want = prefs.music ? scene : null;
+  const want = prefs.music && songs === 0 ? scene : null;
   // ambience
   if (ambient && ambient.weather !== wantAmb?.weather) { const old = ambient; fade(ambBus, 0, 0.5); setTimeout(old.stop, 600); ambient = null; }
   if (wantAmb && !ambient && b) {

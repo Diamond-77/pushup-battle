@@ -62,6 +62,15 @@ export const SOUND_VOLUME = 0.7; // 0 = muted, 1 = loudest
 // e.g. arasaka: "/music/arasaka.mp3". Leave a clan out to use the built-in synthesized theme.
 export const THEME_MUSIC: Record<string, string> = {};
 export const MUSIC_VOLUME = 0.28; // theme song
+// A player's own song, by username: plays (quietly, with a mute button) on the throne while they hold it,
+// and/or on their profile page. src is a file in public/music/ or a full https link (e.g. Supabase Storage).
+// start = where the song begins, in seconds.
+export type PlayerSong = { src: string; start?: number };
+export const PLAYER_SONGS: Record<string, { throne?: PlayerSong; profile?: PlayerSong; celebrate?: boolean }> = {
+  Sadiq: { throne: { src: "/music/am-i-dreaming.mp3" }, celebrate: true },
+  "Diamond (dev)": { profile: { src: "/music/higher-ground.mp3", start: 50 } },
+};
+export const SONG_VOLUME = 0.3;
 export const AMBIENT_VOLUME = 0.22; // rain, wind, crickets
 export const CLAN_DAYS = 30; // a clan membership lasts this many days (also set in supabase/clans.sql)
 

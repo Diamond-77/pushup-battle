@@ -1189,3 +1189,26 @@ body:has(.challenge-sheet) .challenge-note { display: none; }
 .throne-wrap .throne-holder { font-size: 1.15rem; }
 .rank-clan { flex-shrink: 0; width: 30px; height: 30px; display: grid; place-items: center; }
 .rank-clan.lone::before { content: ""; width: 10px; height: 10px; border-radius: 50%; border: 2px solid #b8aa8a; }
+
+/* a player's song: small speaker button */
+.song-btn { position: absolute; z-index: 6; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--wood-rim); background: rgba(20,12,8,0.85); color: var(--parch); box-shadow: 0 3px 0 rgba(0,0,0,0.5); pointer-events: auto; }
+.song-btn.on { color: #ffd27a; border-color: #c9953f; animation: song-beat 1.1s ease-in-out infinite; }
+@keyframes song-beat { 50% { box-shadow: 0 3px 0 rgba(0,0,0,0.5), 0 0 14px rgba(255,210,122,0.55); } }
+.throne-song { top: 24px; right: 18px; }
+.profile-song { top: 18px; right: 18px; }
+
+/* special king: a light sweeping across the seat, a gentle float, and a burst when the page opens */
+.throne-seat.special { animation: seat-float 4s ease-in-out infinite; }
+@keyframes seat-float { 50% { transform: translateY(-4px); box-shadow: 0 0 40px color-mix(in srgb, var(--t1, #ffd27a) 45%, transparent); } }
+.throne-sweep { position: absolute !important; inset: 0; z-index: 0 !important; pointer-events: none; border-radius: inherit; overflow: hidden; }
+.throne-sweep::before { content: ""; position: absolute; top: -20%; bottom: -20%; width: 40%; left: -50%; background: linear-gradient(100deg, transparent, rgba(255,240,200,0.22), transparent); animation: sweep 3.6s ease-in-out infinite; }
+@keyframes sweep { 60%, 100% { left: 120%; } }
+.throne-celebrate { position: absolute; z-index: 8; left: 50%; top: 42%; width: 0; height: 0; pointer-events: none; }
+.tc-rays { position: absolute; left: -170px; top: -170px; width: 340px; height: 340px; border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--c) 55%, transparent) 0 6deg, transparent 6deg 22deg);
+  mask: radial-gradient(circle, #000 20%, transparent 70%); -webkit-mask: radial-gradient(circle, #000 20%, transparent 70%);
+  animation: tc-rays 3.6s ease-out forwards; }
+@keyframes tc-rays { 0% { opacity: 0; transform: scale(0.3) rotate(0); } 15% { opacity: 1; } 100% { opacity: 0; transform: scale(1.3) rotate(40deg); } }
+.throne-celebrate i { position: absolute; width: 12px; height: 18px; border-radius: 60% 0 60% 0; background: var(--c); box-shadow: 0 0 8px var(--c); animation: tc-petal 3.4s cubic-bezier(.2,.7,.3,1) forwards; opacity: 0; }
+.throne-celebrate i.gold { background: #ffd27a; box-shadow: 0 0 10px #ffd27a; width: 6px; height: 6px; border-radius: 50%; }
+@keyframes tc-petal { 0% { opacity: 0; transform: translate(0,0) rotate(0) scale(0.4); } 10% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--x), calc(var(--y) + 90px)) rotate(var(--r)) scale(1); } }

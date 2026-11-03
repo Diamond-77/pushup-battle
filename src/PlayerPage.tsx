@@ -7,6 +7,8 @@ const Palace3D = lazy(() => import("./palace/Palace3D"));
 import { CONTACT_EMAIL, CONTACT_WHATSAPP, RESPECT_TITLES, START_RESPECT, respectTitle } from "./config";
 import Achievements from "./Achievements";
 import ArmorFrame, { Blossom, METALS } from "./ArmorFrame";
+import SongPlayer from "./SongPlayer";
+import { PLAYER_SONGS } from "./config";
 import FollowSheet from "./FollowSheet";
 import { loadCard, type PlayerCard } from "./stats";
 import { SendChallenge } from "./ChallengeUI";
@@ -168,6 +170,7 @@ export default function PlayerPage({ id, myId, onBack, onEdit, onPlayer }: { id:
       ) : (
         <>
           <ArmorFrame clan={clan?.id ?? "lone"}>
+          {PLAYER_SONGS[p.username]?.profile && <SongPlayer song={PLAYER_SONGS[p.username].profile!} className="profile-song" />}
           <div className={`pcard ${p.legendary ? "dev" : ""}`}>
             <Blossom color={accent} />
             <div className="pcard-side">
