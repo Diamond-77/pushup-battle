@@ -123,7 +123,7 @@ export default function LobbyPage({ players, status, notice, onChallenge, onFind
         )}
         {notice && <p className="form-msg">{notice}</p>}
 
-        {isMode && (
+        {(
           <div className="parchment">
             <div className="section-title">Online now · {shown.length}</div>
             {shown.length === 0 && <div className="muted">Nobody else is online. Send your friend the link!</div>}
@@ -144,9 +144,9 @@ export default function LobbyPage({ players, status, notice, onChallenge, onFind
                       {p.respect !== undefined && <span className="pl-respect"> · {p.respect} · {respectTitle(p.respect)}</span>}
                     </div>
                   </div>
-                  <button className="pill" disabled={p.status === "in_match" || status === "in_match" || !canPlay || (p.respect !== undefined && p.respect < M!.minRespect)} onClick={() => onChallenge(p, field as ModeId)}>
+                  {isMode && <button className="pill" disabled={p.status === "in_match" || status === "in_match" || !canPlay || (p.respect !== undefined && p.respect < M!.minRespect)} onClick={() => onChallenge(p, field as ModeId)}>
                     Challenge
-                  </button>
+                  </button>}
                 </li>
               ))}
             </ul>

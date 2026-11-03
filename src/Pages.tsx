@@ -5,6 +5,7 @@ import { CLAN_DAYS, START_RESPECT, respectTitle } from "./config";
 import { supabase } from "./supabase";
 import { useEffect, useState } from "react";
 import { daysLeft, type useClan } from "./useClan";
+import { Crest, METALS } from "./ArmorFrame";
 import type { Profile } from "./auth";
 
 // Full-page screens drawn over the 3D palace.
@@ -199,6 +200,8 @@ export function ThronePage({ clanRespect, myId, onPlayer, onKingClan }: { clanRe
       </div>
       {view === "players" ? (
         <>
+          <div className="throne-wrap" style={{ ["--m-glow" as string]: METALS[kingClan?.id ?? "lone"].glow }}>
+          {king && <Crest clan={kingClan?.id ?? "lone"} m={METALS[kingClan?.id ?? "lone"]} />}
           <div className={`throne-seat ${kingClan ? `themed theme-${kingClan.id}` : ""}`}>
             {kingClan && <div className="theme-fx" />}
             {kingClan?.id === "arasaka" && <div className="ara-run" />}
@@ -211,6 +214,7 @@ export function ThronePage({ clanRespect, myId, onPlayer, onKingClan }: { clanRe
                 {kingClan ? <><ClanLogo clan={kingClan} size={22} /><span>{kingClan.name}</span></> : <span>Lone Warrior</span>}
               </div>
             )}
+          </div>
           </div>
           <div className="parchment">
             <ol className="rank-list">
@@ -236,7 +240,8 @@ export function ThronePage({ clanRespect, myId, onPlayer, onKingClan }: { clanRe
               {row.map((c) => {
                 const place = clans.indexOf(c) + 1;
                 return (
-                  <div key={c.id} className={`cp-card place-${place}`} style={{ ["--c" as string]: c.color }}>
+                  <div key={c.id} className={`cp-card place-${place}`} style={{ ["--c" as string]: c.color, ["--m-glow" as string]: METALS[c.id]?.glow }}>
+                    <Crest clan={c.id} m={METALS[c.id] ?? METALS.lone} />
                     {place === 1 && <div className="cp-crown">THE THRONE</div>}
                     <div className="cp-place">{place === 1 ? "1st" : place === 2 ? "2nd" : "3rd"}</div>
                     <ClanLogo clan={c} size={place === 1 ? 88 : 60} />

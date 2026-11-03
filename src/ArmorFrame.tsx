@@ -40,7 +40,7 @@ const Swirl = ({ x, y, s = 1, c }: { x: number; y: number; s?: number; c: string
   <path transform={`translate(${x} ${y}) scale(${s})`} d="M0 0c4-6 12-6 13 0s-6 8-9 4 1-6 4-3M13 0c3 5 10 5 12 0" fill="none" stroke={c} strokeWidth="1.4" strokeLinecap="round" opacity="0.75" />
 );
 
-function Crest({ clan, m }: { clan: string; m: Metal }) {
+export function Crest({ clan, m }: { clan: string; m: Metal }) {
   const id = `cr-${clan}`;
   const metal = `url(#${id}-metal)`;
   const horns = (jag: boolean) => (

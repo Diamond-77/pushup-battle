@@ -21,7 +21,8 @@ import { supabase } from "./supabase";
 const Palace3D = lazy(() => import("./palace/Palace3D"));
 import { useMatch } from "./useMatch";
 import { usePushupLog } from "./stats";
-import { setMusicOn, setMusicScene, useMusicOn } from "./music";
+import { setAmbienceOn, setMusicOn, setMusicScene, useSoundPrefs } from "./music";
+import { effectsOn, setEffectsOn } from "./sound";
 
 export default function App() {
   const { session, profile, setProfile, loading, recovering, doneRecovering } = useAuth();
@@ -80,12 +81,15 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
   }, [myClan?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Theme music + weather sounds on the menu pages (silent in battles and training)
-  const musicOn = useMusicOn();
+  // On the Battle page each battlefield has its own theme; elsewhere the clan's.
+  const sound = useSoundPrefs();
+  const [fxOn, setFxOn] = useState(effectsOn);
+  const [soundMenu, setSoundMenu] = useState(false);
   useEffect(() => {
     if (!menu) return setMusicScene(null, null);
     const weather = tab === "battle" ? FIELDS.find((f) => f.id === field)!.weather : shown?.weather ?? "day";
-    setMusicScene(tab === "battle" ? myClan?.id ?? "lone" : shown?.id ?? "lone", weather);
-  }, [menu, tab, field, shown?.id, myClan?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    setMusicScene(tab === "battle" ? field : shown?.id ?? "lone", weather);
+  }, [menu, tab, field, shown?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sounds for the countdown and the result
   useEffect(() => {
@@ -251,12 +255,30 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
               <b>{respect}</b>
               <span className="respect-chip-word">Respect</span>
             </button>
-            <button className={`music-btn ${musicOn ? "on" : ""}`} onClick={() => setMusicOn(!musicOn)} aria-label={musicOn ? "Turn music off" : "Turn music on"}>
+            <button className={`music-btn ${sound.music ? "on" : ""}`} onClick={() => setSoundMenu(true)} aria-label="Sound settings">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 18V5l11-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="17" cy="16" r="3" />
-                {!musicOn && <path d="M3 3l18 18" />}
+                {!sound.music && <path d="M3 3l18 18" />}
               </svg>
             </button>
+          </div>
+        )}
+        {soundMenu && (
+          <div className="modal-back sound-back" onClick={() => setSoundMenu(false)}>
+            <div className="modal panel sound-menu" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-title">Sound</div>
+              {([
+                ["Music", "Clan and battlefield themes", sound.music, () => setMusicOn(!sound.music)],
+                ["Weather", "Rain, wind, birds, crickets", sound.ambience, () => setAmbienceOn(!sound.ambience)],
+                ["Game sounds", "Reps, countdown, victory, the announcer", fxOn, () => { setEffectsOn(!fxOn); setFxOn(!fxOn); }],
+              ] as const).map(([name, sub, on, flip]) => (
+                <button key={name} className={`sound-row ${on ? "on" : ""}`} onClick={flip}>
+                  <div><b>{name}</b><span>{sub}</span></div>
+                  <i className="switch" />
+                </button>
+              ))}
+              <button className="game-btn wood" onClick={() => setSoundMenu(false)}>Done</button>
+            </div>
           </div>
         )}
         <Dock tab={tab} onTab={setTab} locked={inMatch} />

@@ -5,6 +5,16 @@ import { SOUND_VOLUME } from "./config";
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
+let fx: GainNode | null = null; // sound effects (reps, countdown, victory...) – can be muted on their own
+
+const FX_KEY = "pb_fx";
+let fxOn = (() => { try { return localStorage.getItem(FX_KEY) !== "off"; } catch { return true; } })();
+export const effectsOn = () => fxOn;
+export function setEffectsOn(on: boolean) {
+  fxOn = on;
+  try { localStorage.setItem(FX_KEY, on ? "on" : "off"); } catch { /* private mode */ }
+  if (fx) fx.gain.value = on ? 1 : 0;
+}
 
 function audio() {
   if (!ctx) {
@@ -14,6 +24,9 @@ function audio() {
     master = ctx.createGain();
     master.gain.value = SOUND_VOLUME;
     master.connect(ctx.destination);
+    fx = ctx.createGain();
+    fx.gain.value = fxOn ? 1 : 0;
+    fx.connect(master);
   }
   return ctx;
 }
@@ -38,7 +51,7 @@ function tone(freq: number, dur: number, opts: { type?: OscillatorType; vol?: nu
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(opts.vol ?? 0.4, t + 0.01);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g).connect(master);
+  o.connect(g).connect(fx!);
   o.start(t);
   o.stop(t + dur + 0.05);
 }
@@ -60,7 +73,7 @@ function noise(dur: number, opts: { vol?: number; at?: number; freq?: number } =
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(opts.vol ?? 0.6, t + 0.05);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  src.connect(f).connect(g).connect(master);
+  src.connect(f).connect(g).connect(fx!);
   src.start(t);
 }
 
@@ -114,7 +127,7 @@ if (typeof window !== "undefined" && window.speechSynthesis) {
 
 export function announce(text: string, delay = 0) {
   const synth = window.speechSynthesis;
-  if (!synth || SOUND_VOLUME <= 0) return;
+  if (!synth || SOUND_VOLUME <= 0 || !fxOn) return;
   setTimeout(() => {
     synth.cancel();
     const u = new SpeechSynthesisUtterance(text);

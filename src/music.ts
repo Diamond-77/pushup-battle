@@ -12,30 +12,39 @@ import type { Weather } from "./clans";
 // A song file in THEME_MUSIC (config.ts) replaces the built-in theme for that clan.
 // Ambience follows the weather: storm = rain, sunset = wind and birds, night = crickets, day = birds.
 
-type Voice = "pluck" | "flute" | "bell";
-type ThemeDef = { root: number; scale: number[]; bpm: number; voice: Voice; drums: boolean; rest: number; seed: number };
+type Voice = "koto" | "flute" | "bell";
+// prog = chord roots (semitones) for each bar of the 4-bar loop
+type ThemeDef = { root: number; scale: number[]; bpm: number; voice: Voice; drums: 0 | 1 | 2; seed: number; prog: number[]; density: number };
+const MINOR = [0, 3, 5, 7, 10], MAJOR = [0, 2, 4, 7, 9], INSEN = [0, 1, 5, 7, 10], YO = [0, 2, 5, 7, 9];
 const THEMES: Record<string, ThemeDef> = {
-  arasaka: { root: 57, scale: [0, 3, 5, 7, 10], bpm: 92, voice: "pluck", drums: true, rest: 0.3, seed: 7 },
-  "soraran-gate": { root: 62, scale: [0, 2, 4, 7, 9], bpm: 76, voice: "flute", drums: false, rest: 0.35, seed: 3 },
-  sleepbuilders: { root: 64, scale: [0, 1, 5, 7, 10], bpm: 58, voice: "bell", drums: false, rest: 0.5, seed: 11 },
-  lone: { root: 60, scale: [0, 2, 5, 7, 9], bpm: 70, voice: "pluck", drums: false, rest: 0.45, seed: 5 },
+  // clans (home, clan, throne, profile)
+  arasaka: { root: 57, scale: MINOR, bpm: 84, voice: "koto", drums: 1, seed: 7, prog: [0, -4, -7, -2], density: 0.6 },
+  "soraran-gate": { root: 62, scale: MAJOR, bpm: 72, voice: "flute", drums: 0, seed: 3, prog: [0, -3, 5, 7], density: 0.45 },
+  sleepbuilders: { root: 64, scale: INSEN, bpm: 56, voice: "bell", drums: 0, seed: 11, prog: [0, -4, -2, -5], density: 0.35 },
+  lone: { root: 60, scale: YO, bpm: 68, voice: "koto", drums: 0, seed: 5, prog: [0, 5, -3, 7], density: 0.45 },
+  // battle modes, while choosing a battlefield (never during the fight itself)
+  brawl: { root: 55, scale: MINOR, bpm: 112, voice: "koto", drums: 2, seed: 21, prog: [0, -2, -4, -2], density: 0.75 },
+  classic: { root: 59, scale: MINOR, bpm: 96, voice: "flute", drums: 1, seed: 17, prog: [0, -4, -7, -5], density: 0.55 },
+  rank: { root: 52, scale: INSEN, bpm: 100, voice: "koto", drums: 2, seed: 29, prog: [0, 1, -4, -2], density: 0.65 },
+  training: { root: 62, scale: YO, bpm: 88, voice: "koto", drums: 1, seed: 13, prog: [0, 5, 7, 5], density: 0.55 },
 };
 const STEPS = 32; // eighth notes: a 4-bar phrase that loops like a theme
 
-const KEY = "pb_music";
-let enabled = (() => { try { return localStorage.getItem(KEY) !== "off"; } catch { return true; } })();
-const listeners = new Set<(on: boolean) => void>();
-
-export function setMusicOn(on: boolean) {
-  enabled = on;
-  try { localStorage.setItem(KEY, on ? "on" : "off"); } catch { /* private mode */ }
-  listeners.forEach((l) => l(on));
+const read = (k: string) => { try { return localStorage.getItem(k) !== "off"; } catch { return true; } };
+const prefs = { music: read("pb_music"), ambience: read("pb_ambience") };
+const listeners = new Set<() => void>();
+function save(k: "music" | "ambience", on: boolean) {
+  prefs[k] = on;
+  try { localStorage.setItem(k === "music" ? "pb_music" : "pb_ambience", on ? "on" : "off"); } catch { /* private mode */ }
+  listeners.forEach((l) => l());
   apply();
 }
-export function useMusicOn() {
-  const [on, setOn] = useState(enabled);
-  useEffect(() => { listeners.add(setOn); return () => { listeners.delete(setOn); }; }, []);
-  return on;
+export const setMusicOn = (on: boolean) => save("music", on);
+export const setAmbienceOn = (on: boolean) => save("ambience", on);
+export function useSoundPrefs() {
+  const [, bump] = useState(0);
+  useEffect(() => { const l = () => bump((n) => n + 1); listeners.add(l); return () => { listeners.delete(l); }; }, []);
+  return { ...prefs };
 }
 
 const midi = (n: number) => 440 * Math.pow(2, (n - 69) / 12);
@@ -43,23 +52,25 @@ function rng(seed: number) {
   let s = seed * 9301 + 49297;
   return () => ((s = (s * 16807) % 2147483647) / 2147483647);
 }
-// a melody for the theme: a seeded walk over two octaves of the scale, landing home at each phrase end
+// a tune: a short motif, the motif again a step higher, an answer, then the motif ending home
 function compose(t: ThemeDef) {
   const r = rng(t.seed);
-  const notes: number[] = [];
+  const motif: number[] = [];
   let deg = 5;
-  for (let i = 0; i < STEPS; i++) {
-    if (i % 16 === 15) { notes.push(-1); continue; }
-    if (i % 16 === 14) { notes.push(i < 16 ? 7 : 5); continue; }
-    if (i % 4 !== 0 && r() < t.rest) { notes.push(-1); continue; }
-    deg = Math.max(0, Math.min(9, deg + Math.round((r() - 0.5) * 4)));
-    notes.push(deg);
+  for (let i = 0; i < 8; i++) {
+    if (i > 0 && i % 2 === 1 && r() > t.density) { motif.push(-1); continue; }
+    deg = Math.max(2, Math.min(9, deg + [-1, 1, -1, 1, -2, 2, 0][Math.floor(r() * 7)]));
+    motif.push(deg);
   }
-  return notes;
+  const shift = (m: number[], k: number) => m.map((d) => (d < 0 ? d : Math.min(10, d + k)));
+  const answer = motif.map((d, i) => (d < 0 || i % 3 === 2 ? -1 : Math.max(1, 12 - d - 2)));
+  const ending = [...motif.slice(0, 5), 5, -1, -1];
+  return [...motif, ...shift(motif, 1), ...answer, ...ending];
 }
 const noteOf = (t: ThemeDef, deg: number) => t.root + 12 * Math.floor(deg / 5) + t.scale[deg % 5];
 
 let musicBus: GainNode | null = null;
+let wet: AudioNode | null = null; // reverb: makes the synth sound like it's played in a hall
 let ambBus: GainNode | null = null;
 let scene: { theme: string; weather: Weather } | null = null;
 let playing: { theme: string; notes: number[]; step: number; next: number } | null = null;
@@ -74,6 +85,18 @@ function buses() {
     musicBus = o.ctx.createGain();
     musicBus.gain.value = 0;
     musicBus.connect(o.out);
+    const verb = o.ctx.createConvolver();
+    const len = Math.floor(o.ctx.sampleRate * 2.8);
+    const ir = o.ctx.createBuffer(2, len, o.ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = ir.getChannelData(c);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    }
+    verb.buffer = ir;
+    const send = o.ctx.createGain();
+    send.gain.value = 0.45;
+    send.connect(verb).connect(musicBus);
+    wet = send;
     ambBus = o.ctx.createGain();
     ambBus.gain.value = 0;
     ambBus.connect(o.out);
@@ -109,31 +132,33 @@ function noiseBuffer(ctx: AudioContext, seconds: number, brown = false) {
   return buf;
 }
 
-function playNote(ctx: AudioContext, dest: AudioNode, voice: Voice, f: number, t: number, len: number) {
-  if (voice === "pluck") { // guzheng-ish: bright attack, quick decay, a soft octave on top
+function playNote(ctx: AudioContext, dry: AudioNode, voice: Voice, f: number, t: number, len: number) {
+  const out = ctx.createGain();
+  out.connect(dry);
+  if (wet) out.connect(wet);
+  if (voice === "koto") { // soft plucked string: mellow tone that fades out
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
-    lp.frequency.setValueAtTime(3200, t);
-    lp.frequency.exponentialRampToValueAtTime(700, t + 0.8);
-    lp.connect(env(ctx, dest, t, 0.005, 0.35, 1.1));
-    osc(ctx, "triangle", f, lp, t, 1.2);
-    osc(ctx, "sawtooth", f * 2.003, env(ctx, lp, t, 0.005, 0.05, 0.4), t, 0.5);
-  } else if (voice === "flute") { // breathy sine with vibrato
+    lp.frequency.setValueAtTime(2200, t);
+    lp.frequency.exponentialRampToValueAtTime(600, t + 1.2);
+    lp.connect(env(ctx, out, t, 0.006, 0.22, 1.6));
+    osc(ctx, "triangle", f, lp, t, 1.8);
+    osc(ctx, "sine", f * 2, env(ctx, lp, t, 0.004, 0.06, 0.5), t, 0.6);
+  } else if (voice === "flute") { // breathy sine with a gentle vibrato
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.28, t + 0.08);
-    g.gain.setValueAtTime(0.24, t + len * 0.8);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + len * 1.6);
-    g.connect(dest);
-    const o = osc(ctx, "sine", f, g, t, len * 1.6);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.12);
+    g.gain.setValueAtTime(0.14, t + len * 0.8);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len * 1.5);
+    g.connect(out);
+    const o = osc(ctx, "sine", f, g, t, len * 1.5);
     const lfo = ctx.createOscillator(), depth = ctx.createGain();
-    lfo.frequency.value = 5.2;
-    depth.gain.value = f * 0.006;
+    lfo.frequency.value = 4.8;
+    depth.gain.value = f * 0.004;
     lfo.connect(depth).connect(o.frequency);
-    lfo.start(t); lfo.stop(t + len * 1.6 + 0.1);
-    osc(ctx, "triangle", f * 2, env(ctx, g, t, 0.08, 0.15, len), t, len * 1.6);
-  } else { // bell: inharmonic partials that ring
-    [1, 2.76, 5.4].forEach((k, i) => osc(ctx, "sine", f * k, env(ctx, dest, t, 0.004, 0.22 / (i + 1.5), 2.6 - i * 0.7), t, 2.8));
+    lfo.start(t); lfo.stop(t + len * 1.5 + 0.1);
+  } else { // bell: a few soft partials that ring
+    [1, 2.0, 3.01].forEach((k, i) => osc(ctx, "sine", f * k, env(ctx, out, t, 0.004, 0.13 / (i + 1), 2.4 - i * 0.6), t, 2.6));
   }
 }
 function taiko(ctx: AudioContext, dest: AudioNode, t: number, big: boolean) {
@@ -141,25 +166,26 @@ function taiko(ctx: AudioContext, dest: AudioNode, t: number, big: boolean) {
   o.type = "sine";
   o.frequency.setValueAtTime(big ? 95 : 140, t);
   o.frequency.exponentialRampToValueAtTime(big ? 42 : 70, t + 0.35);
-  o.connect(env(ctx, dest, t, 0.003, big ? 0.7 : 0.35, 0.45));
+  o.connect(env(ctx, dest, t, 0.003, big ? 0.38 : 0.18, 0.45));
   o.start(t); o.stop(t + 0.6);
   const n = ctx.createBufferSource();
   n.buffer = noiseBuffer(ctx, 0.2, true);
   const lp = ctx.createBiquadFilter();
   lp.type = "lowpass"; lp.frequency.value = 500;
-  n.connect(lp).connect(env(ctx, dest, t, 0.002, 0.4, 0.15));
+  n.connect(lp).connect(env(ctx, dest, t, 0.002, 0.15, 0.12));
   n.start(t);
 }
-function pad(ctx: AudioContext, dest: AudioNode, f: number, t: number, len: number) {
+function pad(ctx: AudioContext, dest: AudioNode, f: number, minor: boolean, t: number, len: number) {
   const lp = ctx.createBiquadFilter();
-  lp.type = "lowpass"; lp.frequency.value = 650;
+  lp.type = "lowpass"; lp.frequency.value = 900;
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(0.07, t + len * 0.3);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+  g.gain.exponentialRampToValueAtTime(0.035, t + len * 0.35);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + len * 1.05);
   lp.connect(g).connect(dest);
-  for (const k of [1, 1.5]) for (const d of [-4, 4]) {
-    const o = osc(ctx, "sawtooth", f * k, lp, t, len);
+  if (wet) g.connect(wet);
+  for (const k of [1, minor ? 1.189 : 1.26, 1.498]) for (const d of [-5, 5]) {
+    const o = osc(ctx, "triangle", f * k, lp, t, len * 1.1);
     o.detune.value = d;
   }
 }
@@ -174,8 +200,9 @@ function tick() {
     const i = playing.step % STEPS, at = playing.next;
     const deg = playing.notes[i];
     if (deg >= 0) playNote(b.ctx, b.music, t.voice, midi(noteOf(t, deg)), at, step * (t.voice === "flute" ? 2 : 1));
-    if (i % 16 === 0) pad(b.ctx, b.music, midi(t.root - 24 + (i === 16 ? t.scale[3] : 0)), at, step * 16);
-    if (t.drums && [0, 6, 8, 14, 16, 22, 24, 27, 30].includes(i)) taiko(b.ctx, b.music, at, i % 8 === 0);
+    if (i % 8 === 0) pad(b.ctx, b.music, midi(t.root - 12 + t.prog[i / 8]), t.scale[1] === 3 || t.scale[1] === 1, at, step * 8);
+    if (t.drums === 1 && i % 8 === 0) taiko(b.ctx, b.music, at, true);
+    if (t.drums === 2 && [0, 3, 6, 8, 11, 14].includes(i % 16)) taiko(b.ctx, b.music, at, i % 8 === 0);
     playing.step++;
     playing.next += step;
   }
@@ -255,13 +282,14 @@ function fade(g: GainNode | null, to: number, s = 0.8) {
 }
 
 function apply() {
-  const want = enabled ? scene : null;
   const b = buses();
+  const wantAmb = prefs.ambience ? scene : null;
+  const want = prefs.music ? scene : null;
   // ambience
-  if (ambient && ambient.weather !== want?.weather) { const old = ambient; fade(ambBus, 0, 0.5); setTimeout(old.stop, 600); ambient = null; }
-  if (want && !ambient && b) {
-    const stop = startAmbient(want.weather);
-    if (stop) { ambient = { weather: want.weather, stop }; setTimeout(() => fade(ambBus, AMBIENT_VOLUME, 1.2), ambBus && ambBus.gain.value > 0.01 ? 650 : 0); }
+  if (ambient && ambient.weather !== wantAmb?.weather) { const old = ambient; fade(ambBus, 0, 0.5); setTimeout(old.stop, 600); ambient = null; }
+  if (wantAmb && !ambient && b) {
+    const stop = startAmbient(wantAmb.weather);
+    if (stop) { ambient = { weather: wantAmb.weather, stop }; setTimeout(() => fade(ambBus, AMBIENT_VOLUME, 1.2), ambBus && ambBus.gain.value > 0.01 ? 650 : 0); }
   }
   // theme
   const file = want ? THEME_MUSIC[want.theme] : undefined;
@@ -298,6 +326,6 @@ if (typeof window !== "undefined") {
   window.addEventListener("pointerdown", kick, { passive: true });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) { fade(musicBus, 0, 0.2); fade(ambBus, 0, 0.2); fileAudio?.pause(); }
-    else if (enabled && scene) { fade(musicBus, playing ? MUSIC_VOLUME : 0, 0.8); fade(ambBus, ambient ? AMBIENT_VOLUME : 0, 0.8); fileAudio?.play().catch(() => {}); }
+    else if (scene) { fade(musicBus, playing ? MUSIC_VOLUME : 0, 0.8); fade(ambBus, ambient ? AMBIENT_VOLUME : 0, 0.8); fileAudio?.play().catch(() => {}); }
   });
 }
