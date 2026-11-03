@@ -755,3 +755,6 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 @keyframes stars-twinkle { from { opacity: 0.6; } to { opacity: 1; } }
 .page-top { justify-content: space-between; align-items: center; }
 .tease .modal-title { font-size: 1.7rem; }
+.cam-help { z-index: 35; }
+.cam-steps { margin: 0; padding-left: 22px; color: #e9dcc0; line-height: 1.6; text-align: left; align-self: stretch; }
+.cam-steps li::marker { color: var(--gold); font-weight: 800; }

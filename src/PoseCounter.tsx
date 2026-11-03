@@ -53,6 +53,8 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
   const meterRef = useRef<HTMLDivElement>(null);
   const meterLabelRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [camDenied, setCamDenied] = useState(false); // camera permission refused: show the help popup
+  const [camTry, setCamTry] = useState(0); // bump to ask for the camera again
   const [loading, setLoading] = useState(true);
   const [debug, setDebug] = useState<Debug>({ ratio: null, kneeLift: null, state: "up", reps: 0, fps: 0, status: "not_detected", fast: false, lock: "off" });
 
@@ -116,20 +118,28 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
         video.srcObject = stream;
         await video.play();
         setError(null);
+        setCamDenied(false);
         requestWakeLock();
       } catch (e) {
-        setError(`Camera error: ${(e as Error).message}`);
+        const name = (e as Error).name;
+        if (name === "NotAllowedError" || name === "SecurityError") setCamDenied(true);
+        else setError(name === "NotFoundError" ? "No camera found on this device." : "The camera couldn't start. Close other apps using it and try again.");
       }
     })();
+    // When the player turns the camera on in settings, start right away.
+    let perm: PermissionStatus | null = null;
+    const onPerm = () => perm?.state === "granted" && setCamTry((n) => n + 1);
+    navigator.permissions?.query({ name: "camera" as PermissionName }).then((p) => { perm = p; p.addEventListener("change", onPerm); }).catch(() => {});
     document.addEventListener("visibilitychange", onVisible);
 
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
+      perm?.removeEventListener("change", onPerm);
       stream?.getTracks().forEach((t) => t.stop());
       wakeLock?.release().catch(() => {});
     };
-  }, [facing]);
+  }, [facing, camTry]);
 
   // Pose detection loop
   useEffect(() => {
@@ -368,6 +378,7 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
         {loading && <div className="toast">Starting tracker…</div>}
         {error && <div className="toast error">{error}</div>}
       </div>
+      {camDenied && !paused && <CameraHelp onRetry={() => setCamTry((n) => n + 1)} />}
       {switched && (
         <div className="switch-warning">
           <div className="switch-title">Switching body</div>
@@ -387,6 +398,32 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
         <div>Lock <b>{debug.lock}</b></div>
       </div>
 
+    </div>
+  );
+}
+
+// Shown when camera access was refused. A website can't open the phone's settings by itself,
+// so it shows the exact steps for this phone, plus a button to ask again.
+function CameraHelp({ onRetry }: { onRetry: () => void }) {
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const android = /Android/.test(ua);
+  const steps = ios
+    ? ["Tap the \u201caA\u201d button in the address bar", "Tap Website Settings", "Set Camera to Allow", "Come back and tap Try again"]
+    : android
+      ? ["Tap the icon left of the web address", "Tap Permissions (or Site settings)", "Turn Camera on", "Come back and tap Try again"]
+      : ["Click the icon left of the web address", "Set Camera to Allow", "Click Try again"];
+  return (
+    <div className="modal-back cam-help">
+      <div className="modal panel">
+        <svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="#c8372d" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 7h3l2-2h8l2 2h3v12H3z" /><circle cx="12" cy="13" r="3.5" /><path d="M3 3l18 18" />
+        </svg>
+        <div className="modal-title">Camera is blocked</div>
+        <p className="modal-text">Pushup Battle needs your camera to count your push-ups. Nothing is recorded or sent anywhere.</p>
+        <ol className="cam-steps">{steps.map((t) => <li key={t}>{t}</li>)}</ol>
+        <button className="game-btn jade wide" onClick={onRetry}>Try again</button>
+      </div>
     </div>
   );
 }
