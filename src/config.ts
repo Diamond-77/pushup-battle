@@ -101,7 +101,7 @@ export const FIELDS: { id: FieldId; place: string; weather: "day" | "sunset" | "
   { id: "training", place: "Training Ground", weather: "day" },
 ];
 export const START_RESPECT = 50;
-export const TRAINING_CAP = 50; // training refills Respect up to this, never beyond
+export const TRAINING_CAP = 50; // most Respect training can pay in any 24 hours (on top of your balance)
 
 // Training challenges (same list as supabase/economy.sql)
 export const TRAINING = [

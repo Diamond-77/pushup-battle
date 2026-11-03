@@ -6,11 +6,25 @@ import { countdownSound, goSound, victoryCall, victorySound, defeatSound } from 
 type Challenge = (typeof TRAINING)[number];
 type Run = { c: Challenge; runId: number | null; phase: "countdown" | "go" | "done"; count: number; endAt: number; base: number; won?: boolean; gain?: number | null; error?: string };
 
-// Training ground: free practice plus timed challenges that refill Respect (up to 50).
-export default function Training({ reps, respect, onReset, onBattle, onEarned }: { reps: number; respect: number; onReset: () => void; onBattle: () => void; onEarned: () => void }) {
+// Training ground: free practice plus timed challenges that pay Respect, at most 50 per 24 hours.
+type Today = { earned: number; nextFree: Date | null };
+const untilText = (d: Date | null) => {
+  if (!d) return "";
+  const m = Math.max(0, Math.ceil((d.getTime() - Date.now()) / 60000));
+  return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+};
+export default function Training({ reps, onReset, onBattle, onEarned }: { reps: number; onReset: () => void; onBattle: () => void; onEarned: () => void }) {
   const [view, setView] = useState<"free" | "challenges">("challenges");
   const [run, setRun] = useState<Run | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [today, setToday] = useState<Today | null>(null);
+  const loadToday = async () => {
+    const { data, error } = (await supabase?.rpc("training_today")) ?? {};
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!error && row) setToday({ earned: row.earned ?? 0, nextFree: row.next_free ? new Date(row.next_free) : null });
+  };
+  useEffect(() => { loadToday(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const left = today ? Math.max(0, TRAINING_CAP - today.earned) : TRAINING_CAP;
   const repsRef = useRef(reps);
   repsRef.current = reps;
 
@@ -52,6 +66,7 @@ export default function Training({ reps, respect, onReset, onBattle, onEarned }:
         const { data, error } = await supabase.rpc("claim_training", { p_run: run.runId, p_reps: done });
         setRun((r) => r && { ...r, gain: error ? 0 : (data as number), error: error?.message });
         onEarned();
+        loadToday();
       })();
     } else if (now >= run.endAt) {
       defeatSound();
@@ -76,7 +91,7 @@ export default function Training({ reps, respect, onReset, onBattle, onEarned }:
                   run.gain == null ? "Claiming…" :
                   run.error ? run.error :
                   run.gain > 0 ? <span className="respect-gain">+{run.gain} Respect</span> :
-                  `Your Respect is full (${TRAINING_CAP}). Battle to earn more.`}
+                  `You've earned today's ${TRAINING_CAP} from training. More in ${untilText(today?.nextFree ?? null)}.`}
               </div>
               <div className="practice-actions">
                 <button className="pill ghost" onClick={() => setRun(null)}>Back</button>
@@ -112,7 +127,9 @@ export default function Training({ reps, respect, onReset, onBattle, onEarned }:
       ) : (
         <>
           <div className="muted small">
-            {respect < TRAINING_CAP ? `Earn Respect back, up to ${TRAINING_CAP}.` : `Respect full for training (${TRAINING_CAP}+). Battle to earn more.`}
+            {left > 0
+              ? `Today: ${today?.earned ?? 0} / ${TRAINING_CAP} Respect from training. ${left} left.`
+              : `Today's ${TRAINING_CAP} from training is earned. More in ${untilText(today?.nextFree ?? null)}.`}
           </div>
           <ul className="train-list">
             {TRAINING.map((c) => (

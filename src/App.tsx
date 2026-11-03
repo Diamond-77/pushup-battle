@@ -176,7 +176,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
               <path d="M4 12a8 8 0 0 1 13.7-5.6M20 12a8 8 0 0 1-13.7 5.6M18 3v4h-4M6 21v-4h4" />
             </svg>
           </button>
-          <Training reps={practiceReps} respect={respect} onReset={() => setPracticeReps(0)} onBattle={() => setTab("battle")} onEarned={refreshProfile} />
+          <Training reps={practiceReps} onReset={() => setPracticeReps(0)} onBattle={() => setTab("battle")} onEarned={refreshProfile} />
           </>
         )}
         {!inMatch && tab === "home" && <HomePage profile={profile} clan={myClan} onBattle={() => setTab("battle")} onTrain={() => setTab("train")} />}

@@ -92,7 +92,7 @@ export default function LobbyPage({ players, status, notice, onChallenge, onFind
                 <div className="field-place">{f.place}</div>
                 <div className="field-name">{mode ? mode.name : "Training"}</div>
                 <div className="field-meta">
-                  {mode ? <>{mode.seconds / 60} min · <b>bet {mode.bet}</b></> : <>Earn Respect up to {TRAINING_CAP}</>}
+                  {mode ? <>{mode.seconds / 60} min · <b>bet {mode.bet}</b></> : <>Up to {TRAINING_CAP} Respect a day</>}
                 </div>
               </div>
             </button>
@@ -104,7 +104,7 @@ export default function LobbyPage({ players, status, notice, onChallenge, onFind
       </div>
 
       <div className="lobby-bottom">
-        <div className="muted small mode-blurb">{M ? M.blurb : "Timed push-up challenges. Refill your Respect when you're low."}</div>
+        <div className="muted small mode-blurb">{M ? M.blurb : "Timed push-up challenges. Earn up to 50 Respect every 24 hours."}</div>
         {!isMode ? (
           <button className="game-btn jade big wide" onClick={onTrain}>Enter training</button>
         ) : !canPlay ? (

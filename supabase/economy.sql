@@ -3,7 +3,7 @@
 --   Brawl   1 min, bet 5   (fewer than 5 reps = lose 1 extra Respect)
 --   Classic 3 min, bet 10
 --   Rank    7 min, bet 100 (needs at least 120 Respect)
---   Training challenges refill Respect, but only up to 50.
+--   Training challenges pay up to 50 Respect per 24 hours (separate from your balance).
 -- Keep the numbers in sync with MODES and TRAINING in src/config.ts.
 
 -- 1. Respect on every profile (new players start with 50). Players can't write it themselves:
@@ -228,7 +228,7 @@ begin
 end;
 $fn$ language plpgsql security definer set search_path = public;
 
--- Returns the Respect earned (0 when already at 50).
+-- Returns the Respect earned (0 when today's 50 from training is used up).
 create or replace function public.claim_training(p_run bigint, p_reps integer)
 returns integer
 as $fn$
@@ -247,7 +247,9 @@ begin
   if p_reps < c.reps or took > c.seconds + 20 or took < c.reps * 0.4 then
     raise exception 'Challenge not completed';
   end if;
-  select respect into bal from public.profiles where id = auth.uid() for update;
+  -- Training pays at most 50 Respect per 24 hours (rolling), on top of whatever you already have.
+  select coalesce(sum(reward), 0) into bal from public.training_runs
+   where user_id = auth.uid() and claimed_at > now() - interval '24 hours';
   gain := greatest(0, least(c.reward, 50 - bal));
   perform public._add_respect(auth.uid(), gain, 'training ' || c.id, null);
   update public.training_runs set claimed_at = now(), reward = gain where id = p_run;
@@ -258,3 +260,12 @@ $fn$ language plpgsql security definer set search_path = public;
 -- Internal helpers can't be called from the app.
 revoke all on function public._add_respect(uuid, integer, text, uuid) from public, anon, authenticated;
 revoke all on function public._settle_match(uuid) from public, anon, authenticated;
+
+-- How much training Respect you've earned in the last 24 hours, and when the oldest of it frees up again.
+create or replace function public.training_today()
+returns table (earned integer, next_free timestamptz)
+as $fn$
+  select coalesce(sum(reward), 0)::integer, min(claimed_at) + interval '24 hours'
+  from public.training_runs
+  where user_id = auth.uid() and claimed_at > now() - interval '24 hours' and reward > 0
+$fn$ language sql stable security definer set search_path = public;
