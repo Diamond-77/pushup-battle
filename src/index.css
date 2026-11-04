@@ -1322,3 +1322,16 @@ body:has(.challenge-sheet) .challenge-note { display: none; }
 .pcard-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .game-btn.big { white-space: nowrap; }
 .game-btn.big.find-glow { font-size: 1.45rem; letter-spacing: 0; }
+
+/* How to play on phones: smaller meter and a compact caption, so nothing covers him */
+.howto .meter-wrap { top: 22%; transform: none; padding: 5px; gap: 5px; border-radius: 14px; }
+.howto .meter { gap: 3px; }
+.howto .block { width: 24px; height: 18px; border-radius: 6px; }
+.howto .meter-label { font-size: 0.7rem; }
+.howto-panel { padding: 10px 14px 12px; gap: 4px; }
+.howto-title { font-size: 1.4rem; }
+.howto-text { font-size: 0.86rem; line-height: 1.32; }
+.howto-panel.slim .howto-text { font-size: 0.8rem; }
+.howto-next, .howto-back { height: 44px; }
+.howto-back { width: 44px; }
+.howto .mode-tag { display: none; }

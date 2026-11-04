@@ -112,9 +112,9 @@ export class Stage {
     const eyeLook = new THREE.Vector3(0, narrow ? 0.62 : 0.5, -1.2);
     this.camera.position.lerpVectors(side, eye, k);
     this.camera.lookAt(this.tmp.lerpVectors(sideLook, eyeLook, k));
-    this.camera.fov = THREE.MathUtils.lerp(50, narrow ? 70 : 54, k);
+    this.camera.fov = THREE.MathUtils.lerp(50, narrow ? 82 : 58, k);
     // lift the picture so he stands clear of the caption panel at the bottom
-    this.camera.setViewOffset(this.w, this.h, 0, this.h * (narrow ? 0.2 : 0.14), this.w, this.h);
+    this.camera.setViewOffset(this.w, this.h, 0, this.h * (narrow ? 0.07 : 0.1) * k, this.w, this.h);
     this.camera.updateProjectionMatrix();
 
     this.me.setPose(shot.me, time);
