@@ -1,0 +1,73 @@
+/* World map page. Phone first: everything sits inside the safe area, thumbs reach the bottom chips. */
+.wm { position: fixed; inset: 0; overflow: hidden; background: #2a2d3c; color: var(--parch); font-family: "Inter", system-ui, sans-serif; -webkit-user-select: none; user-select: none; }
+.wm-canvas { position: absolute; inset: 0; }
+.wm-canvas canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+.wm-top {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 12; display: flex; align-items: center; gap: 12px;
+  padding: calc(env(safe-area-inset-top) + 12px) 16px 22px;
+  background: linear-gradient(180deg, rgba(18, 12, 10, 0.75), rgba(18, 12, 10, 0));
+  pointer-events: none;
+}
+.wm-top > * { pointer-events: auto; }
+.wm-title { font-family: var(--brush); font-weight: 900; font-size: 1.6rem; line-height: 1.05; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45); }
+.wm-sub { font-size: 0.78rem; color: #d8c9aa; letter-spacing: 0.04em; }
+.wm-round {
+  width: 44px; height: 44px; flex: none; border-radius: 50%; border: 2px solid var(--wood-rim);
+  background: linear-gradient(180deg, #4a2c1d, #2a170f); color: var(--parch); font-size: 1.7rem; line-height: 1;
+  display: grid; place-items: center; box-shadow: 0 4px 0 var(--wood-shadow);
+}
+.wm-round.small { width: 36px; height: 36px; font-size: 1.3rem; margin-left: auto; box-shadow: 0 3px 0 var(--wood-shadow); }
+
+.wm-labels { position: absolute; inset: 0; z-index: 10; pointer-events: none; }
+.wm-label {
+  position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 6px; pointer-events: auto;
+  padding: 4px 12px 4px 5px; border-radius: 999px; border: 2px solid var(--wood-rim);
+  background: linear-gradient(180deg, rgba(59, 34, 22, 0.94), rgba(36, 20, 13, 0.94));
+  color: var(--parch); font-family: var(--brush); font-weight: 700; font-size: 0.95rem; white-space: nowrap;
+  box-shadow: 0 3px 0 var(--wood-shadow), 0 0 0 3px color-mix(in srgb, var(--c) 0%, transparent);
+  transform-origin: 50% 100%; transition: opacity 0.2s, box-shadow 0.2s;
+  will-change: transform;
+}
+.wm-label::after { content: ""; position: absolute; left: 50%; bottom: -8px; width: 2px; height: 8px; background: var(--wood-rim); }
+.wm-label.on { box-shadow: 0 3px 0 var(--wood-shadow), 0 0 0 3px var(--c); }
+.wm-label.small { padding: 3px 10px; font-size: 0.75rem; pointer-events: none; opacity: 0.9; }
+.wm-label .clan-logo { flex: none; }
+
+.wm-hint {
+  position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 92px); transform: translateX(-50%); z-index: 11;
+  padding: 7px 14px; border-radius: 999px; background: rgba(18, 12, 10, 0.72); font-size: 0.78rem; white-space: nowrap;
+  pointer-events: none; animation: wm-fade 6s 3s forwards;
+}
+@keyframes wm-fade { to { opacity: 0; } }
+
+.wm-chips {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 12; display: flex; gap: 8px; justify-content: center;
+  padding: 18px 12px calc(env(safe-area-inset-bottom) + 14px);
+  background: linear-gradient(0deg, rgba(18, 12, 10, 0.78), rgba(18, 12, 10, 0));
+}
+.wm-chip {
+  flex: 1; max-width: 150px; min-width: 0; height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  border-radius: 14px; border: 2px solid var(--wood-rim); background: linear-gradient(180deg, #4a2c1d, #2a170f);
+  box-shadow: 0 4px 0 var(--wood-shadow), inset 0 -3px 0 var(--c);
+  color: var(--parch); font-weight: 700; font-size: 0.72rem;
+}
+.wm-chip span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; }
+.wm-chip:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--wood-shadow), inset 0 -3px 0 var(--c); }
+
+.wm-card {
+  position: absolute; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom) + 12px); z-index: 12;
+  max-width: 440px; margin: 0 auto; padding: 14px 14px 16px; border-radius: 20px;
+  background: linear-gradient(180deg, #3b2216, #24140d); border: 2px solid var(--wood-rim);
+  box-shadow: inset 0 0 0 3px #1b1a1f, inset 0 4px 0 3px var(--c), 0 6px 0 var(--wood-shadow);
+  animation: wm-up 0.25s ease-out;
+}
+@keyframes wm-up { from { transform: translateY(30px); opacity: 0; } }
+.wm-card-head { display: flex; align-items: center; gap: 12px; }
+.wm-card-name { font-family: var(--brush); font-weight: 900; font-size: 1.45rem; line-height: 1.1; }
+.wm-card-region { font-size: 0.78rem; color: #d8c9aa; }
+.wm-card-text { margin: 10px 2px 14px; font-size: 0.88rem; line-height: 1.45; color: #e9dcc0; }
+.wm-card-text i { color: #b9ab90; }
+
+.wm-visit { position: absolute; inset: 0; z-index: 20; background: #1b1a1f; }
+.wm-visit .palace3d { z-index: 0; }

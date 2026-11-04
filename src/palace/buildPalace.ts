@@ -574,7 +574,9 @@ export function skyTexture(stops: [string, string, string] = ["#6fa8d6", "#bcd8e
 
 /* ---------- the whole compound ---------- */
 
-export function buildPalace(clan: string, env: Env, overrides: Partial<PalaceStyle> = {}) {
+// bare = only the walled compound and its courtyard trees (no ground, peaks, far mountains, mist or leaves),
+// for placing several palaces on the world map.
+export function buildPalace(clan: string, env: Env, overrides: Partial<PalaceStyle> = {}, { bare = false } = {}) {
   const s = { ...styleFor(clan), ...overrides };
   const rand = rngFrom(clan + ":layout");
   const root = new THREE.Group();
@@ -591,7 +593,8 @@ export function buildPalace(clan: string, env: Env, overrides: Partial<PalaceSty
     if (d > 75) gp.setY(i, Math.sin(x * 0.03) * Math.cos(z * 0.025) * 9 * Math.min(1, (d - 75) / 60) + (rand() - 0.5) * 1.2);
   }
   ground.computeVertexNormals();
-  b.add(ground, c.m.grass, new THREE.Matrix4(), false);
+  if (!bare) b.add(ground, c.m.grass, new THREE.Matrix4(), false);
+  else ground.dispose();
 
   // paved courtyard (texture repeats every 4 m)
   const pave = new THREE.BoxGeometry(84, 0.3, 100);
@@ -652,7 +655,7 @@ export function buildPalace(clan: string, env: Env, overrides: Partial<PalaceSty
     put(c, new THREE.PlaneGeometry(2.6, 6), c.m.banner, M(sx * 17 + 1.45, 7.5, 56), false);
   }
 
-  peaks(c, rand);
+  if (!bare) peaks(c, rand);
   b.finish(root);
 
   // lotus pads and flowers
@@ -672,7 +675,7 @@ export function buildPalace(clan: string, env: Env, overrides: Partial<PalaceSty
     const r = rand();
     return r < s.autumn * 0.5 ? "maple" : r < 0.6 ? "green" : r < 0.85 ? "pine" : "bamboo";
   };
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < (bare ? 0 : 90); i++) {
     const a = rand() * Math.PI * 2, r = 56 + rand() * 60;
     spots.push({ p: new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r * 1.1), kind: kindAt() });
   }
@@ -692,6 +695,7 @@ export function buildPalace(clan: string, env: Env, overrides: Partial<PalaceSty
   }
   root.add(moss);
 
+  if (bare) return { root, style: s, tick: () => {} };
   root.add(mountains(rand, env.mountainTint));
 
   // drifting mist

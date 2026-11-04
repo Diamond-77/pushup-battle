@@ -27,3 +27,4 @@ public/mediapipe/wasm
 
 # local song sources (the web copies live in public/music)
 the musics/
+dist-world
