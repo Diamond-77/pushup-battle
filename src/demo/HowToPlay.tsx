@@ -6,7 +6,7 @@ import Hud from "../Hud";
 
 // Full-page how-to-play: a 3D park guy shows each step inside the app's own camera
 // screen (green/red border, orange tracking lines, depth meter), then wins a demo battle.
-// Every step plays a while before Next unlocks; Skip only shows up after a few seconds.
+// Every step plays a while before Next unlocks (no skipping); Back goes to the step before.
 
 import { HOWTO_KEY } from "./done";
 
@@ -166,7 +166,6 @@ export default function HowToPlay({ onDone, first = 0, me = { name: "You", avata
   const [i, setI] = useState(Math.min(STEPS.length - 1, Math.max(0, first)));
   const [ui, setUi] = useState<UI>({ border: "none" });
   const [unlocked, setUnlocked] = useState(false);
-  const [canSkip, setCanSkip] = useState(false);
   const screenRef = useRef<HTMLDivElement>(null);
   const glRef = useRef<HTMLDivElement>(null);
   const lineRef = useRef<HTMLCanvasElement>(null);
@@ -175,11 +174,6 @@ export default function HowToPlay({ onDone, first = 0, me = { name: "You", avata
   const distRef = useRef<HTMLDivElement>(null);
   const lockRef = useRef<HTMLSpanElement>(null);
   const stepRef = useRef({ i: 0, start: performance.now() });
-
-  useEffect(() => {
-    const id = setTimeout(() => setCanSkip(true), 8000);
-    return () => clearTimeout(id);
-  }, []);
 
   useEffect(() => {
     stepRef.current = { i, start: performance.now() };
@@ -313,21 +307,24 @@ export default function HowToPlay({ onDone, first = 0, me = { name: "You", avata
           </div>
         )}
 
-        {canSkip && !lastStep && (
-          <button className="howto-skip" onClick={finish}>Skip</button>
-        )}
-
         <div className={`howto-panel panel ${b ? "slim" : ""}`}>
           <div className="guide-step">How to play · {i + 1} / {STEPS.length}</div>
           <div className="howto-title">{step.title}</div>
           <p className="howto-text">{step.text}</p>
           <div className="howto-row">
             <div className="guide-dots">{STEPS.map((_, k) => <span key={k} className={k === i ? "on" : ""} />)}</div>
+            <div className="howto-btns">
+            {i > 0 && (
+              <button className="game-btn wood howto-back" onClick={() => setI(i - 1)} aria-label="Previous step">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+              </button>
+            )}
             <button className={`game-btn jade howto-next ${unlocked ? "" : "locked"}`} disabled={!unlocked}
               onClick={() => (lastStep ? finish() : setI(i + 1))}>
               {!unlocked && <span className="howto-lock" ref={lockRef} />}
-              <span className="howto-next-label">{lastStep ? "Let's fight" : "Next"}</span>
+              <span className="howto-next-label">{lastStep ? "Fight!" : "Next"}</span>
             </button>
+            </div>
           </div>
         </div>
       </div>

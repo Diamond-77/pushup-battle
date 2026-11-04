@@ -311,7 +311,7 @@ input:focus { border-color: var(--me); }
   --wood-rim: #6b4429; /* replaces the gold border */
   --wood-shadow: #120a06;
   --glass: rgba(36, 20, 13, 0.92);
-  --brush: "Ma Shan Zheng", "Inter", serif;
+  --brush: "Cinzel", "Inter", serif; /* titles: was a brush script, too hard to read */
 }
 body { background: var(--ink); }
 .screen { background: #1b1a1f; }
@@ -530,7 +530,7 @@ a.game-btn { text-decoration: none; }
 .result-rays { position: absolute; left: 50%; top: 40%; width: 220vmax; height: 220vmax; margin: -110vmax 0 0 -110vmax; pointer-events: none; opacity: 0.22;
   background: repeating-conic-gradient(from 0deg, rgba(255,240,190,0.9) 0deg 6deg, transparent 6deg 20deg); animation: rays-spin 24s linear infinite; }
 .result-full.lose .result-rays { display: none; }
-.result-word { position: relative; font-family: var(--brush); font-size: clamp(4.5rem, 24vw, 9rem); line-height: 1; color: #fff; animation: word-pop 0.6s cubic-bezier(.2,1.6,.4,1) both; }
+.result-word { position: relative; font-family: var(--brush); font-size: clamp(3rem, 15vw, 6.5rem); line-height: 1; color: #fff; animation: word-pop 0.6s cubic-bezier(.2,1.6,.4,1) both; }
 .result-full.win .result-word { color: #f6e3a1; text-shadow: 0 0 30px rgba(246,227,161,0.7), 0 6px 0 #1d5a41; }
 .result-full.lose .result-word { color: #ffd9d4; text-shadow: 0 6px 0 #6b1a14; }
 .result-full .result-score { position: relative; font-family: var(--brush); font-size: 4rem; display: flex; gap: 18px; align-items: center; color: #fff; }
@@ -788,7 +788,7 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .pcard::after { bottom: -3px; right: -3px; border-left: 0; border-top: 0; }
 .pcard-side { flex: 0 0 46px; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 14px 0;
   background: linear-gradient(180deg, color-mix(in srgb, var(--acc) 38%, #000), #08080a 85%); border-right: 1px solid color-mix(in srgb, var(--acc) 40%, transparent); border-radius: 6px 0 0 6px; }
-.pcard-clan { writing-mode: vertical-rl; text-orientation: mixed; font-family: "Ma Shan Zheng", cursive; font-size: 1.25rem; letter-spacing: 0.1em; color: #f6efe2; text-shadow: 0 0 12px var(--acc); white-space: nowrap; }
+.pcard-clan { writing-mode: vertical-rl; text-orientation: mixed; font-family: var(--brush); font-size: 1.25rem; letter-spacing: 0.1em; color: #f6efe2; text-shadow: 0 0 12px var(--acc); white-space: nowrap; }
 .pcard-main { flex: 1; min-width: 0; padding: 14px 14px 14px 12px; display: flex; flex-direction: column; gap: 12px; }
 .pcard-head { display: flex; align-items: center; gap: 14px; }
 .pcard-head > :first-child { flex-shrink: 0; }
@@ -888,7 +888,7 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .follow-sheet .seg button { color: #8f8f9a; }
 .follow-sheet .seg button.on { background: #24242c; color: #fff; }
 .sheet-top { display: flex; justify-content: space-between; align-items: center; }
-.sheet-title { font-family: "Ma Shan Zheng", cursive; font-size: 1.6rem; color: #fff; }
+.sheet-title { font-family: var(--brush); font-size: 1.6rem; color: #fff; }
 .sheet-x { width: 40px; height: 40px; border-radius: 12px; border: 1px solid #2a2a31; background: #141418; color: #fff; font-size: 1.5rem; line-height: 1; }
 .sheet-list { flex: 1; overflow-y: auto; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .sheet-list li.muted { padding: 20px; text-align: center; }
@@ -965,7 +965,7 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .vs-score { display: flex; align-items: center; gap: 10px; }
 .vs-score b { font-size: 1.5rem; color: #8f8f9a; font-variant-numeric: tabular-nums; min-width: 1.4em; text-align: center; }
 .vs-score b.hi { color: #fff; text-shadow: 0 0 12px var(--acc); }
-.vs-score i { font-style: normal; font-family: "Ma Shan Zheng", cursive; font-size: 1.3rem; color: var(--acc); }
+.vs-score i { font-style: normal; font-family: var(--brush); font-size: 1.3rem; color: var(--acc); }
 
 /* ---------- Arasaka special: the dev's clan gets motion ---------- */
 @property --ara-ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
@@ -1025,7 +1025,7 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .topbar { position: absolute; z-index: 30; top: max(10px, env(safe-area-inset-top)); left: 14px; right: 14px; display: flex; justify-content: space-between; align-items: center; pointer-events: none; }
 .topbar > * { pointer-events: auto; }
 .respect-chip { display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px 0 5px; border-radius: 99px; border: 2px solid var(--wood-rim); background: linear-gradient(180deg, #3a2618, #1d130d); color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,0.35); }
-.respect-coin { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-family: "Ma Shan Zheng", cursive; font-size: 1rem; color: #3a2408; background: radial-gradient(circle at 35% 30%, #fff1b8, #e8b84a 55%, #a8741e); box-shadow: inset 0 0 0 2px rgba(58,36,8,0.35); }
+.respect-coin { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-family: var(--brush); font-size: 1rem; color: #3a2408; background: radial-gradient(circle at 35% 30%, #fff1b8, #e8b84a 55%, #a8741e); box-shadow: inset 0 0 0 2px rgba(58,36,8,0.35); }
 .respect-chip b { font-size: 1.05rem; font-variant-numeric: tabular-nums; color: #ffe08a; }
 .respect-chip-word { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #c9b48f; }
 .music-btn { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--wood-rim); background: linear-gradient(180deg, #3a2618, #1d130d); color: #8f8270; }
@@ -1044,7 +1044,7 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   border: 2px solid color-mix(in srgb, var(--c) 70%, #000); box-shadow: 0 0 24px color-mix(in srgb, var(--c) 30%, transparent), 0 5px 0 rgba(0,0,0,0.4); }
 .cp-card.place-1 { max-width: 260px; padding: 26px 16px 18px; border-radius: 130px 130px 22px 22px; box-shadow: 0 0 40px color-mix(in srgb, var(--c) 50%, transparent), 0 5px 0 rgba(0,0,0,0.4); }
 .cp-crown { font-size: 0.62rem; font-weight: 900; letter-spacing: 0.3em; color: #ffe08a; }
-.cp-place { position: absolute; top: 10px; left: 12px; font-family: "Ma Shan Zheng", cursive; font-size: 1.3rem; color: #ffe08a; }
+.cp-place { position: absolute; top: 10px; left: 12px; font-family: var(--brush); font-size: 1.3rem; color: #ffe08a; }
 .cp-card.place-1 .cp-place { top: auto; bottom: 12px; left: 16px; }
 .cp-name { font-size: 1.4rem; color: #fff; text-align: center; line-height: 1.1; }
 .cp-card.place-1 .cp-name { font-size: 2rem; }
@@ -1290,7 +1290,7 @@ body:has(.challenge-sheet) .challenge-note { display: none; }
 .howto-title { font-family: var(--brush); font-size: 1.8rem; line-height: 1.05; color: #fff; }
 .howto-text { margin: 0; color: #e9dcc0; line-height: 1.38; font-size: 0.95rem; }
 .howto-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
-.howto-next { position: relative; overflow: hidden; min-width: 132px; height: 50px; border-radius: 14px; font-size: 1.1rem; }
+.howto-next { position: relative; overflow: hidden; min-width: 120px; height: 50px; border-radius: 14px; font-size: 0.95rem; white-space: nowrap; padding: 0 14px; }
 .howto-next.locked { filter: saturate(0.5) brightness(0.75); cursor: default; }
 .howto-lock { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: rgba(255,255,255,0.22); }
 .howto-next-label { position: relative; }
@@ -1312,3 +1312,5 @@ body:has(.challenge-sheet) .challenge-note { display: none; }
 .knee-ask svg { color: #ffd34d; }
 .knee-ask-title { font-family: var(--brush); font-size: 3.6rem; line-height: 1; text-transform: uppercase; letter-spacing: 0.02em; }
 @keyframes knee-bob { from { transform: translate(-50%, -46%); } to { transform: translate(-50%, -54%); } }
+.howto-btns { display: flex; gap: 8px; align-items: center; }
+.howto-back { width: 50px; height: 50px; padding: 0; border-radius: 14px; display: grid; place-items: center; }
