@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { buildPalace, rngFrom, softTexture } from "../palace/buildPalace";
+import { buildArasaka } from "../palace/arasaka";
 import { ENVS } from "../palace/weather";
 import { CLANS, type Clan } from "../clans";
 
@@ -8,16 +9,17 @@ import { CLANS, type Clan } from "../clans";
 // sleepBuilders moonlit night in the east) and the weather blends across the borders.
 // Units are metres, the same as the palaces, so a character can walk on it later.
 
-export type Site = { clan: Clan; pos: THREE.Vector3; region: string; blurb: string };
+export type Site = { clan: Clan; pos: THREE.Vector3; region: string; blurb: string; lift: number };
 
 const PALACE_SCALE = 0.62;
 const R = 380; // island radius (coast)
 
 // where things are, x = east, z = south
-const SPOTS: Record<string, { x: number; z: number; region: string; blurb: string }> = {
-  arasaka: { x: -10, z: -250, region: "Storm Peaks", blurb: "Thunder never leaves these cliffs." },
-  "soraran-gate": { x: -175, z: 30, region: "Sunset Gate", blurb: "The sun hangs low here and never quite sets." },
-  sleepbuilders: { x: 160, z: 140, region: "Moonlit Hollow", blurb: "Night without end, lit by lanterns and fireflies." },
+// flat = radius of level ground the palace stands on, lift = label height above it
+const SPOTS: Record<string, { x: number; z: number; region: string; blurb: string; flat: number; lift: number; scale: number }> = {
+  arasaka: { x: -10, z: -250, region: "Storm Peaks", blurb: "Thunder never leaves these cliffs.", flat: 84, lift: 70, scale: 0.6 },
+  "soraran-gate": { x: -175, z: 30, region: "Sunset Gate", blurb: "The sun hangs low here and never quite sets.", flat: 44, lift: 30, scale: PALACE_SCALE },
+  sleepbuilders: { x: 160, z: 140, region: "Moonlit Hollow", blurb: "Night without end, lit by lanterns and fireflies.", flat: 44, lift: 30, scale: PALACE_SCALE },
 };
 export const CROSSROADS = new THREE.Vector3(0, 0, -20);
 
@@ -101,7 +103,7 @@ export function heightAt(x: number, z: number, road = roadDist(x, z)) {
   // hills behind each palace
   h += Math.max(0, noise2(x * 0.7 - 30, z * 0.7)) * 26 * smooth(90, 160, s[0]);
   // flat ground for palaces, the crossroads and the roads
-  h = THREE.MathUtils.lerp(h, 0, smooth(70, 44, s[0]));
+  ids.forEach((id, i) => (h = THREE.MathUtils.lerp(h, 0, smooth(SPOTS[id].flat + 26, SPOTS[id].flat, d[i]))));
   h = THREE.MathUtils.lerp(h, 0.5, smooth(48, 28, dc));
   h = THREE.MathUtils.lerp(h, Math.min(h, 1.2), smooth(16, 6, road));
   // cliffs down to the cloud sea
@@ -286,13 +288,13 @@ export function buildWorld(scene: THREE.Scene) {
   for (const clan of CLANS) {
     const sp = SPOTS[clan.id];
     const env = ENVS[clan.weather];
-    const { root: palace } = buildPalace(clan.name, env, clan.palace, { bare: true });
-    palace.scale.setScalar(PALACE_SCALE);
+    const { root: palace } = clan.id === "arasaka" ? buildArasaka(env, { bare: true }) : buildPalace(clan.name, env, clan.palace, { bare: true });
+    palace.scale.setScalar(sp.scale);
     palace.position.set(sp.x, 0, sp.z);
     // face the crossroads (the palace gate is at +z)
     palace.rotation.y = Math.atan2(CROSSROADS.x - sp.x, CROSSROADS.z - sp.z);
     // colour it with its own weather
-    const t = TINT[clan.id].clone().lerp(new THREE.Color(0xffffff), 0.25);
+    const t = TINT[clan.id].clone().lerp(new THREE.Color(0xffffff), clan.id === "arasaka" ? 0.7 : 0.25); // Arasaka is already dark
     const seen = new Set<THREE.Material>();
     palace.traverse((o) => {
       const m = (o as THREE.Mesh).material as THREE.Material | undefined;
@@ -301,7 +303,7 @@ export function buildWorld(scene: THREE.Scene) {
       if ("color" in m && m.type !== "LineBasicMaterial") (m as THREE.MeshToonMaterial).color.multiply(t);
     });
     root.add(palace);
-    sites.push({ clan, pos: new THREE.Vector3(sp.x, 0, sp.z), region: sp.region, blurb: sp.blurb });
+    sites.push({ clan, pos: new THREE.Vector3(sp.x, 0, sp.z), region: sp.region, blurb: sp.blurb, lift: sp.lift });
   }
 
   /* trees, karst pillars and floating rocks */
@@ -344,7 +346,7 @@ export function buildWorld(scene: THREE.Scene) {
     const a = rand() * Math.PI * 2, r = 60 + rand() * (R - 90);
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     const { w, d } = weights(x, z);
-    if (Math.min(...d) < 85 || roadDist(x, z) < 22 || Math.hypot(x - CROSSROADS.x, z - CROSSROADS.z) < 60) continue;
+    if (ids.some((id, k) => d[k] < SPOTS[id].flat + 40) || roadDist(x, z) < 22 || Math.hypot(x - CROSSROADS.x, z - CROSSROADS.z) < 60) continue;
     if (rand() < w[1] * 0.7) continue; // fewer in the gentle sunset land
     if (pillars.some((o) => o.distanceTo(new THREE.Vector2(x, z)) < 26)) continue;
     // keep the view from the crossroads side of each palace clear
@@ -397,7 +399,7 @@ export function buildWorld(scene: THREE.Scene) {
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (Math.hypot(x - CROSSROADS.x, z - CROSSROADS.z) < 34 || roadDist(x, z) < 9) continue;
     const { w, d } = weights(x, z);
-    if (Math.min(...d) < 52) continue;
+    if (ids.some((id, k) => d[k] < SPOTS[id].flat + 8)) continue;
     if (pillars.some((o) => Math.hypot(o.x - x, o.y - z) < 14)) continue;
     const y = heightAt(x, z);
     if (y > 44 || y < -2) continue;
@@ -564,7 +566,8 @@ export function buildWorld(scene: THREE.Scene) {
 
   // invisible hit areas for tapping a palace
   const hits: THREE.Mesh[] = sites.map((s) => {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(42, 42, 40, 12), new THREE.MeshBasicMaterial({ visible: false }));
+    const r = SPOTS[s.clan.id].flat;
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 40, 12), new THREE.MeshBasicMaterial({ visible: false }));
     m.position.copy(s.pos).setY(20);
     m.userData.clan = s.clan.id;
     root.add(m);

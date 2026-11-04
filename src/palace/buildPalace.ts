@@ -59,7 +59,7 @@ export function styleFor(clan: string): PalaceStyle {
 
 /* ---------- painted textures ---------- */
 
-const css = (n: number, k = 1) => {
+export const css = (n: number, k = 1) => {
   const c = new THREE.Color(n);
   c.r = Math.min(1, c.r * k);
   c.g = Math.min(1, c.g * k);
@@ -67,7 +67,7 @@ const css = (n: number, k = 1) => {
   return "#" + c.getHexString();
 };
 
-function canvasTex(w: number, h: number, draw: (x: CanvasRenderingContext2D, w: number, h: number) => void) {
+export function canvasTex(w: number, h: number, draw: (x: CanvasRenderingContext2D, w: number, h: number) => void) {
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
@@ -112,7 +112,7 @@ function wallTexture(wall: number) {
 }
 
 // Roof tiles: rows of round tiles running down the slope, darker eave with tile ends.
-function roofTexture(roof: number) {
+export function roofTexture(roof: number) {
   const t = canvasTex(128, 128, (x, w, h) => {
     x.fillStyle = css(roof);
     x.fillRect(0, 0, w, h);
@@ -134,7 +134,7 @@ function roofTexture(roof: number) {
   return t;
 }
 
-function pavingTexture() {
+export function pavingTexture() {
   return canvasTex(128, 128, (x, w, h) => {
     x.fillStyle = "#ddd7c8";
     x.fillRect(0, 0, w, h);
@@ -150,7 +150,7 @@ function pavingTexture() {
 /* ---------- materials ---------- */
 
 let ramp: THREE.DataTexture | null = null;
-function toonRamp() {
+export function toonRamp() {
   if (ramp) return ramp;
   const d = new Uint8Array([95, 95, 95, 255, 180, 180, 180, 255, 255, 255, 255, 255]);
   ramp = new THREE.DataTexture(d, 3, 1, THREE.RGBAFormat);
@@ -158,10 +158,10 @@ function toonRamp() {
   ramp.needsUpdate = true;
   return ramp;
 }
-const toon = (color: number, map?: THREE.Texture, extra: Partial<THREE.MeshToonMaterialParameters> = {}) =>
+export const toon = (color: number, map?: THREE.Texture, extra: Partial<THREE.MeshToonMaterialParameters> = {}) =>
   new THREE.MeshToonMaterial({ color: map ? 0xffffff : color, gradientMap: toonRamp(), ...(map ? { map } : {}), ...extra });
 
-function materials(s: PalaceStyle, env: Env) {
+export function materials(s: PalaceStyle, env: Env) {
   return {
     wall: toon(0, wallTexture(s.wall)),
     wallPlain: toon(s.wall),
@@ -181,11 +181,11 @@ function materials(s: PalaceStyle, env: Env) {
     rock: new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonRamp() }),
   };
 }
-type Mats = ReturnType<typeof materials>;
+export type Mats = ReturnType<typeof materials>;
 
 /* ---------- merging builder ---------- */
 
-class Builder {
+export class Builder {
   private parts = new Map<THREE.Material, THREE.BufferGeometry[]>();
   private lines: THREE.BufferGeometry[] = [];
   add(geo: THREE.BufferGeometry, mat: THREE.Material, m: THREE.Matrix4, outline: boolean) {
@@ -211,14 +211,14 @@ class Builder {
   }
 }
 
-type Ctx = { b: Builder; T: THREE.Matrix4; m: Mats };
-const M = (x = 0, y = 0, z = 0, ry = 0, sx = 1, sy = 1, sz = 1) =>
+export type Ctx = { b: Builder; T: THREE.Matrix4; m: Mats };
+export const M = (x = 0, y = 0, z = 0, ry = 0, sx = 1, sy = 1, sz = 1) =>
   new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(UP, ry), new THREE.Vector3(sx, sy, sz));
-const put = (c: Ctx, geo: THREE.BufferGeometry, mat: THREE.Material, local: THREE.Matrix4, outline = true) =>
+export const put = (c: Ctx, geo: THREE.BufferGeometry, mat: THREE.Material, local: THREE.Matrix4, outline = true) =>
   c.b.add(geo, mat, c.T.clone().multiply(local), outline);
-const sub = (c: Ctx, local: THREE.Matrix4): Ctx => ({ ...c, T: c.T.clone().multiply(local) });
+export const sub = (c: Ctx, local: THREE.Matrix4): Ctx => ({ ...c, T: c.T.clone().multiply(local) });
 
-function box(c: Ctx, w: number, h: number, d: number, mat: THREE.Material, x = 0, y = 0, z = 0, ry = 0, outline = true) {
+export function box(c: Ctx, w: number, h: number, d: number, mat: THREE.Material, x = 0, y = 0, z = 0, ry = 0, outline = true) {
   put(c, new THREE.BoxGeometry(w, h, d), mat, M(x, y + h / 2, z, ry), outline);
 }
 
@@ -235,14 +235,14 @@ function wallBox(c: Ctx, w: number, h: number, d: number, x = 0, y = 0, z = 0) {
 }
 
 // Steps rising toward -z, starting at the front edge z.
-function stairs(c: Ctx, w: number, totalH: number, depth: number, x: number, y: number, z: number) {
+export function stairs(c: Ctx, w: number, totalH: number, depth: number, x: number, y: number, z: number) {
   const n = Math.max(2, Math.round(totalH / 0.3));
   for (let k = 0; k < n; k++) box(c, w, ((k + 1) * totalH) / n, depth / n, k % 2 ? c.m.marbleShade : c.m.marble, x, y, z - (k + 0.5) * (depth / n), 0, k === 0 || k === n - 1);
   for (const sx of [-1, 1]) box(c, 0.5, totalH + 0.5, depth, c.m.marbleShade, x + sx * (w / 2 + 0.25), y, z - depth / 2);
 }
 
 // A beam from a to b (rails, bridge decks).
-function beam(c: Ctx, a: THREE.Vector3, b: THREE.Vector3, thick: number, tall: number, mat: THREE.Material, outline = true) {
+export function beam(c: Ctx, a: THREE.Vector3, b: THREE.Vector3, thick: number, tall: number, mat: THREE.Material, outline = true) {
   const dir = b.clone().sub(a);
   const len = dir.length();
   const m = new THREE.Matrix4().compose(a.clone().add(b).multiplyScalar(0.5), new THREE.Quaternion().setFromUnitVectors(X, dir.normalize()), new THREE.Vector3(1, 1, 1));
@@ -250,7 +250,7 @@ function beam(c: Ctx, a: THREE.Vector3, b: THREE.Vector3, thick: number, tall: n
 }
 
 // Balustrade along a path of points: posts, a top rail and a lower rail.
-function railing(c: Ctx, pts: THREE.Vector3[], h: number, mat: THREE.Material, closed = false) {
+export function railing(c: Ctx, pts: THREE.Vector3[], h: number, mat: THREE.Material, closed = false) {
   const path = closed ? [...pts, pts[0]] : pts;
   for (let i = 0; i < path.length - 1; i++) {
     const a = path[i], b = path[i + 1];
@@ -265,7 +265,7 @@ function railing(c: Ctx, pts: THREE.Vector3[], h: number, mat: THREE.Material, c
   }
   if (!closed) { const p = path[path.length - 1]; box(c, 0.22, h + 0.15, 0.22, mat, p.x, p.y, p.z, 0, false); }
 }
-const rect = (hw: number, hd: number, y: number) => [
+export const rect = (hw: number, hd: number, y: number) => [
   new THREE.Vector3(-hw, y, hd), new THREE.Vector3(hw, y, hd), new THREE.Vector3(hw, y, -hd), new THREE.Vector3(-hw, y, -hd),
 ];
 
@@ -273,7 +273,7 @@ const rect = (hw: number, hd: number, y: number) => [
 
 // Curved roof from faces: each face rises from an eave edge to a ridge edge,
 // slopes are concave and the corners sweep up. UVs run the tile texture down the slope.
-function roofFromFaces(faces: [THREE.Vector3, THREE.Vector3, THREE.Vector3, THREE.Vector3][], h: number, lift: number) {
+export function roofFromFaces(faces: [THREE.Vector3, THREE.Vector3, THREE.Vector3, THREE.Vector3][], h: number, lift: number) {
   const N = 10, R = 6;
   const pos: number[] = [], uvs: number[] = [], idx: number[] = [];
   for (const [a, b, top0, top1] of faces) {
@@ -331,7 +331,7 @@ function roofPoly(c: Ctx, n: number, radius: number, y: number, h: number, lift 
   return h;
 }
 
-function finial(c: Ctx, y: number, size = 1) {
+export function finial(c: Ctx, y: number, size = 1) {
   put(c, new THREE.SphereGeometry(0.45 * size, 8, 6), c.m.trim, M(0, y + 0.3 * size, 0), false);
   put(c, new THREE.ConeGeometry(0.3 * size, 2.4 * size, 6), c.m.trim, M(0, y + 1.6 * size, 0), true);
 }
@@ -406,7 +406,7 @@ function pavilion(c: Ctx, r = 3.2, n = 6) {
   finial(c, 0.9 + 3.85 + h, 0.8);
 }
 
-function lantern(c: Ctx, x: number, z: number) {
+export function lantern(c: Ctx, x: number, z: number) {
   const s = sub(c, M(x, 0, z));
   box(s, 0.9, 0.5, 0.9, s.m.marbleShade);
   box(s, 0.35, 1.3, 0.35, s.m.marble, 0, 0.5);
@@ -432,9 +432,9 @@ function pool(c: Ctx, rand: () => number, x: number, z: number, w: number, d: nu
 
 /* ---------- nature ---------- */
 
-type TreeKind = "maple" | "green" | "pine" | "bamboo";
+export type TreeKind = "maple" | "green" | "pine" | "bamboo";
 
-function trees(rand: () => number, spots: { p: THREE.Vector3; kind: TreeKind }[]) {
+export function trees(rand: () => number, spots: { p: THREE.Vector3; kind: TreeKind }[]) {
   const g = new THREE.Group();
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
   const inst = (geo: THREE.BufferGeometry, color: number, max: number) => {
@@ -505,7 +505,7 @@ function peaks(c: Ctx, rand: () => number) {
 }
 
 // Far mountain silhouettes, like the paler layers of an ink painting.
-function mountains(rand: () => number, tint: number) {
+export function mountains(rand: () => number, tint: number) {
   const g = new THREE.Group();
   const layers = [
     { r: 440, base: 90, amp: 160, low: 0x9fb4c8, mid: 0xc4d2df, snow: 0xf7f9fc },

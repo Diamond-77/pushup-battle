@@ -73,8 +73,9 @@ export default function WorldMap({ onBack }: { onBack?: () => void }) {
       const dir = new THREE.Vector3(CROSSROADS.x - s.pos.x, 0, CROSSROADS.z - s.pos.z).normalize();
       const narrow = camera.aspect < 0.8;
       // aim a little in front of the palace so it sits above the info card
-      const aim = s.pos.clone().addScaledVector(dir, narrow ? 45 : 20).setY(4);
-      flyTo(aim, aim.clone().addScaledVector(dir, narrow ? 140 : 120).setY(narrow ? 125 : 95));
+      const k = s.lift > 40 ? 1.7 : 1; // bigger empires need a wider shot
+      const aim = s.pos.clone().addScaledVector(dir, (narrow ? 45 : 20) * k).setY(4 * k);
+      flyTo(aim, aim.clone().addScaledVector(dir, (narrow ? 140 : 120) * k).setY((narrow ? 125 : 95) * k));
     };
 
     const resize = () => {
@@ -156,7 +157,7 @@ export default function WorldMap({ onBack }: { onBack?: () => void }) {
         if (fly.t >= 1) fly = null;
       }
       controls.update();
-      for (const s of world.sites) place(labelRefs.current[s.clan.id], s.pos, 30);
+      for (const s of world.sites) place(labelRefs.current[s.clan.id], s.pos, s.lift);
       place(crossRef.current, CROSSROADS, 22);
       renderer.render(scene, camera);
     });

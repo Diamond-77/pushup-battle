@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { buildArena, buildPalace, skyTexture, softTexture, type ArenaKind, type PalaceStyle } from "./buildPalace";
 import { ENVS } from "./weather";
+import { buildArasaka } from "./arasaka";
 import type { Weather } from "../clans";
 import { PALACE } from "../config";
 import { thunder } from "../sound";
@@ -32,7 +33,11 @@ export default function Palace3D({ seed, weather = "day", style, className, aren
     scene.fog = new THREE.Fog(env.fog, env.fogNear, env.fogFar);
 
     const camera = new THREE.PerspectiveCamera(42, 1, 1, 1200);
+    // the Arasaka citadel is much bigger and taller than the other palaces
+    const big = !arena && seed === "Arasaka";
+    if (big) scene.fog = new THREE.Fog(env.fog, 170, 700);
     if (arena) camera.position.set(26, 30, 72);
+    else if (big) camera.position.set(30, 95, 215);
     else camera.position.set(0, 58, 122);
     camera.position.multiplyScalar(zoom);
 
@@ -43,14 +48,14 @@ export default function Palace3D({ seed, weather = "day", style, className, aren
     sun.castShadow = true;
     sun.shadow.mapSize.set(PALACE.SHADOW_SIZE, PALACE.SHADOW_SIZE);
     const sc = sun.shadow.camera;
-    sc.left = sc.bottom = -100;
-    sc.right = sc.top = 100;
+    sc.left = sc.bottom = big ? -150 : -100;
+    sc.right = sc.top = big ? 150 : 100;
     sc.near = 10;
     sc.far = 400;
     scene.add(sun);
 
     // a battlefield (mode select) or a clan palace
-    const { root, tick } = arena ? buildArena(arena, env) : buildPalace(seed, env, style);
+    const { root, tick } = arena ? buildArena(arena, env) : seed === "Arasaka" ? buildArasaka(env) : buildPalace(seed, env, style);
     scene.add(root);
 
     // sky extras
@@ -125,11 +130,11 @@ export default function Palace3D({ seed, weather = "day", style, className, aren
     };
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(0, arena ? 3 : 6, arena ? -2 : -2);
+    controls.target.set(0, arena ? 3 : big ? 22 : 6, big ? -25 : -2);
     controls.enableDamping = true;
     controls.enablePan = false;
     controls.minDistance = arena ? 22 : PALACE.MIN_DISTANCE;
-    controls.maxDistance = (arena ? 90 : PALACE.MAX_DISTANCE) * zoom;
+    controls.maxDistance = (arena ? 90 : big ? 340 : PALACE.MAX_DISTANCE) * zoom;
     controls.minPolarAngle = 0.35;
     controls.maxPolarAngle = 1.38;
     controls.autoRotate = true;
