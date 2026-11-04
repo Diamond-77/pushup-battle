@@ -1280,3 +1280,30 @@ body:has(.challenge-sheet) .challenge-note { display: none; }
   .banner-col .clan-banner { width: 52px; }
   .banner-col .clan-glyph svg { width: 26px; height: 26px; }
 }
+
+/* ---------- How to play (3D demo) ---------- */
+.howto { position: absolute; inset: 0; z-index: 60; background: #1b1a1f; }
+.howto-screen { position: absolute; inset: 0; }
+.howto .view { pointer-events: none; }
+.howto-panel { position: absolute; z-index: 32; left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.howto-panel.slim .howto-text { font-size: 0.86rem; }
+.howto-title { font-family: var(--brush); font-size: 1.8rem; line-height: 1.05; color: #fff; }
+.howto-text { margin: 0; color: #e9dcc0; line-height: 1.38; font-size: 0.95rem; }
+.howto-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
+.howto-next { position: relative; overflow: hidden; min-width: 132px; height: 50px; border-radius: 14px; font-size: 1.1rem; }
+.howto-next.locked { filter: saturate(0.5) brightness(0.75); cursor: default; }
+.howto-lock { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: rgba(255,255,255,0.22); }
+.howto-next-label { position: relative; }
+.howto-skip { position: absolute; z-index: 33; top: max(12px, env(safe-area-inset-top)); right: 14px; padding: 7px 14px; border-radius: 99px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.45); color: #fff; font-weight: 700; font-size: 0.85rem; }
+.howto-dist { position: absolute; z-index: 6; transform: translate(-50%, -160%); padding: 6px 14px; border-radius: 99px; background: rgba(20,12,8,0.82); border: 2px solid #ff8a2a; color: #fff; font-weight: 800; white-space: nowrap; animation: pop 0.4s ease-out; }
+.howto-dist small { font-weight: 600; color: #ffd2a8; }
+.howto-check { position: absolute; z-index: 6; top: max(22px, env(safe-area-inset-top)); left: 22px; width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: var(--me); color: #fff; font-size: 2rem; font-weight: 900; box-shadow: 0 0 24px rgba(63,191,138,0.8); animation: pop 0.4s ease-out; }
+.howto-reps { position: absolute; z-index: 6; top: max(22px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; color: #fff; text-shadow: 0 3px 12px rgba(0,0,0,0.6); }
+.howto-reps b { font-family: var(--brush); font-weight: 400; font-size: 4.2rem; line-height: 1; }
+.howto-reps span { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+.howto-hint { position: absolute; z-index: 6; left: 50%; top: calc(max(12px, env(safe-area-inset-top)) + 150px); transform: translateX(-50%); padding: 8px 16px; border-radius: 99px; background: rgba(10,40,28,0.78); border: 2px solid #9bf0c8; color: #dfffee; font-weight: 800; white-space: nowrap; animation: pulse-hint 1s ease-in-out infinite alternate; }
+@keyframes pulse-hint { from { box-shadow: 0 0 0 rgba(155,240,200,0); } to { box-shadow: 0 0 22px rgba(155,240,200,0.7); } }
+.howto-result { z-index: 31; padding-bottom: 180px; }
+.howto .switch-warning { top: max(16px, env(safe-area-inset-top)); }
+.topbar .howto-btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 99px; background: var(--wood); border: 2px solid var(--wood-rim); color: #f3e6c8; font-weight: 700; font-size: 0.8rem; white-space: nowrap; }
+.topbar .howto-btn i { font-style: normal; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--gold); color: #24140d; font-weight: 900; font-size: 0.75rem; }
