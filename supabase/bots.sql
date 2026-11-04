@@ -4,22 +4,26 @@
 -- a name and picture). This file marks them as bots. When nobody else is searching, a player is
 -- matched with a bot. The server decides how many push-ups the bot does, so nobody can fake it.
 --
--- Tiers: weak, strong, boss. Testers (your own account) always get a bot quickly, of a set tier.
+-- Tiers: weak, fair (a decent fighter, Brawl only), strong, boss, ultra (smokes everyone, every mode). Testers (your own account) always get a bot quickly, of a set tier.
 
 -- 1. Which accounts are bots (hidden: no one can read these tables from the app)
 create table if not exists public.bot_accounts (
   user_id uuid primary key references public.profiles(id) on delete cascade,
-  tier text not null check (tier in ('weak', 'strong', 'boss'))
+  tier text not null check (tier in ('weak', 'fair', 'strong', 'boss', 'ultra'))
 );
 alter table public.bot_accounts enable row level security;
+alter table public.bot_accounts drop constraint if exists bot_accounts_tier_check;
+alter table public.bot_accounts add constraint bot_accounts_tier_check check (tier in ('weak', 'fair', 'strong', 'boss', 'ultra'));
 -- while you're signed in as a bot (e.g. changing its picture) it's "online" and won't be picked
 alter table public.bot_accounts add column if not exists online_until timestamptz;
 
 -- accounts that always get a bot match, and which tier
 create table if not exists public.bot_testers (
   user_id uuid primary key references public.profiles(id) on delete cascade,
-  tier text not null check (tier in ('weak', 'strong', 'boss'))
+  tier text not null check (tier in ('weak', 'fair', 'strong', 'boss', 'ultra'))
 );
+alter table public.bot_testers drop constraint if exists bot_testers_tier_check;
+alter table public.bot_testers add constraint bot_testers_tier_check check (tier in ('weak', 'fair', 'strong', 'boss', 'ultra'));
 alter table public.bot_testers enable row level security;
 
 -- the bot's count for each bot battle, kept here until the battle ends
@@ -36,7 +40,7 @@ create or replace function public._bot_total(p_tier text, p_mode text)
 returns integer
 as $fn$
 declare
-  pace numeric := case p_tier when 'weak' then 23 when 'strong' then 31 else 53 end; -- first minute
+  pace numeric := case p_tier when 'weak' then 23 when 'fair' then 27 when 'strong' then 31 when 'ultra' then 62 else 53 end; -- first minute
   mins integer := public.mode_seconds(p_mode) / 60;
   total numeric := 0;
   i integer;
@@ -46,6 +50,8 @@ begin
   end loop;
   -- 82% to 115% of the pace; the boss has fewer off days (95% to 118%)
   if p_tier = 'boss' then return round(total * (0.95 + random() * 0.23))::integer; end if;
+  if p_tier = 'ultra' then return round(total * (1.0 + random() * 0.2))::integer; end if; -- no off days
+  if p_tier = 'fair' then return round(total * (0.9 + random() * 0.22))::integer; end if; -- steady
   return greatest(3, round(total * (0.82 + random() * 0.33)))::integer;
 end;
 $fn$ language plpgsql;
@@ -115,7 +121,7 @@ begin
     for r in select * from public._bot_free() loop
       select coalesce(sum(delta), 0) into earned from public.respect_log
         where user_id = r.user_id and reason = 'training' and delta > 0 and created_at > now() - interval '24 hours';
-      gain := least(50 - earned, case r.tier when 'weak' then 2 when 'strong' then 3 else 4 end);
+      gain := least(50 - earned, case r.tier when 'weak' then 2 when 'fair' then 3 when 'strong' then 3 else 4 end);
       if gain > 0 then perform public._add_respect(r.user_id, gain, 'training', null); end if;
     end loop;
 
@@ -127,6 +133,7 @@ begin
     select * into b from public._bot_free() f where f.respect between 5 and 299 and f.user_id <> a.user_id order by random() limit 1;
     continue when b.user_id is null;
     md := case
+      when 'fair' in (a.tier, b.tier) then 'brawl'
       when a.respect >= 120 and b.respect >= 120 and random() < 0.5 then 'rank'
       when a.respect >= 10 and b.respect >= 10 and random() < 0.6 then 'classic'
       else 'brawl' end;
@@ -168,6 +175,7 @@ begin
   select p.id, p.username, p.avatar_url, p.legendary, p.title, p.respect, b.tier into bot
     from public.bot_accounts b join public.profiles p on p.id = b.user_id where b.user_id = p_bot for update of p;
   if bot.id is null then raise exception 'not a bot'; end if;
+  if bot.tier = 'fair' and p_mode <> 'brawl' then raise exception '% only fights Brawl', bot.username; end if;
   if (select respect from public.profiles where id = p_me) < bet then raise exception 'You need % Respect for this mode. Train to earn it back.', bet; end if;
   -- a bot that's out of Respect sits out until it has trained back (see _bot_regen)
   if bot.respect < bet then raise exception '% doesn''t have enough Respect right now', bot.username; end if;
@@ -210,12 +218,16 @@ begin
     if random() < 0.25 then
       want := case want when 'weak' then 'strong' when 'boss' then 'strong' else (case when random() < 0.5 then 'weak' else 'boss' end) end;
     end if;
+    -- the fair one takes many Brawls; the ultra boss turns up anywhere, more often at the top
+    if p_mode = 'brawl' and want in ('weak', 'strong') and random() < 0.4 then want := 'fair'; end if;
+    if random() < (case when want = 'boss' then 0.45 else 0.12 end) then want := 'ultra'; end if;
   end if;
   perform public._bot_regen();
   -- skip bots you're signed in as, bots already in a battle (a real player can't be in two), and broke bots
   select b.user_id, p.username, p.avatar_url, p.legendary, p.title, p.respect into bot
     from public.bot_accounts b join public.profiles p on p.id = b.user_id
    where (b.online_until is null or b.online_until < now()) and p.respect >= bet
+     and (b.tier <> 'fair' or p_mode = 'brawl')
      and not exists (select 1 from public.matches x where x.settled_at is null and b.user_id in (x.player_a, x.player_b)
                      and x.started_at > now() - interval '10 minutes')
    order by (b.tier = want) desc, random() limit 1;
@@ -359,7 +371,8 @@ begin
   bot := case when c.proposer = c.from_user then c.to_user else c.from_user end;
   human := c.proposer;
   perform 1 from public.profiles where id in (c.from_user, c.to_user) for update;
-  if (select respect from public.profiles where id = human) < 4 then
+  if (select respect from public.profiles where id = human) < 4
+     or (c.mode <> 'brawl' and exists (select 1 from public.bot_accounts where user_id = bot and tier = 'fair')) then
     perform public._refund_challenge(c);
     update public.challenges set status = 'declined', updated_at = now() where id = p_id;
     return;
@@ -484,4 +497,11 @@ on conflict (user_id) do update set tier = excluded.tier;
 -- your account: always matched with a bot, the strong one
 insert into public.bot_testers (user_id, tier)
 select id, 'strong' from auth.users where email = 'YOUR_EMAIL'
+on conflict (user_id) do update set tier = excluded.tier;
+-- the newer bots: a fair Brawl-only fighter and the ultra boss
+insert into public.bot_accounts (user_id, tier)
+select id, 'fair' from auth.users where email = 'FAIR_BOT_EMAIL'
+on conflict (user_id) do update set tier = excluded.tier;
+insert into public.bot_accounts (user_id, tier)
+select id, 'ultra' from auth.users where email = 'ULTRA_BOT_EMAIL'
 on conflict (user_id) do update set tier = excluded.tier;
