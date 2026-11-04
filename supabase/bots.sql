@@ -62,8 +62,97 @@ begin
   loop
     perform public._add_respect(r.id, 50 - r.respect, 'training', null);
   end loop;
+  perform public._bot_life();
 end;
 $fn$ language plpgsql security definer set search_path = public;
+
+-- Bot life: while nobody is watching, bots train and battle each other, so there's always
+-- someone with enough Respect to fight (even in Rank). Every 20 minutes of real time:
+--   * each free bot trains a little (same 50-a-day training cap as players),
+--   * often, two free bots battle: real match rows, so they get a real history and push-up totals.
+-- It catches up on missed time (up to 2 hours) the next time anyone opens the lobby.
+create table if not exists public.bot_life (id integer primary key, last_run timestamptz not null);
+alter table public.bot_life enable row level security;
+insert into public.bot_life (id, last_run) values (1, now()) on conflict (id) do nothing;
+
+create or replace function public._bot_free()
+returns table (user_id uuid, tier text, respect integer)
+as $fn$
+  select b.user_id, b.tier, p.respect
+  from public.bot_accounts b join public.profiles p on p.id = b.user_id
+  where (b.online_until is null or b.online_until < now())
+    and not exists (select 1 from public.matches x where x.settled_at is null and b.user_id in (x.player_a, x.player_b)
+                    and x.started_at > now() - interval '10 minutes')
+$fn$ language sql stable security definer set search_path = public;
+
+create or replace function public._bot_life()
+returns void
+as $fn$
+declare
+  st timestamptz;
+  slots integer;
+  r record;
+  a record;
+  b record;
+  md text;
+  bet integer;
+  ra integer;
+  rb integer;
+  mid uuid;
+  earned integer;
+  gain integer;
+  win uuid;
+begin
+  select last_run into st from public.bot_life where id = 1 for update skip locked;
+  if st is null then return; end if; -- someone else is running it right now
+  slots := floor(extract(epoch from now() - st) / 1200)::integer;
+  if slots < 1 then return; end if;
+  update public.bot_life set last_run = case when slots > 6 then now() else st + make_interval(secs => slots * 1200) end where id = 1;
+  slots := least(slots, 6);
+
+  for i in 1..slots loop
+    -- training
+    for r in select * from public._bot_free() loop
+      select coalesce(sum(delta), 0) into earned from public.respect_log
+        where user_id = r.user_id and reason = 'training' and delta > 0 and created_at > now() - interval '24 hours';
+      gain := least(50 - earned, case r.tier when 'weak' then 2 when 'strong' then 3 else 4 end);
+      if gain > 0 then perform public._add_respect(r.user_id, gain, 'training', null); end if;
+    end loop;
+
+    -- a battle between two bots, most of the time
+    continue when random() > 0.65;
+    -- a bot sitting on 300+ rests, so one bot can't drain all the others
+    select * into a from public._bot_free() f where f.respect between 5 and 299 order by random() limit 1;
+    continue when a.user_id is null;
+    select * into b from public._bot_free() f where f.respect between 5 and 299 and f.user_id <> a.user_id order by random() limit 1;
+    continue when b.user_id is null;
+    md := case
+      when a.respect >= 120 and b.respect >= 120 and random() < 0.5 then 'rank'
+      when a.respect >= 10 and b.respect >= 10 and random() < 0.6 then 'classic'
+      else 'brawl' end;
+    bet := public.mode_bet(md);
+    ra := public._bot_total(a.tier, md);
+    rb := public._bot_total(b.tier, md);
+    mid := gen_random_uuid();
+    insert into public.matches (id, mode, player_a, player_b, bet, a_paid, b_paid, started_at)
+      values (mid, md, a.user_id, b.user_id, bet, true, true,
+              now() - make_interval(secs => public.mode_seconds(md) + 30 + (random() * 900)::integer));
+    perform public._add_respect(a.user_id, -bet, 'bet ' || md, mid);
+    perform public._add_respect(b.user_id, -bet, 'bet ' || md, mid);
+    win := case when ra > rb then a.user_id when rb > ra then b.user_id end;
+    if win is null then
+      perform public._add_respect(a.user_id, bet, 'draw refund', mid);
+      perform public._add_respect(b.user_id, bet, 'draw refund', mid);
+    else
+      perform public._add_respect(win, bet * 2, 'won ' || md, mid);
+    end if;
+    -- reps go in with an update, so the push-up totals trigger counts them
+    update public.matches set a_reps = ra, b_reps = rb, settled_at = now(), winner = win where id = mid;
+  end loop;
+end;
+$fn$ language plpgsql security definer set search_path = public;
+revoke all on function public._bot_life() from public, anon, authenticated;
+revoke all on function public._bot_free() from public, anon, authenticated;
 
 -- Makes the battle against a chosen bot: pays both bets and decides the bot's count.
 create or replace function public._create_bot_match(p_me uuid, p_bot uuid, p_mode text)
