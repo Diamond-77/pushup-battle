@@ -8,6 +8,13 @@ export const SHOULDER_UP = 0.9; // back above 90% of the top height = "up", rep 
 export const TOP_DECAY = 0.998; // per frame, lets the remembered top height slowly adapt if you move
 export const SMOOTH_FRAMES = 4; // moving-average window for the shoulder height
 export const MIN_VISIBILITY = 0.5; // a shoulder and a wrist must be at least this visible to count
+// Knee check in battles (fair play): every so often the game asks for straight legs ("Knees up")
+// and stops counting until it sees them. Legs bent past KNEE_BENT_DEG for a while also stop counting.
+export const KNEE_CHECK_EVERY_MS = [15000, 25000] as const; // a random gap in this range, so nobody can time it
+export const KNEE_STRAIGHT_DEG = 145; // knee angle that counts as straight legs
+export const KNEE_CHECK_FRAMES = 8; // frames in a row of straight legs to pass a check
+export const KNEE_BENT_DEG = 120; // knee angle that counts as knees on the floor
+export const KNEE_BENT_FRAMES = 12; // frames in a row of bent legs before reps stop counting
 export const KNEE_LIFT = 0.2; // if a knee IS clearly visible at the top, it must be this high above the wrists (fraction of top height). Knees on the floor score ~0. A knee that can't be seen never blocks a rep
 // "Are you in push-up position" gate (rough on purpose, uses loosely tracked hips/legs).
 // Once confirmed, counting only uses the shoulders until you clearly leave the position.
