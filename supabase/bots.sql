@@ -127,10 +127,10 @@ begin
 
     -- a battle between two bots, most of the time
     continue when random() > 0.65;
-    -- a bot sitting on 300+ rests, so one bot can't drain all the others
-    select * into a from public._bot_free() f where f.respect between 5 and 299 order by random() limit 1;
+    -- a bot sitting on 600+ rests, so one bot can't drain all the others
+    select * into a from public._bot_free() f where f.respect between 5 and 599 order by random() limit 1;
     continue when a.user_id is null;
-    select * into b from public._bot_free() f where f.respect between 5 and 299 and f.user_id <> a.user_id order by random() limit 1;
+    select * into b from public._bot_free() f where f.respect between 5 and 599 and f.user_id <> a.user_id order by random() limit 1;
     continue when b.user_id is null;
     md := case
       when 'fair' in (a.tier, b.tier) then 'brawl'
