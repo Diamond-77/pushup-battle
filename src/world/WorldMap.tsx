@@ -7,6 +7,7 @@ import ClanLogo from "../ClanLogo";
 import "./world.css";
 
 const Palace3D = lazy(() => import("../palace/Palace3D"));
+const Explore = lazy(() => import("./Explore"));
 
 const WEATHER_WORD = { storm: "Eternal storm", sunset: "Endless sunset", night: "Moonlit night", day: "Clear day" } as const;
 
@@ -22,10 +23,11 @@ export default function WorldMap({ onBack }: { onBack?: () => void }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [visiting, setVisiting] = useState<string | null>(null);
   const [hint, setHint] = useState(true);
+  const [exploring, setExploring] = useState(false);
 
   useEffect(() => {
-    pausedRef.current = !!visiting;
-  }, [visiting]);
+    pausedRef.current = !!visiting || exploring;
+  }, [visiting, exploring]);
 
   useEffect(() => {
     const host = hostRef.current!;
@@ -242,18 +244,31 @@ export default function WorldMap({ onBack }: { onBack?: () => void }) {
         </nav>
       )}
 
-      {visitClan && (
+      {visitClan && !exploring && (
         <div className="wm-visit">
           <Suspense fallback={null}>
             <Palace3D seed={visitClan.name} weather={visitClan.weather} style={visitClan.palace} />
           </Suspense>
           <header className="wm-top">
             <button className="wm-round" onClick={() => setVisiting(null)} aria-label="Back to the map">‹</button>
+            <ClanLogo clan={visitClan} size={40} />
             <div>
               <div className="wm-title">{visitClan.name}</div>
               <div className="wm-sub">Back to the map</div>
             </div>
           </header>
+          {visitClan.id === "arasaka" && (
+            <div className="wm-explore">
+              <button className="game-btn jade wide" onClick={() => setExploring(true)}>Explore on foot</button>
+            </div>
+          )}
+        </div>
+      )}
+      {exploring && (
+        <div className="wm-visit">
+          <Suspense fallback={null}>
+            <Explore onBack={() => setExploring(false)} />
+          </Suspense>
         </div>
       )}
     </div>

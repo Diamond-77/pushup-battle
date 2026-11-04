@@ -105,7 +105,94 @@ function mats(env: Env) {
   };
 }
 type AMats = ReturnType<typeof mats>;
-type ACtx = Ctx & { m: AMats };
+
+/* ---------- collision map (for walking around) ---------- */
+
+// Boxes are axis-aligned in citadel space. walk = you can stand on its top, and it blocks you from the side
+// if its top is higher than a step; solid = blocks you whenever your body overlaps it in height.
+export type Box = { x0: number; x1: number; z0: number; z1: number; y0: number; y1: number };
+// stairs: height rises from a (low end) to b (high end), across width w
+export type Ramp = { ax: number; az: number; bx: number; bz: number; w: number; ya: number; yb: number };
+export type Door = { pivot: THREE.Group; base: THREE.Quaternion; sign: number; open: number; target: number; at: THREE.Vector3; box: Box };
+export type Collision = { walk: Box[]; solid: Box[]; ramps: Ramp[]; doors: Door[] };
+type ACtx = Ctx & { m: AMats; col: Collision };
+
+const _v = new THREE.Vector3();
+// world-space box of a local box (w, h, d) standing at (x, y, z)
+function aabb(c: ACtx, w: number, h: number, d: number, x: number, y: number, z: number, ry = 0): Box {
+  const m = c.T.clone().multiply(M(x, y, z, ry));
+  const b = { x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity, y0: Infinity, y1: -Infinity };
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) for (const sy of [0, 1]) {
+    _v.set((sx * w) / 2, sy * h, (sz * d) / 2).applyMatrix4(m);
+    b.x0 = Math.min(b.x0, _v.x); b.x1 = Math.max(b.x1, _v.x);
+    b.z0 = Math.min(b.z0, _v.z); b.z1 = Math.max(b.z1, _v.z);
+    b.y0 = Math.min(b.y0, _v.y); b.y1 = Math.max(b.y1, _v.y);
+  }
+  return b;
+}
+const walkBox = (c: ACtx, w: number, h: number, d: number, x = 0, y = 0, z = 0, ry = 0) => c.col.walk.push(aabb(c, w, h, d, x, y, z, ry));
+const solidBox = (c: ACtx, w: number, h: number, d: number, x = 0, y = 0, z = 0, ry = 0) => c.col.solid.push(aabb(c, w, h, d, x, y, z, ry));
+
+// stairs plus their walking slope
+function steps(c: ACtx, w: number, h: number, depth: number, x: number, y: number, z: number) {
+  stairs(c, w, h, depth, x, y, z);
+  const a = new THREE.Vector3(x, y, z + 0.2).applyMatrix4(c.T), b = new THREE.Vector3(x, y + h, z - depth).applyMatrix4(c.T);
+  c.col.ramps.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, w, ya: a.y, yb: b.y });
+}
+
+// a double door that swings inward (toward -z) when someone walks up; dw wide, dh tall, centred at (x, y, z)
+function door(c: ACtx, dw: number, dh: number, x: number, y: number, z: number, mat: THREE.Material, studs = false) {
+  for (const sx of [-1, 1]) {
+    const hinge = c.T.clone().multiply(M(x + sx * (dw / 2), y, z));
+    const pivot = new THREE.Group();
+    hinge.decompose(pivot.position, pivot.quaternion, pivot.scale);
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(dw / 2 - 0.05, dh, 0.18), mat);
+    leaf.position.set((-sx * dw) / 4, dh / 2, 0);
+    pivot.add(leaf);
+    const ink = new THREE.LineSegments(new THREE.EdgesGeometry(leaf.geometry), new THREE.LineBasicMaterial({ color: 0x0d0b0e }));
+    ink.position.copy(leaf.position);
+    pivot.add(ink);
+    if (studs)
+      for (let r = 0; r < 4; r++) for (let k = 0; k < 3; k++) {
+        const st = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 4), c.m.iron);
+        st.position.set((-sx * dw) / 4 + (k - 1) * (dw / 8), dh * (0.2 + r * 0.2), 0.12);
+        pivot.add(st);
+      }
+    c.col.doors.push({
+      pivot, base: pivot.quaternion.clone(), sign: -sx, open: 0, target: 0, // both leaves swing inward
+      at: new THREE.Vector3(x, y + 1, z).applyMatrix4(c.T),
+      box: aabb(c, dw, dh, 0.5, x, y, z),
+    });
+  }
+}
+
+// the Arasaka emblem (hexagon and lightning bolt, same drawing as the clan logo), lit so it shows in the storm
+let emblemTex: THREE.CanvasTexture | null = null;
+function emblem(c: ACtx, size: number, x: number, y: number, z: number, ry = 0) {
+  emblemTex ??= canvasTex(192, 208, (g) => {
+    g.scale(4, 4);
+    g.lineJoin = "round";
+    const hex = new Path2D("M24 1 46 13v26L24 51 2 39V13z");
+    g.fillStyle = "#c8372d";
+    g.fill(hex);
+    g.strokeStyle = "#1b1a1f";
+    g.lineWidth = 2.5;
+    g.stroke(hex);
+    g.strokeStyle = "rgba(255,255,255,0.4)";
+    g.lineWidth = 1.5;
+    g.stroke(new Path2D("M24 6 41 15.5v21L24 46 7 36.5v-21z"));
+    const bolt = new Path2D("M27 9 14 29h9l-4 15 15-22h-9l4-13z");
+    g.fillStyle = "#fff4e6";
+    g.fill(bolt);
+    g.strokeStyle = "#1b1a1f";
+    g.lineWidth = 1.5;
+    g.stroke(bolt);
+  });
+  emblemTex.wrapS = emblemTex.wrapT = THREE.ClampToEdgeWrapping;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size * 1.08), new THREE.MeshBasicMaterial({ map: emblemTex, transparent: true, alphaTest: 0.1, fog: false }));
+  c.T.clone().multiply(M(x, y, z, ry)).decompose(mesh.position, mesh.quaternion, mesh.scale);
+  return mesh;
+}
 
 /* ---------- stonework ---------- */
 
@@ -126,6 +213,7 @@ function stone(c: ACtx, w: number, h: number, d: number, x = 0, y = 0, z = 0, ba
   }
   g.computeVertexNormals();
   put(c, g, c.m.stone, M(x, y + h / 2, z, ry));
+  walkBox(c, w - batter, h, d - batter, x, y, z, ry);
 }
 
 // a defensive wall from a to b (on the ground): battered stone, walkway, merlons on the outer side
@@ -164,7 +252,7 @@ type BOpts = { floors: number; wallH?: number; shrink?: number; veranda?: number
 
 // A multi-storey hall or tower. Returns the height of each floor's walking surface (slab top), and the top.
 export function building(c: ACtx, w: number, d: number, o: BOpts) {
-  const ver = o.veranda ?? 1.3, shrink = o.shrink ?? 0.84, floors: number[] = [];
+  const ver = o.veranda ?? 1.3, shrink = o.shrink ?? 0.84, floors: number[] = [], sizes: { w: number; d: number; h: number }[] = [];
   let y = 0, cw = w, cd = d;
   for (let f = 0; f < o.floors; f++) {
     const H = (o.wallH ?? 4.4) * (f === 0 ? 1.15 : 1);
@@ -172,13 +260,15 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
     // floor slab (the ground floor gets a stone podium with steps)
     if (f === 0) {
       stone(c, sw + 1.6, 1.4, sd + 1.6, 0, y, 0, 0.3);
-      if (o.door !== false) stairs(c, 4.6, 1.4, 2.2, 0, y, sd / 2 + 0.8 + 2.2);
+      if (o.door !== false) steps(c, 4.6, 1.4, 2.2, 0, y, sd / 2 + 0.8 + 2.2);
       y += 1.4;
     } else {
       box(c, sw, 0.6, sd, c.m.wood, 0, y, 0);
+      walkBox(c, sw, 0.6, sd, 0, y, 0);
       y += 0.6;
     }
     floors.push(y);
+    sizes.push({ w: cw, d: cd, h: H });
     // wall shell: four thin walls, the front one with a doorway on the ground floor
     const T = 0.4;
     wallPanel(c, cw, H, 0, y, -cd / 2 + T / 2);
@@ -189,6 +279,8 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
       wallPanel(c, side, H, -cw / 2 + side / 2, y, cd / 2 - T / 2);
       wallPanel(c, side, H, cw / 2 - side / 2, y, cd / 2 - T / 2);
       box(c, dw, H - dh, T, c.m.wallPlain, 0, y + dh, cd / 2 - T / 2);
+      solidBox(c, dw, H - dh, T, 0, y + dh, cd / 2 - T / 2);
+      door(c, dw, dh, 0, y, cd / 2 - T / 2, c.m.pillar);
       box(c, dw + 0.8, 0.5, T + 0.3, c.m.pillar, 0, y + dh, cd / 2 - T / 2); // red lintel
       for (const sx of [-1, 1]) box(c, 0.45, dh, T + 0.3, c.m.pillar, sx * (dw / 2 + 0.2), y, cd / 2 - T / 2, 0, false);
     } else wallPanel(c, cw, H, 0, y, cd / 2 - T / 2);
@@ -199,6 +291,7 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
       for (let i = 0; i <= n; i++) {
         const q = -len / 2 + (i * len) / n;
         put(c, new THREE.CylinderGeometry(0.28, 0.32, H, 8), c.m.pillar, M(along === "x" ? q : fixed, y + H / 2, along === "x" ? fixed : q), false);
+        if (f === 0) solidBox(c, 0.6, H, 0.6, along === "x" ? q : fixed, y, along === "x" ? fixed : q);
       }
     }
     // upper floors: railing round the balcony
@@ -234,7 +327,7 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
       y = top;
     }
   }
-  return { floors, top: y };
+  return { floors, sizes, top: y };
 }
 
 function wallPanel(c: ACtx, len: number, h: number, x: number, y: number, z: number, ry = 0) {
@@ -246,6 +339,7 @@ function wallPanel(c: ACtx, len: number, h: number, x: number, y: number, z: num
     else uv.setXY(i, 0.02, 0.5);
   }
   put(c, g, c.m.wall, M(x, y + h / 2, z, ry));
+  solidBox(c, len, h, 0.4, x, y, z, ry);
 }
 
 // covered walkway on posts from a to b (floor heights may differ: it becomes a ramp)
@@ -279,6 +373,7 @@ function corridor(c: ACtx, a: THREE.Vector3, b: THREE.Vector3, width = 3.2, post
 
 function brazier(c: ACtx, x: number, y: number, z: number, fires: THREE.Vector3[]) {
   put(c, new THREE.CylinderGeometry(0.5, 0.7, 2.4, 6), c.m.iron, M(x, y + 1.2, z), false);
+  solidBox(c, 1.6, 3, 1.6, x, y, z);
   put(c, new THREE.CylinderGeometry(1.3, 0.6, 0.9, 8), c.m.iron, M(x, y + 2.8, z));
   for (let i = 0; i < 3; i++) put(c, new THREE.ConeGeometry(0.18, 0.9, 4), c.m.iron, M(x + Math.cos(i * 2.1) * 1.3, y + 3.5, z + Math.sin(i * 2.1) * 1.3), false);
   fires.push(new THREE.Vector3(x, y + 3.6, z));
@@ -312,16 +407,24 @@ function crag(c: ACtx, x: number, z: number, h: number, r: number, rand: () => n
 
 /* ---------- the citadel ---------- */
 
+const HW = 76, FRONT = 80, BACK = -100;
+// the land around the walls: flat inside, rolling hills outside
+export function groundAt(x: number, z: number) {
+  const d = Math.max(Math.abs(x) - HW, z - FRONT, BACK - z);
+  return d > 8 ? Math.sin(x * 0.03) * Math.cos(z * 0.025) * 10 * Math.min(1, (d - 8) / 60) : 0;
+}
+export const ARASAKA_SPAWN = new THREE.Vector3(0, 0, FRONT + 34);
+
 export function buildArasaka(env: Env, { bare = false } = {}) {
   const rand = rngFrom("arasaka-citadel");
   const root = new THREE.Group();
   const b = new Builder();
-  const c: ACtx = { b, T: new THREE.Matrix4(), m: mats(env) };
+  const col: Collision = { walk: [], solid: [], ramps: [], doors: [] };
+  const c: ACtx = { b, T: new THREE.Matrix4(), m: mats(env), col };
   const m = c.m;
   const fires: THREE.Vector3[] = [];
 
   const T2 = 9, T3 = 20; // terrace heights
-  const HW = 76, FRONT = 80, BACK = -100;
 
   if (!bare) {
     // dark rocky ground with rolling hills outside the walls
@@ -330,7 +433,7 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
     const gp = ground.attributes.position;
     for (let i = 0; i < gp.count; i++) {
       const x = gp.getX(i), z = gp.getZ(i), d = Math.max(Math.abs(x) - HW, z - FRONT, BACK - z);
-      if (d > 8) gp.setY(i, Math.sin(x * 0.03) * Math.cos(z * 0.025) * 10 * Math.min(1, (d - 8) / 60) + (rand() - 0.5) * 1.4);
+      if (d > 8) gp.setY(i, groundAt(x, z));
     }
     ground.computeVertexNormals();
     b.add(ground, m.grass, new THREE.Matrix4(), false);
@@ -341,13 +444,14 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   const cuv = court.attributes.uv;
   for (let i = 0; i < cuv.count; i++) cuv.setXY(i, (cuv.getX(i) * 2 * HW) / 8, (cuv.getY(i) * (FRONT - 20)) / 8);
   put(c, court, m.paving, M(0, 0.15, (FRONT + 20) / 2), false);
+  walkBox(c, 2 * HW, 0.3, FRONT - 20, 0, 0, (FRONT + 20) / 2);
 
   // terrace 2 (barracks yard) and terrace 3 (keep platform): stone blocks with sloped faces
   stone(c, 2 * HW, T2, 20 - BACK, 0, 0, (20 + BACK) / 2, 0.8);
   stone(c, 100, T3 - T2, -32 - BACK, 0, T2, (-32 + BACK) / 2, 0.8);
   // grand stairs up each terrace, with braziers at the foot and top
-  stairs(c, 14, T2, 16, 0, 0, 20 + 16);
-  stairs(c, 10, T3 - T2, 13, 0, T2, -32 + 13);
+  steps(c, 14, T2, 16, 0, 0, 20 + 16);
+  steps(c, 10, T3 - T2, 13, 0, T2, -32 + 13);
   for (const sx of [-1, 1]) {
     brazier(c, sx * 10, 0.3, 39, fires);
     brazier(c, sx * 10, T2, 15, fires);
@@ -355,7 +459,10 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   }
   // parapets along the terrace edges, broken at the stairs
   for (const [y, z, half, gap] of [[T2, 19.4, HW - 4, 8], [T3, -32.6, 49, 6]] as const)
-    for (const sx of [-1, 1]) box(c, half - gap, 1.1, 0.8, m.stoneDark, sx * (gap + half) / 2, y, z);
+    for (const sx of [-1, 1]) {
+      box(c, half - gap, 1.1, 0.8, m.stoneDark, sx * (gap + half) / 2, y, z);
+      solidBox(c, half - gap, 1.1, 0.8, sx * (gap + half) / 2, y, z);
+    }
 
   // outer wall with corner towers; the front wall is split by the gatehouse
   rampart(c, -HW, BACK, HW, BACK, 12, -1);
@@ -374,10 +481,9 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
     building(sub(c, M(sx * 17, 18, FRONT)) as ACtx, 6, 6, { floors: 3, wallH: 3.4, door: false, shrink: 0.85, topRatio: 0.8 });
   }
   stone(c, 22, 7, 16, 0, 11, FRONT); // lintel block over the passage
-  for (const sx of [-1, 1]) {
-    box(c, 4.2, 10.5, 0.6, m.pillar, sx * 2.3, 0.3, FRONT + 6.5); // great doors, half open
-    for (let k = 0; k < 4; k++) put(c, new THREE.SphereGeometry(0.22, 6, 4), m.iron, M(sx * 2.3, 2 + k * 2.4, FRONT + 6.9), false);
-  }
+  // the great gate: studded doors that swing open as you walk up, and the clan emblem above
+  door(c, 20, 10.7, 0, 0.3, FRONT + 6, m.pillar, true);
+  const extras: THREE.Object3D[] = [emblem(c, 6, 0, 14.6, FRONT + 8.05)];
   building(sub(c, M(0, 18, FRONT)) as ACtx, 14, 8, { floors: 2, wallH: 4, door: false, shrink: 0.8 });
   for (const sx of [-1, 1]) bannerPole(c, sx * 26, 0.3, FRONT + 10, 16, sx > 0 ? 0 : Math.PI);
 
@@ -391,6 +497,7 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   // barracks yard: two long barracks, a sand training square with dummies and weapon racks
   for (const sx of [-1, 1]) building(sub(c, M(sx * 52, T2, -18, -sx * Math.PI / 2)) as ACtx, 46, 12, { floors: 2, wallH: 4 });
   box(c, 40, 0.25, 26, m.sand, 0, T2, -4, 0, false);
+  walkBox(c, 40, 0.25, 26, 0, T2, -4);
   railing(c, rect(20, 13, T2 + 0.25), 1, m.wood, true);
   for (let i = 0; i < 6; i++) {
     const x = -14 + (i % 3) * 14, z = i < 3 ? -11 : 3;
@@ -407,7 +514,7 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   // the keep platform: Thunder Keep with two watchtowers and sky bridges
   const kz = -66;
   stone(c, 44, 5, 38, 0, T3, kz, 1);
-  stairs(c, 8, 5, 6, 0, T3, kz + 19 + 6);
+  steps(c, 8, 5, 6, 0, T3, kz + 19 + 6);
   const KW = 30, KS = 0.85;
   const keep = building(sub(c, M(0, T3 + 5, kz)) as ACtx, KW, 25, { floors: 6, wallH: 5.4, shrink: KS, veranda: 1.6, spire: 14 });
   for (const sx of [-1, 1]) {
@@ -422,6 +529,9 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
     put(c, new THREE.PlaneGeometry(3, 16), m.banner, M(sx * 7.5, T3 + 5 + keep.floors[1] + 2, kz + 12.5 + 1.6 + 0.35), false);
   }
   for (const sx of [-1, 1]) brazier(c, sx * 17, T3 + 5, kz + 16, fires);
+  // the emblem high on the keep's top storey, facing the gate
+  const topF = keep.sizes.length - 1, topS = keep.sizes[topF];
+  extras.push(emblem(c, 5, 0, T3 + 5 + keep.floors[topF] + topS.h * 0.5, kz + topS.d / 2 + 0.25));
 
   // basalt crags rising behind the citadel and along its flanks
   for (let i = 0; i < 16; i++) {
@@ -432,6 +542,8 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   for (const sx of [-1, 1]) for (let i = 0; i < 4; i++) crag(c, sx * (HW + 22 + rand() * 25), BACK + 20 + i * 40, 28 + rand() * 30, 10 + rand() * 6, rand, -4);
 
   b.finish(root);
+  for (const e of extras) root.add(e);
+  for (const d of col.doors) root.add(d.pivot);
 
   // fire: glowing cores plus additive flames that flicker
   const glow = softTexture();
@@ -465,10 +577,18 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   root.add(trees(rand, spots));
   if (!bare) root.add(mountains(rand, env.mountainTint));
 
-  const tick = (t: number) => {
+  const q = new THREE.Quaternion();
+  const tick = (t: number, dt = 0.016) => {
     fireGroup.children.forEach((o, i) => {
       if (o instanceof THREE.Sprite) o.scale.setScalar(5.5 + Math.sin(t * 9 + i) * 0.8 + Math.sin(t * 23 + i * 3) * 0.5);
     });
+    // doors ease toward open or shut
+    for (const d of col.doors) {
+      if (d.open === d.target) continue;
+      d.open = d.target > d.open ? Math.min(d.target, d.open + dt * 1.6) : Math.max(d.target, d.open - dt * 1.2);
+      const k = d.open * d.open * (3 - 2 * d.open);
+      d.pivot.quaternion.copy(d.base).multiply(q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), d.sign * k * Math.PI * 0.5));
+    }
   };
-  return { root, tick };
+  return { root, tick, col };
 }

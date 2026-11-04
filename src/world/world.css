@@ -71,3 +71,45 @@
 
 .wm-visit { position: absolute; inset: 0; z-index: 20; background: #1b1a1f; }
 .wm-visit .palace3d { z-index: 0; }
+
+.wm-explore { position: absolute; left: 0; right: 0; bottom: 0; z-index: 12; padding: 18px 16px calc(env(safe-area-inset-bottom) + 16px); display: flex; justify-content: center; background: linear-gradient(0deg, rgba(18, 12, 10, 0.7), rgba(18, 12, 10, 0)); }
+.wm-explore .game-btn { max-width: 360px; }
+
+/* Explore on foot: landscape first. Joystick bottom left, drag anywhere on the right to look. */
+.ex { position: absolute; inset: 0; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.ex canvas { display: block; width: 100%; height: 100%; }
+.ex .lightning-flash { z-index: 1; }
+.ex-top {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 5; display: flex; align-items: center; gap: 12px;
+  padding: calc(env(safe-area-inset-top) + 10px) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
+  pointer-events: none;
+}
+.ex-top > * { pointer-events: auto; }
+.ex-crest {
+  display: flex; align-items: center; gap: 8px; padding: 4px 14px 4px 6px; border-radius: 999px;
+  background: linear-gradient(180deg, rgba(59, 34, 22, 0.92), rgba(36, 20, 13, 0.92)); border: 2px solid var(--wood-rim);
+  font-family: var(--brush); font-weight: 900; font-size: 1.1rem; color: var(--parch); box-shadow: 0 3px 0 var(--wood-shadow);
+}
+.ex-stick {
+  position: absolute; z-index: 5; width: 140px; height: 140px; border-radius: 50%;
+  left: max(28px, calc(env(safe-area-inset-left) + 16px)); bottom: calc(env(safe-area-inset-bottom) + 24px);
+  background: radial-gradient(circle, rgba(27, 26, 31, 0.25) 0 55%, rgba(27, 26, 31, 0.5) 56% 100%);
+  border: 3px solid rgba(243, 233, 210, 0.45); display: grid; place-items: center; pointer-events: none;
+}
+.ex-knob {
+  width: 62px; height: 62px; border-radius: 50%; border: 3px solid var(--wood-rim);
+  background: radial-gradient(circle at 40% 35%, #e05a4c, #a5281f 70%); box-shadow: 0 4px 0 rgba(0, 0, 0, 0.45);
+}
+.ex-hint {
+  position: absolute; z-index: 5; right: max(20px, calc(env(safe-area-inset-right) + 16px)); bottom: calc(env(safe-area-inset-bottom) + 28px);
+  padding: 6px 12px; border-radius: 999px; background: rgba(18, 12, 10, 0.6); color: #e9dcc0; font-size: 0.75rem;
+  pointer-events: none; animation: wm-fade 5s 4s forwards;
+}
+.ex-rotate {
+  position: absolute; inset: 0; z-index: 9; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  background: rgba(18, 12, 10, 0.88); color: var(--parch); text-align: center; font-size: 0.85rem;
+}
+.ex-rotate b { font-family: var(--brush); font-size: 1.4rem; }
+.ex-rotate span { color: #b9ab90; }
+.ex-phone { width: 46px; height: 78px; border: 3px solid var(--parch); border-radius: 9px; animation: ex-turn 1.8s ease-in-out infinite; }
+@keyframes ex-turn { 0%, 25% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
