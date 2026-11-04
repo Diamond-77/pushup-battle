@@ -25,9 +25,14 @@ import {
   LOCK_JUMP,
   LOCK_LEARN_FRAMES,
   LOCK_MAX_DIFF,
+  KNEE_BENT_DEG,
+  KNEE_CHECK_EVERY_MS,
+  KNEE_CHECK_FRAMES,
+  KNEE_SAMPLE_FRAMES,
+  KNEE_STRAIGHT_DEG,
 } from "./config";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
-import { bodySignature, drawStickman, getPoseLandmarker, medianSignature, readBody, signatureDiff, type BodySignature } from "./pose";
+import { bodySignature, drawStickman, getPoseLandmarker, kneeAngle, medianSignature, readBody, signatureDiff, type BodySignature } from "./pose";
 
 type Status = "ok" | "not_detected" | "too_close" | "not_in_position" | "knee_down" | "switched";
 type Debug = { ratio: number | null; kneeLift: number | null; state: "up" | "down"; reps: number; fps: number; status: Status; fast: boolean; lock: string };
@@ -48,6 +53,9 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
   const lockBodyRef = useRef(lockBody);
   lockBodyRef.current = lockBody;
   const [switched, setSwitched] = useState(false);
+  // knee check (battles only): next check time, frames of straight / bent legs, and whether we're waiting for knees up
+  const knee = useRef({ nextAt: 0, sampled: 0, bent: 0, straight: 0, asking: false, flags: 0, ang: null as number | null });
+  const [kneeAsk, setKneeAsk] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const meterRef = useRef<HTMLDivElement>(null);
@@ -226,6 +234,10 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
       let status: Status = "not_detected";
       const body = lm ? readBody(lm, w, h) : null;
       const L = lock.current;
+      if (!(lockBodyRef.current && countingRef.current) && (knee.current.asking || knee.current.nextAt)) {
+        knee.current = { nextAt: 0, sampled: 0, bent: 0, straight: 0, asking: false, flags: 0, ang: null };
+        setKneeAsk(false);
+      }
       if (!lockBodyRef.current) {
         if (L.phase !== "off") { L.phase = "off"; L.base = null; L.frames = []; L.lastPos = null; setSwitched(false); }
       } else if (body?.visible && lm && result?.worldLandmarks[0]) {
@@ -323,7 +335,33 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
 
         // A knee that can't be seen never blocks a rep; a visible knee on the floor does.
         kneeLift = body.kneeHeight === null || topRef.current <= 0 ? null : body.kneeHeight / topRef.current;
-        const kneeOk = kneeLift === null || kneeLift >= KNEE_LIFT;
+        let kneeOk = kneeLift === null || kneeLift >= KNEE_LIFT;
+
+        // Fair play in battles: a silent knee check every few seconds, using the 3D knee bend
+        // (works from the front). Nothing shows unless the knees are found down.
+        const K = knee.current;
+        if (lockBodyRef.current && countingRef.current && result?.worldLandmarks[0] && lm) {
+          if (K.nextAt === 0) K.nextAt = now + KNEE_CHECK_EVERY_MS;
+          const checking = !K.asking && now >= K.nextAt;
+          if (checking || K.asking) {
+            const ang = kneeAngle(result.worldLandmarks[0], lm);
+            K.ang = ang;
+            if (checking) {
+              K.sampled++;
+              if (ang !== null && ang < KNEE_BENT_DEG) K.bent++;
+              if (K.sampled >= KNEE_SAMPLE_FRAMES) {
+                if (K.bent > K.sampled / 2) { K.asking = true; K.flags++; K.straight = 0; setKneeAsk(true); }
+                else K.nextAt = now + KNEE_CHECK_EVERY_MS;
+                K.sampled = 0;
+                K.bent = 0;
+              }
+            } else {
+              K.straight = ang !== null && ang >= KNEE_STRAIGHT_DEG ? K.straight + 1 : 0;
+              if (K.straight >= KNEE_CHECK_FRAMES) { K.asking = false; K.nextAt = now + KNEE_CHECK_EVERY_MS; setKneeAsk(false); }
+            }
+          }
+          if (K.asking) kneeOk = false;
+        }
         if (!kneeOk) status = "knee_down";
 
         const settled = now - enteredAtRef.current > SETTLE_MS; // e.g. still putting the phone down
@@ -407,6 +445,14 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
       </div>
       {!paused && !camWanted && !camDenied && <CameraAsk onAllow={askCamera} />}
       {camDenied && !paused && <CameraHelp onRetry={askCamera} />}
+      {kneeAsk && !switched && (
+        <div className="knee-ask" role="alert">
+          <svg viewBox="0 0 24 24" width="110" height="110" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 20V5M5 11l7-7 7 7" />
+          </svg>
+          <div className="knee-ask-title">Knees up</div>
+        </div>
+      )}
       {switched && (
         <div className="switch-warning">
           <div className="switch-title">Switching body</div>
@@ -422,6 +468,7 @@ export default function PoseCounter({ counting, onRep, facing, children, paused 
         <div>FPS <b>{debug.fps.toFixed(0)}</b></div>
         <div>Track <b>{debug.status}</b></div>
         <div>Knee <b>{debug.kneeLift === null ? "–" : debug.kneeLift.toFixed(2)}</b></div>
+        <div>Knee° <b>{knee.current.ang === null ? "–" : Math.round(knee.current.ang)}</b></div>
         <div>Fast <b>{debug.fast ? "on" : "off"}</b></div>
         <div>Lock <b>{debug.lock}</b></div>
       </div>

@@ -130,8 +130,8 @@ function drawPaper(c: HTMLCanvasElement, n: number, accent: string, name: string
   g.fillStyle = accent;
   g.fillRect(w / 2 - 120, 138, 240, 5);
   const txt = n.toLocaleString();
-  const size = txt.length > 6 ? 170 : txt.length > 4 ? 200 : 240;
-  g.font = `${size}px "Ma Shan Zheng", "Brush Script MT", cursive`;
+  const size = txt.length > 6 ? 130 : txt.length > 4 ? 160 : 200;
+  g.font = `900 ${size}px "Cinzel", serif`;
   g.fillStyle = accent;
   g.fillText(txt, w / 2 + 7, 375 + 7);
   g.fillStyle = "#16100b";
@@ -148,7 +148,7 @@ function drawPaper(c: HTMLCanvasElement, n: number, accent: string, name: string
   g.lineWidth = 3;
   g.strokeRect(-32, -32, 64, 64);
   g.fillStyle = "#f7ebcc";
-  g.font = '50px "Ma Shan Zheng", serif';
+  g.font = '900 50px "Cinzel", serif';
   g.textBaseline = "middle";
   g.fillText((name.trim()[0] ?? "P").toUpperCase(), 0, 4);
   g.restore();
@@ -242,7 +242,7 @@ export default function Scroll3D({ total, accent, dark, mid, name, open, onToggl
     let shown = 0;
     const redraw = (n: number) => { drawPaper(paperCanvas, n, accent, name, caption); paperTex.needsUpdate = true; };
     redraw(0);
-    document.fonts?.load('120px "Ma Shan Zheng"').then(() => redraw(shown)).catch(() => {});
+    document.fonts?.load('900 120px "Cinzel"').then(() => redraw(shown)).catch(() => {});
     const paperMat = new THREE.ShaderMaterial({
       uniforms: { map: { value: paperTex }, reveal: { value: 0 }, time: { value: 0 } },
       vertexShader: `

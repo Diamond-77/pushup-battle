@@ -11,7 +11,7 @@ import { ClanPage, HomePage, ThronePage } from "./Pages";
 import { CLANS, type Clan } from "./clans";
 import { useClan } from "./useClan";
 import { countdownSound, defeatSound, drawSound, goSound, repSound, victoryCall, victorySound } from "./sound";
-import Guide, { guideDone } from "./Guide";
+import { howToDone } from "./demo/done";
 import Training from "./Training";
 import PlayerPage from "./PlayerPage";
 import ClanMembersPage from "./ClanMembersPage";
@@ -19,6 +19,7 @@ import { START_RESPECT, MODES, FIELDS, type FieldId } from "./config";
 import { supabase } from "./supabase";
 // Three.js is big, so the palace loads in its own chunk after the app shows.
 const Palace3D = lazy(() => import("./palace/Palace3D"));
+const HowToPlay = lazy(() => import("./demo/HowToPlay"));
 import { useMatch } from "./useMatch";
 import { usePushupLog } from "./stats";
 import { useChallenges, untilText } from "./challenges";
@@ -49,7 +50,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
   const [tab, setTab] = useState<Tab>("home");
   const [facing, setFacing] = useState<"user" | "environment">("user");
   const [practiceReps, setPracticeReps] = useState(0);
-  const [showGuide, setShowGuide] = useState(() => !guideDone());
+  const [showGuide, setShowGuide] = useState(() => !howToDone());
 
   const clan = useClan(profile.id);
   const myClan = clan.membership?.clan ?? null;
@@ -235,7 +236,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
         )}
         {!inMatch && tab === "home" && <HomePage profile={profile} clan={myClan} onBattle={() => setTab("battle")} onTrain={() => setTab("train")}
           challenges={<ChallengeButton list={ch.list} now={ch.now} online={lobby.players} onStart={(p, mode) => lobby.challenge(p, mode)} onBot={(d, mode) => lobby.enterBotMatch(d, mode)} onChanged={ch.refresh} onPlayer={setViewPlayer} />} />}
-        {menu && !viewPlayer && !(tab === "profile" && !editingProfile) && (
+        {menu && !showGuide && !viewPlayer && !(tab === "profile" && !editingProfile) && (
           <Suspense fallback={null}>
             {tab === "battle" ? (
               <Palace3D seed={field} arena={field} weather={FIELDS.find((f) => f.id === field)!.weather} />
@@ -294,6 +295,9 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
               <b>{respect}</b>
               <span className="respect-chip-word">Respect</span>
             </button>
+            {tab === "home" && (
+              <button className="howto-btn" onClick={() => setShowGuide(true)}><i>?</i>How to play</button>
+            )}
             <button className={`music-btn ${sound.music ? "on" : ""}`} onClick={() => setSoundMenu(true)} aria-label="Sound settings">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 18V5l11-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="17" cy="16" r="3" />
@@ -332,7 +336,11 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
           </button>
         )}
         <Dock tab={tab} onTab={setTab} locked={inMatch} ping={ch.ping} />
-        {showGuide && !inMatch && <Guide onDone={() => setShowGuide(false)} />}
+        {showGuide && !inMatch && (
+          <Suspense fallback={null}>
+            <HowToPlay me={{ name: me.name, avatar: me.avatar, legendary: me.legendary }} onDone={() => setShowGuide(false)} />
+          </Suspense>
+        )}
       </PoseCounter>
     </main>
   );

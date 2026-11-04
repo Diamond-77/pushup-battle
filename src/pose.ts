@@ -118,6 +118,26 @@ export function readBody(lm: NormalizedLandmark[], width: number, height: number
   };
 }
 
+// Knee bend from the 3D "world" landmarks, in degrees: about 180 with straight legs (a proper plank),
+// about 90-120 with the knees on the floor. Works from the front, where the knees' height in the
+// picture says nothing (far-away knees on the floor still look higher than the hands).
+// Uses the side the tracker is surer about; null when neither leg is seen at all.
+export function kneeAngle(world: Landmark[], lm: NormalizedLandmark[]): number | null {
+  let best: number | null = null, bestVis = 0.15;
+  for (const [h, k, a] of [[23, 25, 27], [24, 26, 28]]) {
+    const vis = Math.min(lm[h].visibility ?? 0, lm[k].visibility ?? 0, lm[a].visibility ?? 0);
+    if (vis < bestVis) continue;
+    const u = [world[h].x - world[k].x, world[h].y - world[k].y, world[h].z - world[k].z];
+    const v = [world[a].x - world[k].x, world[a].y - world[k].y, world[a].z - world[k].z];
+    const nu = Math.hypot(u[0], u[1], u[2]), nv = Math.hypot(v[0], v[1], v[2]);
+    if (nu < 1e-6 || nv < 1e-6) continue;
+    const cos = (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / (nu * nv);
+    best = (Math.acos(Math.max(-1, Math.min(1, cos))) * 180) / Math.PI;
+    bestVis = vis;
+  }
+  return best;
+}
+
 // Body proportions from MediaPipe's 3D "world" landmarks (meters): shoulder width, upper arm,
 // forearm and torso length. They stay about the same for one person whatever pose they're in,
 // so they tell two people apart. A length is null when its points aren't clearly seen.
