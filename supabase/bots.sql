@@ -36,7 +36,7 @@ create or replace function public._bot_total(p_tier text, p_mode text)
 returns integer
 as $fn$
 declare
-  pace numeric := case p_tier when 'weak' then 23 when 'strong' then 31 else 44 end; -- first minute
+  pace numeric := case p_tier when 'weak' then 23 when 'strong' then 31 else 53 end; -- first minute
   mins integer := public.mode_seconds(p_mode) / 60;
   total numeric := 0;
   i integer;
@@ -44,9 +44,26 @@ begin
   for i in 0 .. mins - 1 loop
     total := total + pace * power(0.86, i);
   end loop;
-  return greatest(3, round(total * (0.82 + random() * 0.33)))::integer; -- 82% to 115% of the pace
+  -- 82% to 115% of the pace; the boss has fewer off days (95% to 118%)
+  if p_tier = 'boss' then return round(total * (0.95 + random() * 0.23))::integer; end if;
+  return greatest(3, round(total * (0.82 + random() * 0.33)))::integer;
 end;
 $fn$ language plpgsql;
+
+-- Bots train too: a bot under 50 Respect that hasn't won or lost anything for 4 hours trains back up to 50.
+create or replace function public._bot_regen()
+returns void
+as $fn$
+declare r record;
+begin
+  for r in select p.id, p.respect from public.bot_accounts b join public.profiles p on p.id = b.user_id
+           where p.respect < 50
+             and not exists (select 1 from public.respect_log l where l.user_id = p.id and l.created_at > now() - interval '4 hours')
+  loop
+    perform public._add_respect(r.id, 50 - r.respect, 'training', null);
+  end loop;
+end;
+$fn$ language plpgsql security definer set search_path = public;
 
 -- Makes the battle against a chosen bot: pays both bets and decides the bot's count.
 create or replace function public._create_bot_match(p_me uuid, p_bot uuid, p_mode text)
@@ -63,8 +80,8 @@ begin
     from public.bot_accounts b join public.profiles p on p.id = b.user_id where b.user_id = p_bot for update of p;
   if bot.id is null then raise exception 'not a bot'; end if;
   if (select respect from public.profiles where id = p_me) < bet then raise exception 'You need % Respect for this mode. Train to earn it back.', bet; end if;
-  -- the bot always has enough for its bet
-  if bot.respect < bet then perform public._add_respect(bot.id, bet - bot.respect, 'refill', null); end if;
+  -- a bot that's out of Respect sits out until it has trained back (see _bot_regen)
+  if bot.respect < bet then raise exception '% doesn''t have enough Respect right now', bot.username; end if;
   insert into public.matches (id, mode, player_a, player_b, bet, a_paid, b_paid)
   values (mid, p_mode, least(p_me, bot.id), greatest(p_me, bot.id), bet, true, true);
   perform public._add_respect(p_me, -bet, 'bet ' || p_mode, mid);
@@ -105,10 +122,11 @@ begin
       want := case want when 'weak' then 'strong' when 'boss' then 'strong' else (case when random() < 0.5 then 'weak' else 'boss' end) end;
     end if;
   end if;
-  -- skip bots you're signed in as, and bots already in a battle (a real player can't be in two)
+  perform public._bot_regen();
+  -- skip bots you're signed in as, bots already in a battle (a real player can't be in two), and broke bots
   select b.user_id, p.username, p.avatar_url, p.legendary, p.title, p.respect into bot
     from public.bot_accounts b join public.profiles p on p.id = b.user_id
-   where (b.online_until is null or b.online_until < now())
+   where (b.online_until is null or b.online_until < now()) and p.respect >= bet
      and not exists (select 1 from public.matches x where x.settled_at is null and b.user_id in (x.player_a, x.player_b)
                      and x.started_at > now() - interval '10 minutes')
    order by (b.tier = want) desc, random() limit 1;
@@ -317,6 +335,7 @@ begin
 end;
 $fn$ language plpgsql security definer set search_path = public;
 revoke all on function public._bot_accept(bigint) from public, anon, authenticated;
+revoke all on function public._bot_regen() from public, anon, authenticated;
 revoke all on function public._create_bot_match(uuid, uuid, text) from public, anon, authenticated;
 
 
@@ -324,15 +343,20 @@ revoke all on function public._create_bot_match(uuid, uuid, text) from public, a
 create or replace function public.lobby_extras()
 returns json
 as $fn$
+declare res json;
+begin
+  perform public._bot_regen();
   select coalesce(json_agg(json_build_object(
     'id', p.id, 'name', p.username, 'avatar', p.avatar_url, 'legendary', coalesce(p.legendary, false), 'title', p.title,
     'respect', p.respect,
     'clan', (select cm.clan_id from public.clan_members cm where cm.user_id = p.id and cm.expires_at > now() limit 1),
-    'busy', exists (select 1 from public.matches x where x.settled_at is null and p.id in (x.player_a, x.player_b) and x.started_at > now() - interval '10 minutes')
+    'busy', p.respect < 5 or exists (select 1 from public.matches x where x.settled_at is null and p.id in (x.player_a, x.player_b) and x.started_at > now() - interval '10 minutes')
   )), '[]'::json)
   from public.bot_accounts b join public.profiles p on p.id = b.user_id
-  where (b.online_until is null or b.online_until < now()) and auth.uid() is not null and auth.uid() <> b.user_id;
-$fn$ language sql stable security definer set search_path = public;
+  where (b.online_until is null or b.online_until < now()) and auth.uid() is not null and auth.uid() <> b.user_id into res;
+  return res;
+end;
+$fn$ language plpgsql security definer set search_path = public;
 
 -- a live challenge to a bot in the lobby: it "accepts" and the battle starts
 create or replace function public.start_bot_vs(p_bot uuid, p_mode text)
@@ -344,6 +368,7 @@ declare
 begin
   if me is null then raise exception 'Please sign in again'; end if;
   if public.mode_bet(p_mode) is null then raise exception 'Unknown battle mode'; end if;
+  perform public._bot_regen();
   if not exists (select 1 from public.bot_accounts where user_id = p_bot and (online_until is null or online_until < now())) then
     raise exception 'They went offline';
   end if;
