@@ -115,7 +115,9 @@ export type Box = { x0: number; x1: number; z0: number; z1: number; y0: number; 
 export type Ramp = { ax: number; az: number; bx: number; bz: number; w: number; ya: number; yb: number };
 export type Door = { pivot: THREE.Group; base: THREE.Quaternion; sign: number; open: number; target: number; at: THREE.Vector3; box: Box };
 // roofs: ceilings and roofs overhead (no effect on walking; rain stops on them, and you're indoors under one)
-export type Collision = { walk: Box[]; solid: Box[]; ramps: Ramp[]; doors: Door[]; roofs: Box[] };
+// a lift: a platform riding a shaft; gates on each floor stay shut unless the platform is there
+export type Lift = { x0: number; x1: number; z0: number; z1: number; stops: number[]; gates: { box: Box; stop: number }[]; at: number };
+export type Collision = { walk: Box[]; solid: Box[]; ramps: Ramp[]; doors: Door[]; roofs: Box[]; lifts: Lift[] };
 type ACtx = Ctx & { m: AMats; col: Collision };
 
 const _v = new THREE.Vector3();
@@ -280,7 +282,7 @@ function roof(c: ACtx, W: number, D: number, iw: number, id: number, y: number, 
 /* ---------- buildings ---------- */
 
 type Side = "x+" | "x-" | "z+" | "z-";
-type BOpts = { spiral?: boolean; openings?: { floor: number; side: Side; w: number }[]; floors: number; wallH?: number; shrink?: number; veranda?: number; door?: boolean; spire?: number; topRatio?: number; banners?: boolean };
+type BOpts = { shaft?: Rect; spiral?: boolean; openings?: { floor: number; side: Side; w: number }[]; floors: number; wallH?: number; shrink?: number; veranda?: number; door?: boolean; spire?: number; topRatio?: number; banners?: boolean };
 
 // A multi-storey hall or tower. Returns the height of each floor's walking surface (slab top), and the top.
 // Buildings you can walk into get a stair to every floor (a straight flight along the back wall, or a
@@ -299,7 +301,7 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
       if (inside) steps(c, 4.6, 1.4, 2.2, 0, y, sd / 2 + 0.8 + 2.2);
       y += 1.4;
     } else {
-      holedSlab(c, sw, 0.6, sd, y, hole, c.m.wood, true);
+      holedSlab(c, sw, 0.6, sd, y, [hole, o.shaft ?? null], c.m.wood, true);
       y += 0.6;
     }
     floors.push(y);
@@ -352,7 +354,7 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
     const next = y + H + 0.8 + rise - 0.4 + 0.6; // the next slab's top
     hole = !last && inside ? (o.spiral ? spiralStair(c, nw, nd, y, next) : straightStair(c, nw, nd, y, next, f % 2 ? 1 : -1)) : null;
     // beam band: a solid ring over the pillars and the wall tops (the ceiling), open over the stairwell
-    holedSlab(c, 2 * hx + 0.7, 0.8, 2 * hz + 0.7, y + H, hole, c.m.wood, false);
+    holedSlab(c, 2 * hx + 0.7, 0.8, 2 * hz + 0.7, y + H, last ? hole : [hole, o.shaft ?? null], c.m.wood, false);
     c.col.roofs.push(aabb(c, 2 * hx + 0.7, 0.8, 2 * hz + 0.7, 0, y + H, 0));
     box(c, 2 * hx + 0.9, 0.22, 2 * hz + 0.9, c.m.bracket, 0, y + H + 0.1, 0, 0, false);
     y += H + 0.8;
@@ -383,18 +385,32 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
 }
 
 
-type Hole = { x0: number; x1: number; z0: number; z1: number } | null;
+type Rect = { x0: number; x1: number; z0: number; z1: number };
+type Hole = Rect | null;
 
-// a slab w x d (bottom at y, h thick) with an optional rectangular hole cut out of it
-function holedSlab(c: ACtx, w: number, h: number, d: number, y: number, hole: Hole, mat: THREE.Material, walk: boolean) {
-  const X0 = -w / 2, X1 = w / 2, Z0 = -d / 2, Z1 = d / 2;
-  const parts = hole
-    ? [[X0, X1, Math.max(Z0, hole.z1), Z1], [X0, X1, Z0, Math.min(Z1, hole.z0)], [X0, Math.max(X0, hole.x0), hole.z0, hole.z1], [Math.min(X1, hole.x1), X1, hole.z0, hole.z1]]
-    : [[X0, X1, Z0, Z1]];
-  for (const [a, b, e, g] of parts) {
-    if (b - a < 0.05 || g - e < 0.05) continue;
-    box(c, b - a, h, g - e, mat, (a + b) / 2, y, (e + g) / 2);
-    if (walk) walkBox(c, b - a, h, g - e, (a + b) / 2, y, (e + g) / 2);
+// a slab w x d (bottom at y, h thick) with rectangular holes cut out of it (stairwells, the lift shaft)
+function holedSlab(c: ACtx, w: number, h: number, d: number, y: number, holes: Hole | Hole[], mat: THREE.Material, walk: boolean) {
+  const hs = (Array.isArray(holes) ? holes : [holes]).filter((q): q is Rect => !!q);
+  const xs = [...new Set([-w / 2, w / 2, ...hs.flatMap((q) => [q.x0, q.x1])])].filter((v) => v >= -w / 2 && v <= w / 2).sort((p, q) => p - q);
+  const zs = [...new Set([-d / 2, d / 2, ...hs.flatMap((q) => [q.z0, q.z1])])].filter((v) => v >= -d / 2 && v <= d / 2).sort((p, q) => p - q);
+  // a grid of cells between the cut lines; keep the ones outside every hole, joined into strips along x
+  for (let j = 0; j < zs.length - 1; j++) {
+    const z0 = zs[j], z1 = zs[j + 1];
+    if (z1 - z0 < 0.05) continue;
+    let start: number | null = null;
+    for (let i = 0; i <= xs.length - 1; i++) {
+      const cx = i < xs.length - 1 ? (xs[i] + xs[i + 1]) / 2 : NaN, cz = (z0 + z1) / 2;
+      const solid = i < xs.length - 1 && !hs.some((q) => cx > q.x0 && cx < q.x1 && cz > q.z0 && cz < q.z1);
+      if (solid && start === null) start = xs[i];
+      if (!solid && start !== null) {
+        const x0 = start, x1 = xs[i];
+        if (x1 - x0 > 0.05) {
+          box(c, x1 - x0, h, z1 - z0, mat, (x0 + x1) / 2, y, (z0 + z1) / 2);
+          if (walk) walkBox(c, x1 - x0, h, z1 - z0, (x0 + x1) / 2, y, (z0 + z1) / 2);
+        }
+        start = null;
+      }
+    }
   }
 }
 
@@ -537,6 +553,300 @@ function crag(c: ACtx, x: number, z: number, h: number, r: number, rand: () => n
   put(c, g, c.m.rock, M(x, y0 + h / 2, z, rand() * 3));
 }
 
+/* ---------- inside the Thunder Keep ---------- */
+
+// the lift shaft, in the keep's own coordinates (it has to fit inside the smallest, top floor)
+const SHAFT: Rect = { x0: 2.8, x1: 5.6, z0: 0.1, z1: 2.9 };
+const LIFT_SPEED = 3, LIFT_WAIT = 4;
+
+type KeepInfo = { floors: number[]; sizes: { w: number; d: number; h: number }[] };
+
+// The Great Hall on the ground floor: red carpet from the door to the throne on its dais, a painted
+// screen behind (the stair up hides behind it), two rows of red pillars, hanging lanterns, braziers.
+function greatHall(kc: ACtx, keep: KeepInfo, fires: THREE.Vector3[], extras: THREE.Object3D[]) {
+  const m = kc.m, y0 = keep.floors[0], H = keep.sizes[0].h, D = keep.sizes[0].d, W = keep.sizes[0].w;
+  const carpet = toon(0x7a1410), gold = toon(0xb08a3e), lantern = toon(0xc8372d, undefined, { emissive: 0xff5a2a, emissiveIntensity: 0.9 });
+  // carpet with a gold edge
+  box(kc, 3.4, 0.03, D / 2 + 4, gold, 0, y0, (D / 2 - 4) / 2 + 0.1, 0, false);
+  box(kc, 3, 0.05, D / 2 + 4, carpet, 0, y0, (D / 2 - 4) / 2 + 0.1, 0, false);
+  // pillars
+  for (const x of [-12, -6, 6, 12]) for (const z of [-6, 6]) {
+    put(kc, new THREE.CylinderGeometry(0.42, 0.48, H, 10), m.pillar, M(x, y0 + H / 2, z), false);
+    put(kc, new THREE.CylinderGeometry(0.62, 0.66, 0.4, 10), gold, M(x, y0 + 0.2, z), false);
+    put(kc, new THREE.CylinderGeometry(0.62, 0.5, 0.5, 10), gold, M(x, y0 + H - 0.25, z), false);
+    solidBox(kc, 1, H, 1, x, y0, z);
+  }
+  // the dais: two steps
+  box(kc, 9, 0.35, 4.6, m.stoneDark, 0, y0, -5.6);
+  walkBox(kc, 9, 0.35, 4.6, 0, y0, -5.6);
+  box(kc, 6.4, 0.35, 3.4, m.marble, 0, y0 + 0.35, -6.1);
+  walkBox(kc, 6.4, 0.35, 3.4, 0, y0 + 0.35, -6.1);
+  box(kc, 3.6, 0.04, 2.2, carpet, 0, y0 + 0.7, -5.9, 0, false);
+  // the throne: black lacquer, gold trim, a red cushion, a tall fan-shaped back
+  const ty = y0 + 0.7, tz = -6.6;
+  box(kc, 2.4, 0.6, 1.6, m.wood, 0, ty, tz);
+  box(kc, 1.9, 0.18, 1.3, carpet, 0, ty + 0.6, tz + 0.05, 0, false);
+  box(kc, 2.6, 3.4, 0.35, m.wood, 0, ty, tz - 0.75);
+  box(kc, 2.9, 0.5, 0.45, gold, 0, ty + 3.4, tz - 0.75);
+  for (const sx of [-1, 1]) {
+    box(kc, 0.3, 1.1, 1.6, m.wood, sx * 1.25, ty, tz);
+    box(kc, 0.36, 0.12, 1.7, gold, sx * 1.25, ty + 1.1, tz, 0, false);
+    put(kc, new THREE.ConeGeometry(0.22, 1.2, 5), gold, M(sx * 1.45, ty + 4.3, tz - 0.75), false);
+  }
+  solidBox(kc, 2.8, 4, 2, 0, ty, tz - 0.2);
+  // the painted screen behind the throne, with the storm emblem
+  box(kc, 10, 5.2, 0.25, m.wallPlain, 0, y0, -8.15);
+  box(kc, 10.4, 0.35, 0.4, gold, 0, y0 + 5.2, -8.15, 0, false);
+  for (const sx of [-1, 1]) box(kc, 0.35, 5.2, 0.4, m.pillar, sx * 5.1, y0, -8.15, 0, false);
+  solidBox(kc, 10, 5.2, 0.3, 0, y0, -8.15);
+  extras.push(emblem(kc, 3.4, 0, y0 + 3.3, -7.98));
+  // braziers either side of the dais
+  for (const sx of [-1, 1]) brazier(kc, sx * 5.8, y0, -4.6, fires);
+  // two big paper lanterns hanging over the carpet
+  for (const z of [1, 7.5]) {
+    put(kc, new THREE.CylinderGeometry(0.02, 0.02, 1.4, 4), m.iron, M(0, y0 + H - 0.7, z), false);
+    put(kc, new THREE.SphereGeometry(0.75, 12, 8), lantern, M(0, y0 + H - 1.7, z, 0, 1, 1.2, 1));
+    for (const dy of [-0.85, 0.85]) put(kc, new THREE.CylinderGeometry(0.42, 0.42, 0.14, 10), m.wood, M(0, y0 + H - 1.7 + dy, z), false);
+  }
+  // war banners down the side walls
+  for (const sx of [-1, 1]) for (const z of [-4, 4]) put(kc, new THREE.PlaneGeometry(2.2, 4.4), m.banner, M(sx * (W / 2 - 0.25), y0 + H - 2.7, z, -sx * Math.PI / 2), false);
+  // one warm light for the hall
+  const l = new THREE.PointLight(0xff8a4a, 3, 30, 1.2);
+  l.position.copy(new THREE.Vector3(0, y0 + H - 1.2, 0).applyMatrix4(kc.T));
+  return [l];
+}
+
+
+// canvas helpers for the room props
+function mapTex() {
+  return canvasTex(512, 320, (g, w, h) => {
+    g.fillStyle = "#2a1408"; g.fillRect(0, 0, w, h);
+    g.strokeStyle = "rgba(255,170,90,0.25)"; g.lineWidth = 1;
+    for (let x = 0; x < w; x += 32) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+    for (let y = 0; y < h; y += 32) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+    g.fillStyle = "#5a2c12"; g.beginPath(); g.ellipse(w / 2, h / 2, 210, 130, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = "#ffb060"; g.lineWidth = 3; g.setLineDash([8, 6]);
+    g.beginPath(); g.moveTo(w / 2, 70); g.lineTo(w / 2, h / 2); g.lineTo(120, 220); g.moveTo(w / 2, h / 2); g.lineTo(392, 220); g.stroke();
+    g.setLineDash([]);
+    for (const [x, y, c, t] of [[w / 2, 70, "#ff4d3d", "ARASAKA"], [120, 220, "#ffb347", "SORARAN GATE"], [392, 220, "#9f8cff", "SLEEPBUILDERS"], [w / 2, h / 2, "#e8d8b0", "CROSSROADS"]] as const) {
+      g.fillStyle = c; g.beginPath(); g.arc(x, y, 12, 0, Math.PI * 2); g.fill();
+      g.font = "bold 18px system-ui, sans-serif"; g.textAlign = "center"; g.fillStyle = "#ffe6c0"; g.fillText(t, x, y + 32);
+    }
+  });
+}
+function boardTex(title: string, lines: string[]) {
+  return canvasTex(256, 320, (g, w, h) => {
+    g.fillStyle = "#1a0d0b"; g.fillRect(0, 0, w, h);
+    g.strokeStyle = "#b08a3e"; g.lineWidth = 6; g.strokeRect(8, 8, w - 16, h - 16);
+    g.fillStyle = "#e0483b"; g.font = "bold 24px system-ui, sans-serif"; g.textAlign = "center"; g.fillText(title, w / 2, 48);
+    g.fillStyle = "#f3e9d2"; g.font = "18px system-ui, sans-serif";
+    lines.forEach((t, i) => g.fillText(t, w / 2, 96 + i * 40));
+  });
+}
+function tatamiTex() {
+  return canvasTex(256, 256, (g, w, h) => {
+    g.fillStyle = "#6f6a3e"; g.fillRect(0, 0, w, h);
+    g.strokeStyle = "rgba(30,26,10,0.25)"; g.lineWidth = 1;
+    for (let y = 0; y < h; y += 4) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+    g.strokeStyle = "#1b1a12"; g.lineWidth = 8; g.strokeRect(0, 0, w, h);
+    g.beginPath(); g.moveTo(w / 2, 0); g.lineTo(w / 2, h); g.stroke();
+  });
+}
+
+// The upper floors of the Keep. The back strip of every room holds the stairs, and the lift stands
+// right of centre, so the props sit in the front half and along the side walls.
+function keepFloors(kc: ACtx, keep: KeepInfo, extras: THREE.Object3D[]) {
+  const m = kc.m, gold = toon(0xb08a3e), glowOrange = toon(0x000000, undefined, { emissive: 0xff8a3a, emissiveIntensity: 0.6 });
+  const room = (f: number) => ({ y: keep.floors[f], H: keep.sizes[f].h, W: keep.sizes[f].w, D: keep.sizes[f].d });
+
+  // F2 War Room: a long map table glowing from below, and a board of clan challenges
+  {
+    const { y, W } = room(1);
+    const tex = mapTex();
+    box(kc, 6.4, 0.9, 3.8, m.wood, -4, y, 2.2);
+    box(kc, 6.6, 0.12, 4, gold, -4, y + 0.9, 2.2, 0, false);
+    put(kc, new THREE.PlaneGeometry(6.2, 3.7).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: tex }), M(-4, y + 1.03, 2.2), false);
+    box(kc, 6, 0.08, 3.4, glowOrange, -4, y + 0.05, 2.2, 0, false);
+    solidBox(kc, 6.4, 1, 3.8, -4, y, 2.2);
+    for (const [dx, dz] of [[-2.2, -2.6], [0, -2.6], [2.2, -2.6], [-2.2, 4.4], [0, 4.4]]) box(kc, 0.7, 0.5, 0.7, m.pillar, -4 + dx, y, 2.2 + dz + (dz < 0 ? 1.4 : -1.4) * 0, 0, false);
+    put(kc, new THREE.PlaneGeometry(2.6, 3.2), new THREE.MeshBasicMaterial({ map: boardTex("CLAN CHALLENGES", ["Soraran Gate", "Sat 8 pm", "sleepBuilders", "Sun 9 pm", "Be there or", "lose respect"]) }), M(-W / 2 + 0.25, y + 2.6, 2, Math.PI / 2), false);
+  }
+
+  // F3 Hall of Records + library: champion plaques flanking the bridge doorways, bookshelves along
+  // the front wall, and trophy plinths
+  {
+    const { y, W, D } = room(2);
+    const plaque = toon(0x3a2a18), brass = toon(0xc9a24f, undefined, { emissive: 0x6a4a10, emissiveIntensity: 0.4 });
+    for (const sx of [-1, 1]) for (const z of [-4.5, -3, 3, 4.5]) {
+      box(kc, 0.15, 1.1, 0.9, plaque, sx * (W / 2 - 0.3), y + 1.6, z, 0, false);
+      box(kc, 0.17, 0.5, 0.6, brass, sx * (W / 2 - 0.32), y + 1.95, z, 0, false);
+    }
+    // the library: tall shelves either side of the front doorway
+    const books = [toon(0x6e1a14), toon(0x2a3b4a), toon(0x4a3a1a), toon(0x2e4a2a)];
+    for (const sx of [-1, 1]) for (let k = 0; k < 2; k++) {
+      const x = sx * (2.6 + k * 2.4), z = D / 2 - 0.65;
+      box(kc, 2.2, 3.6, 0.8, m.wood, x, y, z);
+      solidBox(kc, 2.2, 3.6, 0.9, x, y, z);
+      for (let shelf = 0; shelf < 4; shelf++) for (let b = 0; b < 7; b++)
+        box(kc, 0.22, 0.55 + ((b * 7 + shelf * 3) % 4) * 0.06, 0.5, books[(b + shelf + k) % 4], x - 0.95 + b * 0.3, y + 0.25 + shelf * 0.85, z - 0.12, 0, false);
+    }
+    // trophy plinths
+    for (const x of [-5, -2]) {
+      box(kc, 0.9, 1.1, 0.9, m.stoneDark, x, y, -2.5);
+      solidBox(kc, 0.9, 1.1, 0.9, x, y, -2.5);
+      put(kc, new THREE.CylinderGeometry(0.28, 0.12, 0.5, 8), brass, M(x, y + 1.35, -2.5), false);
+      put(kc, new THREE.CylinderGeometry(0.06, 0.18, 0.2, 8), brass, M(x, y + 1.0 + 0.1, -2.5), false);
+    }
+  }
+
+  // F4 Dojo: a tatami floor, a mirror wall, wooden dummies and a lacquered bell
+  {
+    const { y, W, D, H } = room(3);
+    const tat = tatamiTex();
+    tat.wrapS = tat.wrapT = THREE.RepeatWrapping;
+    tat.repeat.set(W / 2, D / 2);
+    put(kc, new THREE.PlaneGeometry(W - 0.8, D - 0.8).rotateX(-Math.PI / 2), toon(0, tat), M(0, y + 0.02, 0), false);
+    put(kc, new THREE.PlaneGeometry(D - 4, H - 1.2), new THREE.MeshBasicMaterial({ color: 0x8b9aa8, transparent: true, opacity: 0.35 }), M(-W / 2 + 0.25, y + (H - 1.2) / 2 + 0.3, 0, Math.PI / 2), false);
+    for (const [x, z] of [[-4, 3], [-1, 3]]) {
+      put(kc, new THREE.CylinderGeometry(0.3, 0.35, 2.2, 8), m.wood, M(x, y + 1.1, z));
+      put(kc, new THREE.BoxGeometry(1.4, 0.15, 0.15), m.wood, M(x, y + 1.6, z), false);
+      solidBox(kc, 0.7, 2.2, 0.7, x, y, z);
+    }
+    put(kc, new THREE.CylinderGeometry(0.55, 0.75, 1.2, 10, 1, true), toon(0x5c1713, undefined, { side: THREE.DoubleSide }), M(-W / 2 + 1.6, y + H - 1.6, -1.5), false);
+    // a grid of small lanterns on the ceiling
+    const lamp = toon(0xf3e2b8, undefined, { emissive: 0xffd8a0, emissiveIntensity: 0.7 });
+    for (let i = -1; i <= 1; i++) for (const z of [-1, 3]) box(kc, 0.7, 0.35, 0.7, lamp, i * 4, y + H - 0.45, z, 0, false);
+  }
+
+  // F5 Storm Shrine: a stone altar with a crackling blue crystal, kneeling cushions, relic chimes
+  {
+    const { y, H } = room(4);
+    const crystal = toon(0x9fd4ff, undefined, { emissive: 0x4a9fff, emissiveIntensity: 1.1 });
+    box(kc, 2.6, 1, 1.8, m.stoneDark, -2.5, y, 2.4);
+    box(kc, 2.9, 0.15, 2.1, gold, -2.5, y + 1, 2.4, 0, false);
+    solidBox(kc, 2.6, 1.2, 1.8, -2.5, y, 2.4);
+    put(kc, new THREE.OctahedronGeometry(0.55, 0), crystal, M(-2.5, y + 1.85, 2.4, 0, 1, 1.6, 1), false);
+    for (let i = 0; i < 4; i++) box(kc, 0.8, 0.15, 0.8, m.pillar, -4 + i * 1.1, y, 4.4, 0, false);
+    for (let i = 0; i < 5; i++) put(kc, new THREE.CylinderGeometry(0.05, 0.05, 0.6 + i * 0.15, 6), gold, M(-4.5 + i * 0.4, y + H - 0.9 - i * 0.07, -1), false);
+  }
+
+  // F6 Summit: a colossal sword driven into a block of stone (the Storm Colossus's, one day)
+  {
+    const { y } = room(5);
+    box(kc, 2.4, 0.9, 2.4, m.stoneDark, -2.4, y, 1.6);
+    solidBox(kc, 2.4, 0.9, 2.4, -2.4, y, 1.6);
+    const steel = toon(0x8a9098, undefined, { emissive: 0x2a3a5a, emissiveIntensity: 0.3 });
+    box(kc, 0.5, 3.4, 0.12, steel, -2.4, y + 0.6, 1.6, 0.4, false);
+    box(kc, 1.5, 0.25, 0.3, gold, -2.4, y + 4, 1.6, 0.4, false);
+    box(kc, 0.18, 1.2, 0.18, m.wood, -2.4, y + 4.2, 1.6, 0.4, false);
+  }
+}
+
+// The Thunder Lift: an iron cage up through every floor, a platform that rides it on a fixed timetable
+// (so every player sees it in the same place), and gates that only open on the floor where it stands.
+function thunderLift(kc: ACtx, keep: KeepInfo, col: Collision) {
+  const m = kc.m, S = SHAFT, cx = (S.x0 + S.x1) / 2, cz = (S.z0 + S.z1) / 2, sw = S.x1 - S.x0, sd = S.z1 - S.z0;
+  const bottom = keep.floors[0], last = keep.floors.length - 1, top = keep.floors[last] + keep.sizes[last].h;
+  const iron = toon(0x1d2028, undefined, { emissive: 0x2a4cbf, emissiveIntensity: 0.08 });
+  const h = top - bottom;
+  // corner posts, bars on three sides, a band at every floor
+  for (const [x, z] of [[S.x0, S.z0], [S.x1, S.z0], [S.x0, S.z1], [S.x1, S.z1]]) put(kc, new THREE.CylinderGeometry(0.12, 0.12, h, 6), iron, M(x, bottom + h / 2, z), false);
+  const bars = (ax: number, az: number, bx: number, bz: number) => {
+    const n = Math.round(Math.hypot(bx - ax, bz - az) / 0.45);
+    for (let i = 1; i < n; i++) put(kc, new THREE.CylinderGeometry(0.035, 0.035, h, 4), iron, M(ax + ((bx - ax) * i) / n, bottom + h / 2, az + ((bz - az) * i) / n), false);
+  };
+  bars(S.x0, S.z0, S.x1, S.z0);
+  bars(S.x0, S.z0, S.x0, S.z1);
+  bars(S.x1, S.z0, S.x1, S.z1);
+  for (const y of keep.floors) {
+    box(kc, sw + 0.2, 0.15, 0.15, iron, cx, y + 2.6, S.z1, 0, false);
+    box(kc, sw + 0.2, 0.15, 0.15, iron, cx, y + 2.6, S.z0, 0, false);
+  }
+  // the cage walls are solid (the front is the gate)
+  solidBox(kc, sw, h, 0.2, cx, bottom, S.z0);
+  solidBox(kc, 0.2, h, sd, S.x0, bottom, cz);
+  solidBox(kc, 0.2, h, sd, S.x1, bottom, cz);
+  const world = aabb(kc, sw - 0.1, 0.1, sd - 0.1, cx, 0, cz);
+  const lift: Lift = { x0: world.x0, x1: world.x1, z0: world.z0, z1: world.z1, stops: keep.floors.map((y) => new THREE.Vector3(0, y, 0).applyMatrix4(kc.T).y), gates: [], at: 0 };
+  keep.floors.forEach((y, i) => lift.gates.push({ box: aabb(kc, sw, 2.6, 0.2, cx, y, S.z1), stop: lift.stops[i] }));
+  col.lifts.push(lift);
+
+  // the moving parts (not merged): platform with crackling lightning, and a sliding gate per floor
+  const group = new THREE.Group();
+  const plat = new THREE.Group();
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(sw - 0.15, 0.25, sd - 0.15), m.iron);
+  deck.position.y = -0.125;
+  const glow = new THREE.LineSegments(new THREE.EdgesGeometry(deck.geometry), new THREE.LineBasicMaterial({ color: 0x8fc8ff }));
+  glow.position.copy(deck.position);
+  plat.add(deck, glow);
+  const boltGeo = new THREE.BufferGeometry();
+  const boltPos = new Float32Array(4 * 7 * 2 * 3);
+  boltGeo.setAttribute("position", new THREE.BufferAttribute(boltPos, 3));
+  const bolts = new THREE.LineSegments(boltGeo, new THREE.LineBasicMaterial({ color: 0xbfe3ff, transparent: true, blending: THREE.AdditiveBlending }));
+  bolts.frustumCulled = false;
+  plat.add(bolts);
+  group.add(plat);
+  const gates: THREE.Group[] = keep.floors.map((y) => {
+    const g = new THREE.Group();
+    for (let i = 0; i <= 6; i++) {
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.5, 4), iron);
+      bar.position.set(S.x0 + 0.15 + (i * (sw - 0.3)) / 6, y + 1.25, S.z1);
+      g.add(bar);
+    }
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(sw, 0.1, 0.1), iron);
+    rail.position.set(cx, y + 2.45, S.z1);
+    g.add(rail);
+    group.add(g);
+    return g;
+  });
+  kc.T.decompose(group.position, group.quaternion, group.scale);
+
+  // the timetable: up, stopping at every floor, then back down
+  const order = [...keep.floors.keys(), ...[...keep.floors.keys()].reverse().slice(1, -1)];
+  const legs: { t0: number; t1: number; y0: number; y1: number }[] = [];
+  let t = 0;
+  order.forEach((f, i) => {
+    const y = keep.floors[f], nf = order[(i + 1) % order.length], ny = keep.floors[nf];
+    legs.push({ t0: t, t1: t + LIFT_WAIT, y0: y, y1: y });
+    t += LIFT_WAIT;
+    const dur = Math.abs(ny - y) / LIFT_SPEED;
+    legs.push({ t0: t, t1: t + dur, y0: y, y1: ny });
+    t += dur;
+  });
+  const cycle = t;
+  let flick = 0;
+  const tick = (dt: number) => {
+    const now = (Date.now() / 1000) % cycle;
+    const leg = legs.find((l) => now >= l.t0 && now < l.t1) ?? legs[0];
+    const k = (now - leg.t0) / (leg.t1 - leg.t0), e = k * k * (3 - 2 * k);
+    const y = leg.y0 + (leg.y1 - leg.y0) * e;
+    plat.position.set(cx, y, cz);
+    lift.at = new THREE.Vector3(0, y, 0).applyMatrix4(kc.T).y;
+    // a gate lifts while the platform is at its floor
+    keep.floors.forEach((fy, i) => {
+      const open = Math.abs(fy - y) < 0.25 ? 1 : 0;
+      gates[i].position.y += (open * 2.3 - gates[i].position.y) * Math.min(1, dt * 6);
+    });
+    // lightning flickers round the platform's edges
+    if ((flick -= dt) <= 0) {
+      flick = 0.07 + Math.random() * 0.08;
+      let j = 0;
+      for (const [x, z] of [[-sw / 2, -sd / 2], [sw / 2, -sd / 2], [sw / 2, sd / 2], [-sw / 2, sd / 2]]) {
+        let px = x * 0.9, py = 0.05, pz = z * 0.9;
+        for (let s2 = 0; s2 < 7; s2++) {
+          const nx = x * 0.9 + (Math.random() - 0.5) * 0.35, ny = py + 0.25 + Math.random() * 0.2, nz = z * 0.9 + (Math.random() - 0.5) * 0.35;
+          boltPos.set([px, py, pz, nx, ny, nz], j);
+          j += 6;
+          px = nx; py = ny; pz = nz;
+        }
+      }
+      boltGeo.attributes.position.needsUpdate = true;
+      (bolts.material as THREE.LineBasicMaterial).opacity = 0.5 + Math.random() * 0.5;
+    }
+  };
+  return { group, tick };
+}
+
 /* ---------- the citadel ---------- */
 
 const HW = 76, FRONT = 80, BACK = -100;
@@ -551,7 +861,7 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   const rand = rngFrom("arasaka-citadel");
   const root = new THREE.Group();
   const b = new Builder();
-  const col: Collision = { walk: [], solid: [], ramps: [], doors: [], roofs: [] };
+  const col: Collision = { walk: [], solid: [], ramps: [], doors: [], roofs: [], lifts: [] };
   const c: ACtx = { b, T: new THREE.Matrix4(), m: mats(env), col };
   const m = c.m;
   const fires: THREE.Vector3[] = [];
@@ -650,7 +960,8 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   stone(c, 44, 5, 38, 0, T3, kz, 1);
   steps(c, 8, 5, 6, 0, T3, kz + 19 + 6);
   const KW = 30, KS = 0.85;
-  const keep = building(sub(c, M(0, T3 + 5, kz)) as ACtx, KW, 25, { floors: 6, wallH: 5.4, shrink: KS, veranda: 1.6, spire: 14, openings: [{ floor: 2, side: "x+", w: 3.4 }, { floor: 2, side: "x-", w: 3.4 }] });
+  const kc = sub(c, M(0, T3 + 5, kz)) as ACtx;
+  const keep = building(kc, KW, 25, { floors: 6, wallH: 5.4, shrink: KS, veranda: 1.6, spire: 14, shaft: SHAFT, openings: [{ floor: 2, side: "x+", w: 3.4 }, { floor: 2, side: "x-", w: 3.4 }] });
   for (const sx of [-1, 1]) {
     const tx = sx * 38, tz = kz - 4;
     stone(c, 17, 5, 17, tx, T3, tz, 0.8);
@@ -664,6 +975,9 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
     put(c, new THREE.PlaneGeometry(3, 16), m.banner, M(sx * 7.5, T3 + 5 + keep.floors[1] + 2, kz + 12.5 + 1.6 + 0.35), false);
   }
   for (const sx of [-1, 1]) brazier(c, sx * 17, T3 + 5, kz + 16, fires);
+  const keepLights = greatHall(kc, keep, fires, extras);
+  keepFloors(kc, keep, extras);
+  const lift = thunderLift(kc, keep, col);
   // the emblem high on the keep's top storey, facing the gate
   const topF = keep.sizes.length - 1, topS = keep.sizes[topF];
   extras.push(emblem(c, 5, 0, T3 + 5 + keep.floors[topF] + topS.h * 0.5, kz + topS.d / 2 + 0.25));
@@ -679,6 +993,7 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   b.finish(root);
   for (const e of extras) root.add(e);
   for (const d of col.doors) root.add(d.pivot);
+  root.add(lift.group, ...keepLights);
 
   // fire: glowing cores plus additive flames that flicker
   const glow = softTexture();
@@ -714,6 +1029,7 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
 
   const q = new THREE.Quaternion();
   const tick = (t: number, dt = 0.016) => {
+    lift.tick(dt);
     fireGroup.children.forEach((o, i) => {
       if (o instanceof THREE.Sprite) o.scale.setScalar(5.5 + Math.sin(t * 9 + i) * 0.8 + Math.sin(t * 23 + i * 3) * 0.5);
     });

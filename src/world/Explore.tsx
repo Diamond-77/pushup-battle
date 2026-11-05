@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-import { buildArasaka, groundAt, ARASAKA_SPAWN, type Box, type Door } from "../palace/arasaka";
+import { buildArasaka, groundAt, ARASAKA_SPAWN, type Box, type Door, type Lift } from "../palace/arasaka";
 import { skyTexture } from "../palace/buildPalace";
 import { ENVS } from "../palace/weather";
 import { supabase } from "../supabase";
@@ -231,6 +231,8 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
         const h = r.ya + (r.yb - r.ya) * t;
         if (h <= y + STEP && h > best) best = h;
       }
+      // standing on a lift platform
+      for (const l of col.lifts) if (x > l.x0 && x < l.x1 && z > l.z0 && z < l.z1 && l.at <= y + STEP && l.at > best) best = l.at;
       return best;
     };
     const blocks = (b: Box, y: number) => y + TALL > b.y0 && y < b.y1;
@@ -249,11 +251,14 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
           if (m === l) p.x = b.x0 - R; else if (m === rr) p.x = b.x1 + R; else if (m === f) p.z = b.z0 - R; else p.z = b.z1 + R;
         }
       };
-      for (let pass = 0; pass < 2; pass++)
+      for (let pass = 0; pass < 2; pass++) {
+        // lift gates are shut unless the platform stands at that floor
+        for (const l of col.lifts) for (const g of l.gates) if (Math.abs(l.at - g.stop) > 0.3 && blocks(g.box, p.y)) test(g.box);
         for (const { b, kind } of cellAt(p.x, p.z)) {
           if (!blocks(b, p.y)) continue;
           if (kind === "solid" || (kind === "walk" && b.y1 > p.y + STEP) || (kind === "door" && !doorOpen.has(b))) test(b);
         }
+      }
     };
     // the highest surface below y at (x, z): where rain lands
     const coverAt = (x: number, z: number, y: number) => {
@@ -280,6 +285,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     pos.y = groundAt(pos.x, pos.z);
     let facing = Math.PI; // toward the gate (-z)
     let vy = 0, grounded = true, running = false;
+    let riding: Lift | null = null; // the lift you stand on
 
     /* ----- other people ----- */
     const people = PEOPLE.map((p) => {
@@ -351,7 +357,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     }
 
     // dev only: lets automated checks teleport the hero and turn him
-    if (import.meta.env.DEV) (window as unknown as { __ex: unknown }).__ex = { pos, floor: floorAt, face: (a: number) => (facing = a), yaw: (a: number) => (yaw = a, pitch = 0.15), doors: () => col.doors.map((d) => d.open) };
+    if (import.meta.env.DEV) (window as unknown as { __ex: unknown }).__ex = { pos, floor: floorAt, lifts: col.lifts, face: (a: number) => (facing = a), yaw: (a: number) => (yaw = a, pitch = 0.15), doors: () => col.doors.map((d) => d.open) };
 
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1500);
     let yaw = 0, pitch = 0.3; // camera sits behind (at +z of) the hero to start
@@ -674,11 +680,14 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       // gravity, jumping, and standing on the highest floor within a step (sitting: stay put on the seat)
       if (seat) { pos.copy(seat.pos); facing = seat.facing; vy = 0; grounded = true; }
       else {
+        // riding a lift: move with the platform, however far it went this frame
+        if (riding && grounded && pos.x > riding.x0 && pos.x < riding.x1 && pos.z > riding.z0 && pos.z < riding.z1) pos.y = riding.at;
         vy -= GRAVITY * dt;
         pos.y += vy * dt;
         const floor = floorAt(pos.x, pos.z, pos.y + Math.max(0, -vy * dt));
         if (pos.y <= floor + 0.02 || (grounded && pos.y - floor < STEP && vy <= 0)) { pos.y = floor; vy = 0; grounded = true; }
         else grounded = false;
+        riding = grounded ? col.lifts.find((l) => Math.abs(l.at - pos.y) < 0.01 && pos.x > l.x0 && pos.x < l.x1 && pos.z > l.z0 && pos.z < l.z1) ?? null : null;
       }
 
       // the closest free seat within reach
