@@ -91,55 +91,99 @@
   font-family: var(--brush); font-weight: 900; font-size: 1.1rem; color: var(--parch); box-shadow: 0 3px 0 var(--wood-shadow);
 }
 .ex-stick {
-  position: absolute; z-index: 5; width: 136px; height: 136px; border-radius: 50%;
-  left: max(28px, calc(env(safe-area-inset-left) + 18px)); bottom: calc(env(safe-area-inset-bottom) + 22px);
-  background: rgba(220, 220, 228, 0.22); border: 1.5px solid rgba(255, 255, 255, 0.18);
-  display: grid; place-items: center; pointer-events: none;
+  position: absolute; z-index: 5; width: 150px; height: 150px; border-radius: 50%;
+  left: max(30px, calc(env(safe-area-inset-left) + 20px)); bottom: calc(env(safe-area-inset-bottom) + 20px);
+  display: grid; place-items: center; pointer-events: none; transition: opacity 0.2s;
+  opacity: 0.78;
 }
-.ex-marks { position: absolute; inset: 0; width: 100%; height: 100%; }
-.ex-marks path { fill: none; stroke: #fff; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; opacity: 0.9; }
-.ex-knob { width: 26px; height: 26px; border-radius: 50%; background: rgba(255, 255, 255, 0.5); box-shadow: 0 0 0 10px rgba(255, 255, 255, 0.08); }
+.ex-stick.live { opacity: 1; }
+.ex-ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle, rgba(18, 14, 16, 0.18) 0 52%, rgba(18, 14, 16, 0.42) 53% 100%);
+  border: 2px solid rgba(243, 233, 210, 0.38);
+  box-shadow: inset 0 0 0 7px rgba(243, 233, 210, 0.06), 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+/* a glowing wedge on the rim that points where you steer */
+.ex-dir {
+  position: absolute; inset: -4px; border-radius: 50%; opacity: 0;
+  background: conic-gradient(from -38deg, transparent 0deg, rgba(255, 186, 120, 0.95) 38deg, transparent 76deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 63%, #000 64% 71%, transparent 72%);
+  mask: radial-gradient(circle, transparent 0 63%, #000 64% 71%, transparent 72%);
+}
+.ex-knob {
+  position: relative; width: 66px; height: 66px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #fff8ea 0 12%, #f3e9d2 38%, #b9ab90 100%);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45), inset 0 -4px 8px rgba(80, 60, 40, 0.35), 0 0 0 6px rgba(243, 233, 210, 0.12);
+}
+.ex-knob::after { content: ""; position: absolute; inset: 16px; border-radius: 50%; border: 2px solid rgba(107, 68, 41, 0.35); }
 
-/* right thumb: the big jump/run button, with the action arc wrapped round its upper left */
+/* right thumb: the big jump/run button with the action arc wrapped round its upper left */
 .ex-right {
-  position: absolute; z-index: 5; width: 210px; height: 190px;
-  right: max(24px, calc(env(safe-area-inset-right) + 16px)); bottom: calc(env(safe-area-inset-bottom) + 18px);
+  position: absolute; z-index: 5; width: 230px; height: 210px;
+  right: max(18px, calc(env(safe-area-inset-right) + 10px)); bottom: calc(env(safe-area-inset-bottom) + 14px);
   pointer-events: none;
 }
 .ex-right button { pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent; }
 .ex-jump {
-  position: absolute; right: 0; bottom: 0; width: 122px; height: 122px; border-radius: 50%;
-  background: rgba(220, 220, 228, 0.24); border: 1.5px solid rgba(255, 255, 255, 0.18); display: grid; place-items: center;
+  position: absolute; right: 0; bottom: 0; width: 122px; height: 122px; border-radius: 50%; padding: 0;
+  background: radial-gradient(circle at 50% 35%, rgba(70, 58, 56, 0.55), rgba(18, 14, 16, 0.6));
+  border: 2px solid rgba(243, 233, 210, 0.42);
+  box-shadow: inset 0 0 0 7px rgba(243, 233, 210, 0.06), 0 6px 18px rgba(0, 0, 0, 0.4);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  transition: transform 0.08s, box-shadow 0.15s;
 }
-.ex-jump:active { background: rgba(240, 240, 248, 0.4); transform: scale(0.96); }
-.ex-jump svg { width: 50px; height: 50px; }
-.ex-jump svg circle { fill: #fff; }
-.ex-jump svg path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
-.ex-arc {
-  position: absolute; right: 66px; bottom: 38px; width: 120px; height: 120px; padding: 0; border: 0; background: none;
-}
+.ex-jump:active { transform: scale(0.95); }
+.ex-jump svg { width: 52px; height: 52px; }
+.ex-jump svg circle { fill: var(--parch); }
+.ex-jump svg path { fill: none; stroke: var(--parch); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.ex-jump em { font-style: normal; font-size: 0.56rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(243, 233, 210, 0.6); }
+.ex-jump.running { box-shadow: inset 0 0 0 7px rgba(255, 140, 90, 0.25), 0 0 0 3px #e0483b, 0 0 22px rgba(255, 80, 50, 0.7); }
+.ex-jump.running em { color: #ffb08a; }
+.ex-arc { position: absolute; right: 49px; bottom: 49px; width: 150px; height: 150px; padding: 0; border: 0; background: none; }
 .ex-arc svg { width: 100%; height: 100%; overflow: visible; }
-.ex-arc path { stroke: rgba(210, 210, 218, 0.55); stroke-width: 30; stroke-linecap: round; }
-.ex-arc text { font-family: var(--brush); font-weight: 900; font-size: 17px; letter-spacing: 0.06em; fill: #fff; dominant-baseline: central; }
-.ex-arc:disabled { opacity: 0.55; }
-.ex-arc.on path { stroke: #c8372d; filter: drop-shadow(0 0 6px rgba(255, 70, 50, 0.9)); }
-.ex-arc.on.door path { stroke: #8a6a3a; filter: drop-shadow(0 0 6px rgba(255, 200, 120, 0.7)); }
-.ex-arc.on:active { transform: scale(0.95); }
+.ex-arc .band { fill: none; stroke: rgba(18, 14, 16, 0.5); stroke-width: 30; stroke-linecap: round; }
+.ex-arc text { font-family: var(--brush); font-weight: 900; letter-spacing: 0.08em; fill: rgba(243, 233, 210, 0.45); dominant-baseline: central; }
+.ex-arc.on .band { stroke: url(#ex-arc-on); filter: drop-shadow(0 0 7px rgba(255, 70, 50, 0.85)); }
+.ex-arc.on.door .band { stroke: url(#ex-arc-door); filter: drop-shadow(0 0 6px rgba(255, 200, 120, 0.6)); }
+.ex-arc.on text { fill: #fff4e6; }
+.ex-arc.on:active { transform: scale(0.96); transform-origin: 92% 92%; }
 
 /* several actions at once: small round skill buttons round the big one, like MLBB */
 .ex-skills { position: absolute; inset: 0; }
 .ex-skill {
-  position: absolute; width: 54px; height: 54px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.3);
-  background: rgba(220, 220, 228, 0.3); display: grid; place-items: center; padding: 0; color: #fff;
+  position: absolute; width: 54px; height: 54px; border-radius: 50%; padding: 0; color: var(--parch);
+  background: radial-gradient(circle at 50% 35%, rgba(70, 58, 56, 0.6), rgba(18, 14, 16, 0.7));
+  border: 2px solid rgba(243, 233, 210, 0.42); display: grid; place-items: center; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  animation: ex-pop-in 0.18s ease-out;
 }
-.ex-skill svg { width: 24px; height: 24px; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-.ex-skill span { position: absolute; top: 100%; margin-top: 2px; font-size: 0.6rem; font-weight: 700; white-space: nowrap; text-shadow: 0 1px 2px #000; }
-.ex-skill.battle { background: #c8372d; border-color: #ff8a7a; box-shadow: 0 0 12px rgba(255, 70, 50, 0.8); }
-.ex-skill.door { background: rgba(138, 106, 58, 0.85); }
-.ex-skill:active { transform: scale(0.92); }
-.ex-skill.s0 { right: 52px; bottom: 136px; }
-.ex-skill.s1 { right: 118px; bottom: 100px; }
-.ex-skill.s2 { right: 136px; bottom: 30px; }
+@keyframes ex-pop-in { from { transform: scale(0.6); opacity: 0; } }
+.ex-skill svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.ex-skill span { position: absolute; top: 100%; margin-top: 3px; font-size: 0.6rem; font-weight: 700; white-space: nowrap; text-shadow: 0 1px 3px #000; }
+.ex-skill.battle { background: radial-gradient(circle at 50% 35%, #e0483b, #8f241b); border-color: #ff9a8a; box-shadow: 0 0 14px rgba(255, 70, 50, 0.8); color: #fff4e6; }
+.ex-skill.door { background: radial-gradient(circle at 50% 35%, #a8834a, #5a3f1f); }
+.ex-skill:active { transform: scale(0.9); }
+.ex-skill.s0 { right: 34px; bottom: 129px; }
+.ex-skill.s1 { right: 101px; bottom: 101px; }
+.ex-skill.s2 { right: 129px; bottom: 34px; }
+
+/* target lock: faces of everyone in reach, above the right thumb */
+.ex-lock {
+  position: absolute; z-index: 6; display: flex; gap: 10px;
+  right: max(28px, calc(env(safe-area-inset-right) + 20px)); bottom: calc(env(safe-area-inset-bottom) + 236px);
+}
+.ex-face {
+  position: relative; width: 50px; height: 50px; border-radius: 50%; padding: 0; overflow: visible;
+  border: 2px solid rgba(243, 233, 210, 0.5); background: #2a2d3c; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45); animation: ex-pop-in 0.18s ease-out;
+}
+.ex-face img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.ex-face b { color: var(--parch); font-size: 1.2rem; }
+.ex-face span { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 2px; font-size: 0.58rem; font-weight: 700; color: #fff; text-shadow: 0 1px 3px #000; white-space: nowrap; }
+.ex-face.on { border-color: #e0313c; box-shadow: 0 0 0 2px #e0313c, 0 0 14px rgba(255, 60, 50, 0.8); }
+.ex-face.on::before { content: ""; position: absolute; left: 50%; top: -12px; transform: translateX(-50%); border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 9px solid #e0313c; }
+
+.ex-gear { margin-left: auto; width: 40px; height: 40px; }
+.ex-gear svg { width: 20px; height: 20px; fill: none; stroke: var(--parch); stroke-width: 1.8; }
 
 /* name tags over heads */
 .ex-tag {
@@ -147,8 +191,10 @@
   font-size: 0.72rem; font-weight: 700; color: #fff; text-shadow: 0 1px 3px #000; white-space: nowrap; will-change: transform;
 }
 .ex-tag.you { font-size: 0.6rem; opacity: 0.85; }
-.ex-tag.calling { font-size: 0.9rem; }
-.ex-arrow { width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 10px solid #e0313c; margin-bottom: 2px; animation: ex-bob 0.8s ease-in-out infinite; }
+.ex-arrow { display: none; }
+.ex-tag.pointed .ex-arrow { display: block; }
+.ex-tag.pointed { font-size: 0.85rem; }
+.ex-tag .ex-arrow { width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 10px solid #e0313c; margin-bottom: 2px; animation: ex-bob 0.8s ease-in-out infinite; }
 @keyframes ex-bob { 50% { transform: translateY(-4px); } }
 
 /* incoming challenge: name, then a small card with tick and cross */
@@ -195,3 +241,26 @@
 .ex-rotate span { color: #b9ab90; }
 .ex-phone { width: 46px; height: 78px; border: 3px solid var(--parch); border-radius: 9px; animation: ex-turn 1.8s ease-in-out infinite; }
 @keyframes ex-turn { 0%, 25% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+
+.ex-pop-who { display: flex; align-items: center; gap: 8px; }
+.ex-pop-who img { width: 34px; height: 34px; border-radius: 50%; border: 2px solid #e0313c; }
+.ex-modes-head { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.ex-modes-head img { width: 32px; height: 32px; border-radius: 50%; border: 2px solid #e0313c; }
+
+/* settings */
+.ex-settings { position: absolute; inset: 0; z-index: 10; display: grid; place-items: center; background: rgba(10, 8, 8, 0.6); padding: 12px; }
+.ex-settings-card {
+  width: min(440px, 100%); max-height: calc(100% - 8px); overflow-y: auto; padding: 14px 16px; border-radius: 18px;
+  background: linear-gradient(180deg, #3b2216, #24140d); border: 2px solid var(--wood-rim); box-shadow: 0 6px 0 var(--wood-shadow);
+  color: var(--parch); display: flex; flex-direction: column; gap: 10px; touch-action: pan-y;
+}
+.ex-settings-title { font-family: var(--brush); font-weight: 900; font-size: 1.3rem; }
+.ex-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 0.85rem; }
+.ex-row b { color: #e8b84a; font-variant-numeric: tabular-nums; }
+.ex-row input[type="range"] { width: 48%; accent-color: #3fbf8a; }
+.ex-seg { display: flex; border: 1.5px solid var(--wood-rim); border-radius: 10px; overflow: hidden; flex: none; }
+.ex-seg button { padding: 6px 10px; border: 0; background: none; color: #d8c9aa; font-size: 0.75rem; font-weight: 700; }
+.ex-seg button.on { background: #3fbf8a; color: #0f3a28; }
+.ex-note { margin: 0; font-size: 0.72rem; color: #b9ab90; }
+.ex-settings-foot { display: flex; gap: 10px; justify-content: flex-end; align-items: center; }
+.ex-settings-foot .game-btn { height: 44px; font-size: 1.1rem !important; }
