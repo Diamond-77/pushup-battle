@@ -280,33 +280,40 @@ function roof(c: ACtx, W: number, D: number, iw: number, id: number, y: number, 
 /* ---------- buildings ---------- */
 
 type Side = "x+" | "x-" | "z+" | "z-";
-type BOpts = { openings?: { floor: number; side: Side; w: number }[]; floors: number; wallH?: number; shrink?: number; veranda?: number; door?: boolean; spire?: number; topRatio?: number; banners?: boolean };
+type BOpts = { spiral?: boolean; openings?: { floor: number; side: Side; w: number }[]; floors: number; wallH?: number; shrink?: number; veranda?: number; door?: boolean; spire?: number; topRatio?: number; banners?: boolean };
 
 // A multi-storey hall or tower. Returns the height of each floor's walking surface (slab top), and the top.
+// Buildings you can walk into get a stair to every floor (a straight flight along the back wall, or a
+// spiral in small towers), a stairwell cut through the floor above, and a doorway out onto each balcony.
 export function building(c: ACtx, w: number, d: number, o: BOpts) {
   const ver = o.veranda ?? 1.3, shrink = o.shrink ?? 0.84, floors: number[] = [], sizes: { w: number; d: number; h: number }[] = [];
+  const inside = o.door !== false;
   let y = 0, cw = w, cd = d;
+  let hole: Hole = null; // the stairwell coming up through this floor
   for (let f = 0; f < o.floors; f++) {
     const H = (o.wallH ?? 4.4) * (f === 0 ? 1.15 : 1);
     const sw = cw + 2 * ver + 0.6, sd = cd + 2 * ver + 0.6;
     // floor slab (the ground floor gets a stone podium with steps)
     if (f === 0) {
       stone(c, sw + 1.6, 1.4, sd + 1.6, 0, y, 0, 0.3);
-      if (o.door !== false) steps(c, 4.6, 1.4, 2.2, 0, y, sd / 2 + 0.8 + 2.2);
+      if (inside) steps(c, 4.6, 1.4, 2.2, 0, y, sd / 2 + 0.8 + 2.2);
       y += 1.4;
     } else {
-      box(c, sw, 0.6, sd, c.m.wood, 0, y, 0);
-      walkBox(c, sw, 0.6, sd, 0, y, 0);
+      holedSlab(c, sw, 0.6, sd, y, hole, c.m.wood, true);
       y += 0.6;
     }
     floors.push(y);
     sizes.push({ w: cw, d: cd, h: H });
-    // wall shell: four thin walls, the front one with a doorway on the ground floor
+    // wall shell: four thin walls. The ground floor has the front door; upper floors have open
+    // doorways onto the balcony (front, plus any side a sky bridge lands on)
     const T = 0.4;
-    wallPanel(c, cw, H, 0, y, -cd / 2 + T / 2);
-    wallPanel(c, cd, H, -cw / 2 + T / 2, y, 0, Math.PI / 2);
-    wallPanel(c, cd, H, cw / 2 - T / 2, y, 0, Math.PI / 2);
-    if (f === 0 && o.door !== false) {
+    const opens = (side: Side) => inside && f > 0 && (side === "z+" || (o.openings ?? []).some((q) => q.floor === f && q.side === side));
+    const ddw = Math.min(2.4, cw * 0.3), ddh = Math.min(3, H - 0.8);
+    const wall = (side: Side, len: number, x: number, z: number, ry: number) => (opens(side) ? doorway(c, len, H, x, y, z, ry, ddw, ddh) : wallPanel(c, len, H, x, y, z, ry));
+    wall("z-", cw, 0, -cd / 2 + T / 2, 0);
+    wall("x-", cd, -cw / 2 + T / 2, 0, Math.PI / 2);
+    wall("x+", cd, cw / 2 - T / 2, 0, Math.PI / 2);
+    if (f === 0 && inside) {
       const dw = Math.min(3.2, cw * 0.3), dh = Math.min(3.6, H - 0.8), side = (cw - dw) / 2;
       wallPanel(c, side, H, -cw / 2 + side / 2, y, cd / 2 - T / 2);
       wallPanel(c, side, H, cw / 2 - side / 2, y, cd / 2 - T / 2);
@@ -315,7 +322,7 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
       door(c, dw, dh, 0, y, cd / 2 - T / 2, c.m.pillar);
       box(c, dw + 0.8, 0.5, T + 0.3, c.m.pillar, 0, y + dh, cd / 2 - T / 2); // red lintel
       for (const sx of [-1, 1]) box(c, 0.45, dh, T + 0.3, c.m.pillar, sx * (dw / 2 + 0.2), y, cd / 2 - T / 2, 0, false);
-    } else wallPanel(c, cw, H, 0, y, cd / 2 - T / 2);
+    } else wall("z+", cw, 0, cd / 2 - T / 2, 0);
     // red pillars on the slab edge, carrying the beam band
     const hx = cw / 2 + ver, hz = cd / 2 + ver;
     for (const [len, along, fixed] of [[2 * hx, "x", hz], [2 * hx, "x", -hz], [2 * hz, "z", hx], [2 * hz, "z", -hx]] as const) {
@@ -336,16 +343,20 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
       }
       fence(c, rect(hx, hz, y), 1.0, c.m.rail, true, gaps);
     }
-    // beam band: a solid ring over the pillars and the wall tops (the ceiling)
-    box(c, 2 * hx + 0.7, 0.8, 2 * hz + 0.7, c.m.wood, 0, y + H, 0);
+    // the next floor's size and height, so the stair up to it can be laid out now
+    const last = f === o.floors - 1;
+    const nw = cw * shrink, nd = cd * shrink;
+    const W = hx + 2.4, D = hz + 2.4;
+    const iw = nw / 2 + ver + 0.3, id = nd / 2 + ver + 0.3;
+    const rise = Math.max(1.6, (W - iw) * 0.6);
+    const next = y + H + 0.8 + rise - 0.4 + 0.6; // the next slab's top
+    hole = !last && inside ? (o.spiral ? spiralStair(c, nw, nd, y, next) : straightStair(c, nw, nd, y, next, f % 2 ? 1 : -1)) : null;
+    // beam band: a solid ring over the pillars and the wall tops (the ceiling), open over the stairwell
+    holedSlab(c, 2 * hx + 0.7, 0.8, 2 * hz + 0.7, y + H, hole, c.m.wood, false);
     c.col.roofs.push(aabb(c, 2 * hx + 0.7, 0.8, 2 * hz + 0.7, 0, y + H, 0));
     box(c, 2 * hx + 0.9, 0.22, 2 * hz + 0.9, c.m.bracket, 0, y + H + 0.1, 0, 0, false);
     y += H + 0.8;
-    const W = hx + 2.4, D = hz + 2.4;
-    if (f < o.floors - 1) {
-      const nw = cw * shrink, nd = cd * shrink;
-      const iw = nw / 2 + ver + 0.3, id = nd / 2 + ver + 0.3;
-      const rise = Math.max(1.6, (W - iw) * 0.6);
+    if (!last) {
       roof(c, W, D, iw - 0.2, id - 0.2, y - 0.1, rise, 1.4);
       y += rise - 0.4; // the next slab sits right on the roof's inner edge
       cw = nw;
@@ -369,6 +380,76 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
     }
   }
   return { floors, sizes, top: y };
+}
+
+
+type Hole = { x0: number; x1: number; z0: number; z1: number } | null;
+
+// a slab w x d (bottom at y, h thick) with an optional rectangular hole cut out of it
+function holedSlab(c: ACtx, w: number, h: number, d: number, y: number, hole: Hole, mat: THREE.Material, walk: boolean) {
+  const X0 = -w / 2, X1 = w / 2, Z0 = -d / 2, Z1 = d / 2;
+  const parts = hole
+    ? [[X0, X1, Math.max(Z0, hole.z1), Z1], [X0, X1, Z0, Math.min(Z1, hole.z0)], [X0, Math.max(X0, hole.x0), hole.z0, hole.z1], [Math.min(X1, hole.x1), X1, hole.z0, hole.z1]]
+    : [[X0, X1, Z0, Z1]];
+  for (const [a, b, e, g] of parts) {
+    if (b - a < 0.05 || g - e < 0.05) continue;
+    box(c, b - a, h, g - e, mat, (a + b) / 2, y, (e + g) / 2);
+    if (walk) walkBox(c, b - a, h, g - e, (a + b) / 2, y, (e + g) / 2);
+  }
+}
+
+// a wall with an open doorway in the middle (no door leaf), red posts and a lintel
+function doorway(c: ACtx, len: number, H: number, x: number, y: number, z: number, ry: number, dw: number, dh: number) {
+  const s = sub(c, M(x, 0, z, ry)) as ACtx, side = (len - dw) / 2;
+  wallPanel(s, side, H, -len / 2 + side / 2, y, 0);
+  wallPanel(s, side, H, len / 2 - side / 2, y, 0);
+  box(s, dw, H - dh, 0.4, s.m.wallPlain, 0, y + dh, 0);
+  solidBox(s, dw, H - dh, 0.4, 0, y + dh, 0);
+  box(s, dw + 0.8, 0.5, 0.7, s.m.pillar, 0, y + dh, 0);
+  for (const sx of [-1, 1]) box(s, 0.45, dh, 0.7, s.m.pillar, sx * (dw / 2 + 0.2), y, 0, 0, false);
+}
+
+// a straight flight along the back wall of the room above (nw x nd), from y0 up to y1.
+// dir: which way it climbs along x (floors alternate, so each flight starts where the last one ended).
+// Returns the stairwell to cut out of the floor above.
+function straightStair(c: ACtx, nw: number, nd: number, y0: number, y1: number, dir: number): Hole {
+  const SW = 1.6, rise = y1 - y0, L = Math.min(nw - 2, rise * 1.35), zc = -nd / 2 + 0.55 + SW / 2;
+  const bottom = -dir * (L / 2), n = Math.max(4, Math.round(rise / 0.28));
+  for (let k = 0; k < n; k++)
+    box(c, L / n, ((k + 1) * rise) / n, SW, k % 2 ? c.m.marbleShade : c.m.marble, bottom + dir * (k + 0.5) * (L / n), y0, zc, 0, k === 0 || k === n - 1);
+  // a handrail along the open side; it's solid past the first steps so you can't walk in under the flight
+  const ra = new THREE.Vector3(bottom, y0 + 1, zc + SW / 2 + 0.1), rb = new THREE.Vector3(-bottom, y1 + 1, zc + SW / 2 + 0.1);
+  beam(c, ra, rb, 0.14, 0.14, c.m.rail);
+  for (let k = 1; k <= 3; k++) {
+    const p = ra.clone().lerp(rb, k / 4);
+    box(c, 0.1, 1, 0.1, c.m.rail, p.x, p.y - 1, p.z, 0, false);
+  }
+  solidBox(c, L - 1.2, rise, 0.25, dir * 0.6, y0, zc + SW / 2 + 0.1);
+  const a = new THREE.Vector3(bottom - dir * 0.3, y0, zc).applyMatrix4(c.T), b = new THREE.Vector3(-bottom + dir * 0.6, y1, zc).applyMatrix4(c.T);
+  c.col.ramps.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, w: SW, ya: a.y, yb: b.y });
+  // only the upper part needs head room through the floor above
+  const t0 = Math.max(0, 1 - 2.6 / rise), xa = bottom + dir * t0 * L, xb = -bottom + dir * 0.05;
+  return { x0: Math.min(xa, xb), x1: Math.max(xa, xb), z0: zc - SW / 2 - 0.15, z1: zc + SW / 2 + 0.15 };
+}
+
+// a spiral stair round a post in the middle of a small tower: one full turn per floor, starting and
+// ending at the front, so you step off it straight out of the doorway. Returns the stairwell.
+function spiralStair(c: ACtx, nw: number, nd: number, y0: number, y1: number): Hole {
+  const r = Math.min(nw, nd) / 2 - 0.8, rm = r * 0.58, N = 20, rise = y1 - y0;
+  put(c, new THREE.CylinderGeometry(0.3, 0.3, rise + 0.6, 8), c.m.pillar, M(0, y0 + rise / 2, 0), false);
+  solidBox(c, 0.5, rise, 0.5, 0, y0, 0);
+  const at = (k: number, rad: number) => new THREE.Vector3(Math.sin((2 * Math.PI * k) / N) * rad, y0 + (rise * k) / N, Math.cos((2 * Math.PI * k) / N) * rad);
+  for (let k = 0; k < N; k++) {
+    const p = at(k, rm), q = at(k + 1, rm), mid = p.clone().add(q).multiplyScalar(0.5), th = (2 * Math.PI * (k + 0.5)) / N;
+    put(c, new THREE.BoxGeometry(p.distanceTo(q) * 1.15, 0.22, r * 0.95), k % 2 ? c.m.marbleShade : c.m.marble, M(mid.x, mid.y - 0.11, mid.z, th));
+    // each piece reaches a quarter past both ends, so there are no slivers between pieces to fall through
+    const a = p.clone().lerp(q, -0.25).applyMatrix4(c.T), b = p.clone().lerp(q, 1.25).applyMatrix4(c.T);
+    c.col.ramps.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, w: r * 0.95, ya: a.y, yb: b.y });
+  }
+  // off the top, onto the floor in front of the stairwell
+  const a = new THREE.Vector3(0, y1, rm).applyMatrix4(c.T), b = new THREE.Vector3(0, y1, r + 0.9).applyMatrix4(c.T);
+  c.col.ramps.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, w: 1.4, ya: a.y, yb: b.y });
+  return { x0: -r - 0.1, x1: r + 0.1, z0: -r - 0.1, z1: r + 0.1 };
 }
 
 function wallPanel(c: ACtx, len: number, h: number, x: number, y: number, z: number, ry = 0) {
@@ -572,13 +653,13 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   const keep = building(sub(c, M(0, T3 + 5, kz)) as ACtx, KW, 25, { floors: 6, wallH: 5.4, shrink: KS, veranda: 1.6, spire: 14, openings: [{ floor: 2, side: "x+", w: 3.4 }, { floor: 2, side: "x-", w: 3.4 }] });
   for (const sx of [-1, 1]) {
     const tx = sx * 38, tz = kz - 4;
-    stone(c, 14, 5, 14, tx, T3, tz, 0.8);
-    const tower = building(sub(c, M(tx, T3 + 5, tz)) as ACtx, 8, 8, { floors: 5, wallH: 4.6, shrink: 0.9, openings: [{ floor: 2, side: sx > 0 ? "x-" : "x+", w: 3.4 }] });
+    stone(c, 17, 5, 17, tx, T3, tz, 0.8);
+    const tower = building(sub(c, M(tx, T3 + 5, tz)) as ACtx, 10, 10, { floors: 5, wallH: 4.6, shrink: 0.92, spiral: true, openings: [{ floor: 2, side: sx > 0 ? "x-" : "x+", w: 3.4 }] });
     // bridge from the tower's 3rd floor to the keep's 3rd floor
     const fy = T3 + 5 + tower.floors[2], ky = T3 + 5 + keep.floors[2];
     const kw = (KW * KS * KS) / 2 + 1.6 + 0.3;
     // the bridge lands right on the tower's balcony slab (no gap)
-    corridor(c, new THREE.Vector3(tx - sx * ((8 * 0.81) / 2 + 1.6), fy, tz), new THREE.Vector3(sx * kw, ky, tz), 3, 3);
+    corridor(c, new THREE.Vector3(tx - sx * (tower.sizes[2].w / 2 + 1.6), fy, tz), new THREE.Vector3(sx * kw, ky, tz), 3, 3);
     // long war banners down the keep's face
     put(c, new THREE.PlaneGeometry(3, 16), m.banner, M(sx * 7.5, T3 + 5 + keep.floors[1] + 2, kz + 12.5 + 1.6 + 0.35), false);
   }

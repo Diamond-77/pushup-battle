@@ -269,7 +269,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     // for the camera: low things (railings, fences, parapets, benches) don't pull it in, it just looks over them
     const insideSolid = (v: THREE.Vector3) => {
       for (const { b, kind } of cellAt(v.x, v.z))
-        if (b.y1 - b.y0 > 1.6 && v.x > b.x0 && v.x < b.x1 && v.z > b.z0 && v.z < b.z1 && v.y > b.y0 && v.y < b.y1 && (kind !== "door" || !doorOpen.has(b))) return true;
+        if ((kind !== "solid" || b.y1 - b.y0 > 1.6) && v.x > b.x0 && v.x < b.x1 && v.z > b.z0 && v.z < b.z1 && v.y > b.y0 && v.y < b.y1 && (kind !== "door" || !doorOpen.has(b))) return true;
       return false;
     };
 
@@ -351,7 +351,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     }
 
     // dev only: lets automated checks teleport the hero and turn him
-    if (import.meta.env.DEV) (window as unknown as { __ex: unknown }).__ex = { pos, face: (a: number) => (facing = a), yaw: (a: number) => (yaw = a, pitch = 0.15), doors: () => col.doors.map((d) => d.open) };
+    if (import.meta.env.DEV) (window as unknown as { __ex: unknown }).__ex = { pos, floor: floorAt, face: (a: number) => (facing = a), yaw: (a: number) => (yaw = a, pitch = 0.15), doors: () => col.doors.map((d) => d.open) };
 
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1500);
     let yaw = 0, pitch = 0.3; // camera sits behind (at +z of) the hero to start
