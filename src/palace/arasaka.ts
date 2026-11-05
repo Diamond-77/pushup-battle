@@ -169,8 +169,11 @@ function steps(c: ACtx, w: number, h: number, depth: number, x: number, y: numbe
   box(c, w + 1, h, 1.6, c.m.marble, x, y, z - depth - 0.8, 0, false);
   walkBox(c, w, h, 1.6, x, y, z - depth - 0.8);
   // the walking ramp runs a little past the top step onto the landing, so there's never a gap to fall into
-  const a = new THREE.Vector3(x, y, z + 0.3).applyMatrix4(c.T), b = new THREE.Vector3(x, y + h, z - depth - 0.9).applyMatrix4(c.T);
+  // the slope reaches full height exactly at the top step, then runs flat onto the landing
+  const a = new THREE.Vector3(x, y, z + 0.3).applyMatrix4(c.T), b = new THREE.Vector3(x, y + h, z - depth).applyMatrix4(c.T);
   c.col.ramps.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, w, ya: a.y, yb: b.y });
+  const f = new THREE.Vector3(x, y + h, z - depth - 1.6).applyMatrix4(c.T);
+  c.col.ramps.push({ ax: b.x, az: b.z, bx: f.x, bz: f.z, w, ya: b.y, yb: f.y });
 }
 
 // a double door that swings inward (toward -z) when someone walks up; dw wide, dh tall, centred at (x, y, z)
@@ -269,6 +272,15 @@ function roof(c: ACtx, W: number, D: number, iw: number, id: number, y: number, 
   const i = [new THREE.Vector3(-iw, 0, id), new THREE.Vector3(iw, 0, id), new THREE.Vector3(iw, 0, -id), new THREE.Vector3(-iw, 0, -id)];
   const g = roofFromFaces([[e[0], e[1], i[0], i[1]], [e[1], e[2], i[1], i[2]], [e[2], e[3], i[2], i[3]], [e[3], e[0], i[3], i[0]]], rise, lift);
   put(c, g, c.m.roof, M(0, y, 0));
+  // the roof is solid: each face is a walkable slope from the eave up to the inner edge (or ridge)
+  const slope = (ax: number, az: number, bx: number, bz: number, w: number) => {
+    const a = new THREE.Vector3(ax, y + 0.15, az).applyMatrix4(c.T), b = new THREE.Vector3(bx, y + rise + 0.15, bz).applyMatrix4(c.T);
+    c.col.ramps.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, w, ya: a.y, yb: b.y });
+  };
+  slope(0, D, 0, id, W + iw);
+  slope(0, -D, 0, -id, W + iw);
+  slope(W, 0, iw, 0, D + id);
+  slope(-W, 0, -iw, 0, D + id);
   // dark fascia so the eave has some thickness from below
   for (const [ax, az, bx, bz] of [[-W, D, W, D], [W, D, W, -D], [W, -D, -W, -D], [-W, -D, -W, D]])
     beam(c, new THREE.Vector3(ax, y - 0.25, az), new THREE.Vector3(bx, y - 0.25, bz), 0.35, 0.5, c.m.ridge, false);
@@ -456,8 +468,10 @@ function spiralStair(c: ACtx, nw: number, nd: number, y0: number, y1: number): H
   solidBox(c, 0.5, rise, 0.5, 0, y0, 0);
   const at = (k: number, rad: number) => new THREE.Vector3(Math.sin((2 * Math.PI * k) / N) * rad, y0 + (rise * k) / N, Math.cos((2 * Math.PI * k) / N) * rad);
   for (let k = 0; k < N; k++) {
-    const p = at(k, rm), q = at(k + 1, rm), mid = p.clone().add(q).multiplyScalar(0.5), th = (2 * Math.PI * (k + 0.5)) / N;
-    put(c, new THREE.BoxGeometry(p.distanceTo(q) * 1.15, 0.22, r * 0.95), k % 2 ? c.m.marbleShade : c.m.marble, M(mid.x, mid.y - 0.11, mid.z, th));
+    const p = at(k, rm), q = at(k + 1, rm);
+    // a proper pie-slice step (a slice of a cylinder), chunky enough that the flight looks solid from below
+    const top = y0 + (rise * (k + 1)) / N, thick = 0.5;
+    put(c, new THREE.CylinderGeometry(r + 0.05, r + 0.05, thick, 4, 1, false, (2 * Math.PI * k) / N, ((2 * Math.PI) / N) * 1.04), k % 2 ? c.m.marbleShade : c.m.marble, M(0, top - thick / 2, 0), k % 4 === 0);
     // each piece reaches a quarter past both ends, so there are no slivers between pieces to fall through
     const a = p.clone().lerp(q, -0.25).applyMatrix4(c.T), b = p.clone().lerp(q, 1.25).applyMatrix4(c.T);
     c.col.ramps.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, w: r * 0.95, ya: a.y, yb: b.y });
@@ -517,6 +531,37 @@ function corridor(c: ACtx, a: THREE.Vector3, b: THREE.Vector3, width = 3.2, post
     put(c, g, c.m.roof, new THREE.Matrix4(), false);
   }
   beam(c, a.clone().add(up), b.clone().add(up), 0.4, 0.4, c.m.ridge, false);
+}
+
+// a heavy stone bridge from a to b: thick deck, solid parapets, buttresses underneath.
+// Built to carry the Thunder Line one day; for now you walk across it.
+function stoneBridge(c: ACtx, a: THREE.Vector3, b: THREE.Vector3, width: number) {
+  const dir = b.clone().sub(a), len = dir.length(), u = dir.clone().normalize();
+  const n = new THREE.Vector3(-u.z, 0, u.x);
+  const down = new THREE.Vector3(0, -0.8, 0);
+  beam(c, a.clone().add(down), b.clone().add(down), width, 1.6, c.m.stone);
+  // a darker band and corbels under the deck
+  beam(c, a.clone().add(new THREE.Vector3(0, -1.8, 0)), b.clone().add(new THREE.Vector3(0, -1.8, 0)), width - 1.2, 0.6, c.m.stoneDark, false);
+  const k = Math.max(2, Math.round(len / 4));
+  for (let i = 1; i < k; i++) {
+    const p = a.clone().lerp(b, i / k);
+    for (const s of [-1, 1]) box(c, 0.7, 1.4, 0.7, c.m.stoneDark, p.x + n.x * s * (width / 2 - 0.35), p.y - 3, p.z + n.z * s * (width / 2 - 0.35), 0, false);
+  }
+  // parapets: solid, with a red neon strip along the top
+  const ry = -Math.atan2(u.z, u.x);
+  for (const s of [-1, 1]) {
+    const off = n.clone().multiplyScalar(s * (width / 2 - 0.3));
+    beam(c, a.clone().add(off).setY(a.y + 0.55), b.clone().add(off).setY(b.y + 0.55), 0.6, 1.1, c.m.stoneDark);
+    beam(c, a.clone().add(off).setY(a.y + 1.13), b.clone().add(off).setY(b.y + 1.13), 0.62, 0.06, c.m.rail, false);
+    const pieces = Math.max(1, Math.ceil(len / 1.5));
+    for (let i = 0; i < pieces; i++) {
+      const p = a.clone().lerp(b, (i + 0.5) / pieces).add(off);
+      solidBox(c, len / pieces, 1.2, 0.6, p.x, p.y, p.z, ry);
+    }
+  }
+  // the deck is walkable
+  const pa = a.clone().applyMatrix4(c.T), pb = b.clone().applyMatrix4(c.T);
+  c.col.ramps.push({ ax: pa.x, az: pa.z, bx: pb.x, bz: pb.z, w: width - 1.2, ya: pa.y, yb: pb.y });
 }
 
 function brazier(c: ACtx, x: number, y: number, z: number, fires: THREE.Vector3[]) {
@@ -961,16 +1006,18 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   steps(c, 8, 5, 6, 0, T3, kz + 19 + 6);
   const KW = 30, KS = 0.85;
   const kc = sub(c, M(0, T3 + 5, kz)) as ACtx;
-  const keep = building(kc, KW, 25, { floors: 6, wallH: 5.4, shrink: KS, veranda: 1.6, spire: 14, shaft: SHAFT, openings: [{ floor: 2, side: "x+", w: 3.4 }, { floor: 2, side: "x-", w: 3.4 }] });
+  const keep = building(kc, KW, 25, { floors: 6, wallH: 5.4, shrink: KS, veranda: 1.6, spire: 14, shaft: SHAFT, openings: [{ floor: 2, side: "x+", w: 6.2 }, { floor: 2, side: "x-", w: 6.2 }] });
   for (const sx of [-1, 1]) {
     const tx = sx * 38, tz = kz - 4;
-    stone(c, 17, 5, 17, tx, T3, tz, 0.8);
-    const tower = building(sub(c, M(tx, T3 + 5, tz)) as ACtx, 10, 10, { floors: 5, wallH: 4.6, shrink: 0.92, spiral: true, openings: [{ floor: 2, side: sx > 0 ? "x-" : "x+", w: 3.4 }] });
+    // the stone base reaches forward past the tower's own front steps, and a stair climbs to it from the terrace
+    stone(c, 17, 5, 22, tx, T3, tz + 2.5, 0.8);
+    steps(c, 6, 5, 7, tx, T3, tz + 2.5 + 11 + 7);
+    const tower = building(sub(c, M(tx, T3 + 5, tz)) as ACtx, 10, 10, { floors: 5, wallH: 4.6, shrink: 0.92, spiral: true, openings: [{ floor: 2, side: sx > 0 ? "x-" : "x+", w: 6.2 }] });
     // bridge from the tower's 3rd floor to the keep's 3rd floor
     const fy = T3 + 5 + tower.floors[2], ky = T3 + 5 + keep.floors[2];
     const kw = (KW * KS * KS) / 2 + 1.6 + 0.3;
     // the bridge lands right on the tower's balcony slab (no gap)
-    corridor(c, new THREE.Vector3(tx - sx * (tower.sizes[2].w / 2 + 1.6), fy, tz), new THREE.Vector3(sx * kw, ky, tz), 3, 3);
+    stoneBridge(c, new THREE.Vector3(tx - sx * (tower.sizes[2].w / 2 + 1.6), fy, tz), new THREE.Vector3(sx * kw, ky, tz), 6);
     // long war banners down the keep's face
     put(c, new THREE.PlaneGeometry(3, 16), m.banner, M(sx * 7.5, T3 + 5 + keep.floors[1] + 2, kz + 12.5 + 1.6 + 0.35), false);
   }
