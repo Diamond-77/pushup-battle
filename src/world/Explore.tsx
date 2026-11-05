@@ -3,11 +3,14 @@ import * as THREE from "three";
 import { buildArasaka, groundAt, ARASAKA_SPAWN, type Box, type Door } from "../palace/arasaka";
 import { skyTexture } from "../palace/buildPalace";
 import { ENVS } from "../palace/weather";
+import { supabase } from "../supabase";
 import { clanById } from "../clans";
 import ClanLogo from "../ClanLogo";
 import { Hero } from "./hero";
 import { Billboard } from "./billboard";
-import { Radio, videoId, videoTitle, thumb, type RadioState } from "./music";
+import { buildNeon } from "./neon";
+import { Online, lookFor } from "./players";
+import { Radio, videoId, videoTitle, thumb, playlistId, playlistSongs, search, canSearch, type RadioState, type Found } from "./music";
 
 // Walk around the Arasaka citadel in third person (landscape, MLBB-style controls):
 // - left thumb: the joystick steers
@@ -23,11 +26,18 @@ const TALL = 1.7;
 const STEP = 0.75; // highest ledge you can step onto
 const WALK = 4.2, RUN = 8.2, JUMP = 7.2, GRAVITY = 22;
 const BATTLE_RANGE = 8;
-const RADIO_RANGE = 30; // close enough to open the song list
-const HEAR = 80; // close enough to hear the billboard
-// the billboard stands on the lawn left of the road, turned toward where you arrive
-const BOARD_AT = new THREE.Vector3(-30, 0, 100);
-const BOARD_RY = Math.atan2(ARASAKA_SPAWN.x - BOARD_AT.x, ARASAKA_SPAWN.z - BOARD_AT.z);
+const RADIO_RANGE = 45; // close enough to open the song list
+// the giant screen stands in the lower court against the terrace wall, turned toward the gate
+const BOARD_AT = new THREE.Vector3(-30, 0.3, 30);
+const BOARD_RY = 0.35;
+const BOARD_SIZE = 2.2; // a 35 x 20 m screen
+// the citadel's walls: the music fills everything inside and fades out past them
+const CITADEL = { x: 80, front: 88, back: -104 };
+const loudness = (p: THREE.Vector3, screen: THREE.Vector3) => {
+  const near = THREE.MathUtils.clamp(1 - (Math.hypot(p.x - screen.x, p.z - screen.z) - 25) / 70, 0, 1);
+  const out = Math.max(Math.abs(p.x) - CITADEL.x, p.z - CITADEL.front, CITADEL.back - p.z, 0);
+  return Math.max(near, 0.6 * THREE.MathUtils.clamp(1 - out / 60, 0, 1));
+};
 
 const MODES = [
   { id: "brawl", name: "Brawl", time: "1 min", bet: 5 },
@@ -43,9 +53,10 @@ const PEOPLE = [
   { name: "Ultra", at: [10, -9], colors: { tee: 0xc8372d, band: 0xf7f7f2, hair: 0x101014, shoe: 0xe8b84a } },
 ] as const;
 
-// short display name over your head, like "DIAM (you)". The test page has no sign-in, so ?name=Diamond sets it.
+// short display name over your head, like "DIAMON (you)". Signed in it's your username; without, ?name=Diamond sets it.
 const shortName = (full: string) => full.trim().split(/\s+/)[0].slice(0, 6).toUpperCase();
-const MY_NAME = shortName(new URLSearchParams(location.search).get("name") || "Player");
+const GUEST_NAME = new URLSearchParams(location.search).get("name") || "Player";
+export type Me = { id: string; name: string };
 
 /* ----- settings, kept on this phone ----- */
 type Settings = { speed: number; look: number; stick: "smooth" | "snappy"; follow: boolean; quality: "low" | "medium" | "high"; invert: boolean };
@@ -62,9 +73,10 @@ function loadSettings(): Settings {
 type Action = "door" | "battle" | "music" | "more";
 type Ui = { actions: Action[]; doorOpen: boolean; near: string[]; target: string | null; hear: boolean };
 // what the buttons call inside the 3D loop
-type Api = { jumpDown: () => void; jumpUp: () => void; act: (a: Action) => void; lock: (name: string) => void; challenged: (name: string | null) => void; wave: () => void; listen: (on: boolean) => void };
+type Api = { jumpDown: () => void; jumpUp: () => void; act: (a: Action) => void; lock: (name: string) => void; challenged: (name: string | null) => void; wave: () => void; listen: (on: boolean) => void; challenge: (key: string, mode: string) => boolean; answer: (key: string, mode: string, ok: boolean) => boolean };
 
-export default function Explore({ onBack }: { onBack: () => void }) {
+export default function Explore({ onBack, me: account }: { onBack: () => void; me?: Me | null }) {
+  const myName = shortName(account?.name || GUEST_NAME);
   const hostRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<HTMLDivElement>(null);
   const knobRef = useRef<HTMLDivElement>(null);
@@ -73,7 +85,7 @@ export default function Explore({ onBack }: { onBack: () => void }) {
   const flashRef = useRef<HTMLDivElement>(null);
   const youRef = useRef<HTMLDivElement>(null);
   const tagRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const api = useRef<Api>({ jumpDown: () => {}, jumpUp: () => {}, act: () => {}, lock: () => {}, challenged: () => {}, wave: () => {}, listen: () => {} });
+  const api = useRef<Api>({ jumpDown: () => {}, jumpUp: () => {}, act: () => {}, lock: () => {}, challenged: () => {}, wave: () => {}, listen: () => {}, challenge: () => false, answer: () => false });
   const radioRef = useRef<Radio | null>(null);
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const settingsRef = useRef(settings);
@@ -86,9 +98,15 @@ export default function Explore({ onBack }: { onBack: () => void }) {
   const [listening, setListening] = useState(false);
   const [link, setLink] = useState("");
   const [adding, setAdding] = useState(false);
+  const [found, setFound] = useState<Found[] | null>(null);
+  const [kind, setKind] = useState<"video" | "playlist">("video");
   const [avatars, setAvatars] = useState<Record<string, string>>({});
   const [picker, setPicker] = useState<string | null>(null);
   const [incoming, setIncoming] = useState<string | null>(null);
+  const [incomingMode, setIncomingMode] = useState<Mode>(MODES[0]);
+  // everyone with a name tag: the test people plus real players online. key = name for test people, user id for players
+  const [roster, setRoster] = useState<{ key: string; label: string; real: boolean }[]>(() => PEOPLE.map((p) => ({ key: p.name, label: p.name, real: false })));
+  const label0 = (k: string) => roster.find((r) => r.key === k)?.label ?? k;
   const [more, setMore] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const clan = clanById("arasaka")!;
@@ -151,11 +169,14 @@ export default function Explore({ onBack }: { onBack: () => void }) {
     col.solid.forEach((b) => add(b, "solid"));
     col.doors.forEach((d) => add(d.box, "door", d));
 
-    /* ----- the lawn billboard and its radio ----- */
-    const board = new Billboard(host, BOARD_AT.clone().setY(groundAt(BOARD_AT.x, BOARD_AT.z)), BOARD_RY);
+    const neon = buildNeon();
+    scene.add(neon.root);
+
+    /* ----- the giant screen and its radio ----- */
+    const board = new Billboard(host, BOARD_AT, BOARD_RY, BOARD_SIZE);
     scene.add(board.root);
     board.solid.forEach((b) => add(b, "solid"));
-    const radio = new Radio("arasaka");
+    const radio = new Radio("arasaka", account?.id);
     radioRef.current = radio;
     const syncRadio = () => {
       setMusic({ queue: radio.state.queue.map((x) => ({ ...x })), now: radio.state.now });
@@ -227,8 +248,41 @@ export default function Explore({ onBack }: { onBack: () => void }) {
       at.y = floorAt(at.x, at.z, 20);
       h.root.position.copy(at);
       scene.add(h.root);
-      return { name: p.name, hero: h, pos: at, facing: 0 };
+      return { name: p.name as string, hero: h, pos: at, facing: 0, remote: false };
     });
+
+    /* ----- real players online (signed in only) ----- */
+    const online = account && supabase ? new Online("arasaka", { id: account.id, name: account.name }) : null;
+    const syncRoster = () => {
+      if (!online) return;
+      for (let i = people.length - 1; i >= 0; i--) {
+        const p = people[i];
+        if (p.remote && !online.peers.has(p.name)) { scene.remove(p.hero.root); people.splice(i, 1); }
+      }
+      for (const peer of online.peers.values()) {
+        if (people.some((p) => p.name === peer.id)) continue;
+        const h = new Hero(lookFor(peer.id));
+        h.root.visible = false; // until we hear where they are
+        scene.add(h.root);
+        people.push({ name: peer.id, hero: h, pos: new THREE.Vector3(), facing: 0, remote: true });
+      }
+      setRoster([...PEOPLE.map((p) => ({ key: p.name as string, label: p.name as string, real: false })), ...[...online.peers.values()].map((p) => ({ key: p.id, label: shortName(p.name), real: true }))]);
+      uiKey = "";
+    };
+    if (online) {
+      online.onRoster = syncRoster;
+      online.onChallenge = (from, mode) => {
+        setIncomingMode(MODES.find((m) => m.id === mode) ?? MODES[0]);
+        setIncoming(from);
+      };
+      online.onAnswer = (from, mode, ok) => {
+        const m = MODES.find((x) => x.id === mode) ?? MODES[0];
+        const who = shortName(online.peers.get(from)?.name ?? "They");
+        setToast(ok ? `${who} accepted your ${m.name} challenge. Real camera battles from the world come next.` : `${who} declined your challenge.`);
+      };
+      api.current.challenge = (key, mode) => { if (!online.peers.has(key)) return false; online.challenge(key, mode); return true; };
+      api.current.answer = (key, mode, ok) => { if (!online.peers.has(key)) return false; online.answer(key, mode, ok); return true; };
+    }
 
     // portraits for target lock: a close-up of each person's face, rendered once
     {
@@ -479,6 +533,7 @@ export default function Explore({ onBack }: { onBack: () => void }) {
         pos.z += (Math.cos(facing) * total) / n;
         collide(pos);
         for (const p of people) {
+          if (!p.hero.root.visible) continue;
           const rx = pos.x - p.pos.x, rz = pos.z - p.pos.z, rd = Math.hypot(rx, rz);
           if (rd < 2 * R && Math.abs(pos.y - p.pos.y) < 1.5 && rd > 1e-4) { pos.x = p.pos.x + (rx / rd) * 2 * R; pos.z = p.pos.z + (rz / rd) * 2 * R; }
         }
@@ -508,16 +563,33 @@ export default function Explore({ onBack }: { onBack: () => void }) {
       near = [];
       let nearest18: (typeof people)[number] | null = null;
       for (const p of people) {
+        if (p.remote) {
+          // real players: glide toward where they last said they were
+          const peer = online?.peers.get(p.name);
+          if (!peer || Number.isNaN(peer.x)) continue;
+          if (!p.hero.root.visible || Math.hypot(peer.x - p.pos.x, peer.z - p.pos.z) > 12) p.pos.set(peer.x, peer.y, peer.z);
+          else p.pos.lerp(v.set(peer.x, peer.y, peer.z), Math.min(1, dt * 10));
+          let a = peer.f - p.facing;
+          a = Math.atan2(Math.sin(a), Math.cos(a));
+          p.facing += a * Math.min(1, dt * 12);
+          p.hero.root.visible = true;
+          p.hero.root.position.copy(p.pos);
+          p.hero.root.rotation.y = p.facing;
+          p.hero.animate(peer.s, dt, t, peer.air);
+        }
+        if (!p.hero.root.visible) continue;
         const d = Math.hypot(pos.x - p.pos.x, pos.z - p.pos.z);
-        if (d < 14) {
+        if (!p.remote && d < 14) {
           let a = Math.atan2(pos.x - p.pos.x, pos.z - p.pos.z) - p.facing;
           a = Math.atan2(Math.sin(a), Math.cos(a));
           p.facing += a * Math.min(1, dt * 4);
         }
-        p.hero.root.rotation.y = p.facing;
-        p.hero.animate(0, dt, t + p.pos.x);
+        if (!p.remote) {
+          p.hero.root.rotation.y = p.facing;
+          p.hero.animate(0, dt, t + p.pos.x);
+        }
         if (d < BATTLE_RANGE && Math.abs(pos.y - p.pos.y) < 2) near.push(p);
-        if (d < 18 && (!nearest18 || d < Math.hypot(pos.x - nearest18.pos.x, pos.z - nearest18.pos.z))) nearest18 = p;
+        if (!p.remote && d < 18 && (!nearest18 || d < Math.hypot(pos.x - nearest18.pos.x, pos.z - nearest18.pos.z))) nearest18 = p;
       }
       near.sort((a, b) => Math.hypot(pos.x - a.pos.x, pos.z - a.pos.z) - Math.hypot(pos.x - b.pos.x, pos.z - b.pos.z));
       if (locked && !near.some((p) => p.name === locked)) locked = null;
@@ -527,7 +599,7 @@ export default function Explore({ onBack }: { onBack: () => void }) {
       if (nearest18 && !challenger) {
         nearTime += dt;
         nextChallenge -= dt;
-        if (nearTime > 4 && nextChallenge <= 0) { challenger = nearest18.name; setIncoming(challenger); }
+        if (nearTime > 4 && nextChallenge <= 0) { challenger = nearest18.name; setIncomingMode(MODES[0]); setIncoming(challenger); }
       } else if (!nearest18) nearTime = 0;
 
       // which buttons to show
@@ -537,7 +609,8 @@ export default function Explore({ onBack }: { onBack: () => void }) {
       if (near.length) actions.push("battle");
       if (boardD < RADIO_RANGE) actions.push("music");
       if (near.length) actions.push("more");
-      const hear = boardD < HEAR;
+      const loud = loudness(pos, board.center);
+      const hear = loud > 0.05;
       const key = actions.join() + (nearDoor && nearDoor.target > 0.5 ? "o" : "") + near.map((p) => p.name).join() + "|" + target + hear;
       if (key !== uiKey) {
         uiKey = key;
@@ -547,7 +620,9 @@ export default function Explore({ onBack }: { onBack: () => void }) {
       hero.root.position.copy(pos);
       hero.root.rotation.y = facing;
       hero.animate(speed, dt, t, !grounded);
+      online?.send(pos.x, pos.y, pos.z, facing, speed, !grounded);
       citadel.tick(t, dt);
+      neon.tick(t, dt, pos);
 
       // third-person camera behind the hero, pulled in if a wall is in the way.
       // Below zero pitch the camera drops low behind you so you can look up at the sky.
@@ -594,7 +669,7 @@ export default function Explore({ onBack }: { onBack: () => void }) {
       if (flashRef.current) flashRef.current.style.opacity = String(f * 0.4);
 
       renderer.render(scene, camera);
-      board.tick(camera, host.clientWidth, host.clientHeight, pos, radio.elapsed(), dt);
+      board.tick(camera, host.clientWidth, host.clientHeight, loudness(pos, board.center), radio.elapsed(), dt);
     });
 
     return () => {
@@ -602,6 +677,7 @@ export default function Explore({ onBack }: { onBack: () => void }) {
       ro.disconnect();
       unsub();
       radio.close();
+      online?.close();
       radioRef.current = null;
       board.dispose();
       host.removeEventListener("touchstart", ts);
@@ -625,44 +701,85 @@ export default function Explore({ onBack }: { onBack: () => void }) {
   }, []);
 
   const act = (a: Action) => api.current.act(a);
-  const startBattle = (who: string, mode: Mode, from: "you" | "them") => {
+  const startBattle = (key: string, mode: Mode, from: "you" | "them") => {
+    const who = label0(key);
     setPicker(null);
     setIncoming(null);
     api.current.challenged(null);
+    // a real player gets the challenge on their phone; the test people answer straight away
+    if (from === "you" && api.current.challenge(key, mode.id)) { setToast(`Challenge sent to ${who}…`); return; }
+    if (from === "them") api.current.answer(key, mode.id, true);
     setToast(
       from === "you"
         ? `${who} accepted your ${mode.name} challenge (${mode.time}, ${mode.bet} Respect). In the real game the camera battle starts here.`
         : `You accepted ${who}'s ${mode.name} challenge. In the real game the camera battle starts here.`,
     );
   };
+  const decline = (key: string) => {
+    setIncoming(null);
+    api.current.challenged(null);
+    api.current.answer(key, incomingMode.id, false);
+  };
   const set = <K extends keyof Settings>(k: K, val: Settings[K]) => setSettings((s) => ({ ...s, [k]: val }));
   const main = ui.actions.filter((a) => a !== "more");
   const multi = main.length > 1;
   const arc: Action = (["battle", "door", "music"] as const).find((a) => ui.actions.includes(a)) ?? "battle";
   const label = (a: Action) => (a === "door" ? (ui.doorOpen ? "Close door" : "Open door") : a === "battle" ? "Battle" : a === "music" ? "Radio" : "More");
-  const me = radioRef.current?.myId ?? "";
+  const meId = radioRef.current?.myId ?? "";
   const queue = [...music.queue].sort((a, b) => b.votes.length - a.votes.length);
-  const addSong = async () => {
-    const id = videoId(link);
-    if (!id) { setToast("That doesn't look like a YouTube link."); return; }
-    setAdding(true);
-    const title = await videoTitle(id);
-    setAdding(false);
-    radioRef.current?.suggest(id, title, MY_NAME);
-    setLink("");
+  const suggest = (list: { id: string; title: string }[]) => {
+    if (!list.length) return;
+    radioRef.current?.suggest(list, myName);
     if (!listening) api.current.listen(true); // you picked a song, so you want to hear it
   };
+  const addPlaylist = async (id: string) => {
+    if (!canSearch) { setToast("Playlists need the YouTube key set up first."); return; }
+    setAdding(true);
+    try {
+      const songs = await playlistSongs(id);
+      suggest(songs);
+      setToast(`Added ${songs.length} songs from the playlist.`);
+    } catch (e) {
+      setToast((e as Error).message);
+    }
+    setAdding(false);
+  };
+  // the box takes a song link, a playlist link, or words to search for
+  const go = async () => {
+    const text = link.trim();
+    if (!text || adding) return;
+    const list = playlistId(text), vid = videoId(text);
+    if (vid) {
+      setAdding(true);
+      suggest([{ id: vid, title: await videoTitle(vid) }]);
+      setAdding(false);
+      setLink("");
+    } else if (list) {
+      await addPlaylist(list);
+      setLink("");
+    } else if (!canSearch) setToast("Search needs the YouTube key set up first. Paste a link for now.");
+    else {
+      setAdding(true);
+      try {
+        setFound(await search(text, kind));
+      } catch (e) {
+        setToast((e as Error).message);
+      }
+      setAdding(false);
+    }
+  };
+  const isLink = !!(videoId(link) || playlistId(link));
   const pointed = incoming ?? ui.target; // who the red triangle points at
 
   return (
     <div className="ex" ref={hostRef}>
       <div ref={flashRef} className="lightning-flash" />
 
-      <div ref={youRef} className="ex-tag you">{MY_NAME} (you)</div>
-      {PEOPLE.map((p) => (
-        <div key={p.name} ref={(n) => { tagRefs.current[p.name] = n; }} className={`ex-tag ${pointed === p.name ? "pointed" : ""}`}>
+      <div ref={youRef} className="ex-tag you">{myName} (you)</div>
+      {roster.map((p) => (
+        <div key={p.key} ref={(n) => { tagRefs.current[p.key] = n; }} className={`ex-tag ${p.real ? "real" : ""} ${pointed === p.key ? "pointed" : ""}`}>
           <i className="ex-arrow" />
-          {p.name}
+          {p.label}
         </div>
       ))}
 
@@ -688,9 +805,9 @@ export default function Explore({ onBack }: { onBack: () => void }) {
       {ui.near.length > 1 && (
         <div className="ex-lock">
           {ui.near.map((n) => (
-            <button key={n} className={`ex-face ${ui.target === n ? "on" : ""}`} onPointerUp={() => api.current.lock(n)} aria-label={`Target ${n}`}>
-              {avatars[n] ? <img src={avatars[n]} alt="" /> : <b>{n[0]}</b>}
-              <span>{n}</span>
+            <button key={n} className={`ex-face ${ui.target === n ? "on" : ""}`} onPointerUp={() => api.current.lock(n)} aria-label={`Target ${label0(n)}`}>
+              {avatars[n] ? <img src={avatars[n]} alt="" /> : <b>{label0(n)[0]}</b>}
+              <span>{label0(n)}</span>
             </button>
           ))}
         </div>
@@ -763,7 +880,7 @@ export default function Explore({ onBack }: { onBack: () => void }) {
         <div className="ex-modes">
           <div className="ex-modes-head">
             {avatars[picker] && <img src={avatars[picker]} alt="" />}
-            <div className="ex-modes-title">Challenge {picker}</div>
+            <div className="ex-modes-title">Challenge {label0(picker)}</div>
           </div>
           {MODES.map((m) => (
             <button key={m.id} className="ex-mode" onPointerUp={() => startBattle(picker, m, "you")}>
@@ -779,15 +896,15 @@ export default function Explore({ onBack }: { onBack: () => void }) {
         <div className="ex-pop">
           <div className="ex-pop-who">
             {avatars[incoming] && <img src={avatars[incoming]} alt="" />}
-            <div className="ex-pop-name">{incoming}</div>
+            <div className="ex-pop-name">{label0(incoming)}</div>
           </div>
           <div className="ex-pop-card">
-            <div className="ex-pop-label">challenges you · Brawl</div>
+            <div className="ex-pop-label">challenges you · {incomingMode.name}</div>
             <div className="ex-pop-row">
-              <button className="ok" aria-label="Accept" onPointerUp={() => startBattle(incoming, MODES[0], "them")}>
+              <button className="ok" aria-label="Accept" onPointerUp={() => startBattle(incoming, incomingMode, "them")}>
                 <svg viewBox="0 0 24 24"><path d="M4 13l5 5L20 6" /></svg>
               </button>
-              <button className="no" aria-label="Decline" onPointerUp={() => { setIncoming(null); api.current.challenged(null); }}>
+              <button className="no" aria-label="Decline" onPointerUp={() => decline(incoming)}>
                 <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></svg>
               </button>
             </div>
@@ -827,15 +944,37 @@ export default function Explore({ onBack }: { onBack: () => void }) {
           ) : (
             <p className="ex-note">Nothing playing yet. Paste a song below and it goes on the screen.</p>
           )}
-          <form className="ex-music-add" onSubmit={(e) => { e.preventDefault(); if (!adding) addSong(); }}>
-            <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="Paste a YouTube link" inputMode="url" autoCapitalize="off" autoCorrect="off" />
-            <button className="game-btn jade" disabled={!link.trim() || adding}>{adding ? "…" : "Add"}</button>
+          <form className="ex-music-add" onSubmit={(e) => { e.preventDefault(); go(); }}>
+            <input type="search" enterKeyHint={isLink ? "done" : "search"} value={link} onChange={(e) => setLink(e.target.value)} placeholder={canSearch ? "Search YouTube or paste a link" : "Paste a YouTube link"} autoCapitalize="off" autoCorrect="off" />
+            <button className="game-btn jade" disabled={!link.trim() || adding}>{adding ? "…" : isLink || !canSearch ? "Add" : "Search"}</button>
           </form>
-          <a className="ex-music-find" href="https://www.youtube.com/" target="_blank" rel="noreferrer">Find a song on YouTube, then Share → Copy link</a>
+          {canSearch && (
+            <div className="ex-seg small">
+              <button className={kind === "video" ? "on" : ""} onClick={() => { setKind("video"); setFound(null); }}>Songs</button>
+              <button className={kind === "playlist" ? "on" : ""} onClick={() => { setKind("playlist"); setFound(null); }}>Playlists</button>
+              {found && <button onClick={() => setFound(null)}>Song list</button>}
+            </div>
+          )}
           <div className="ex-music-list">
-            {queue.length === 0 && <p className="ex-note">No songs waiting. The one with the most votes plays next.</p>}
-            {queue.map((q) => {
-              const mine = q.votes.includes(me);
+            {found && found.length === 0 && <p className="ex-note">Nothing found.</p>}
+            {found?.map((f) => {
+              const queued = f.kind === "video" && (music.queue.some((q) => q.id === f.id) || music.now?.id === f.id);
+              return (
+                <div key={f.id} className="ex-music-row">
+                  <img src={f.thumb} alt="" />
+                  <div>
+                    <b>{f.title}</b>
+                    <em>{f.kind === "playlist" ? "Playlist · " : ""}{f.channel}</em>
+                  </div>
+                  <button className={`ex-vote ${queued ? "on" : ""}`} disabled={queued || adding} onClick={() => (f.kind === "video" ? suggest([{ id: f.id, title: f.title.slice(0, 90) }]) : addPlaylist(f.id))} aria-label="Add">
+                    {queued ? "Added" : "+ Add"}
+                  </button>
+                </div>
+              );
+            })}
+            {!found && queue.length === 0 && <p className="ex-note">No songs waiting. The one with the most votes plays next, and when the list is empty earlier songs come round again.</p>}
+            {!found && queue.map((q) => {
+              const mine = q.votes.includes(meId);
               return (
                 <div key={q.id} className="ex-music-row">
                   <img src={thumb(q.id)} alt="" />

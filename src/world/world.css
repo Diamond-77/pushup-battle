@@ -316,3 +316,8 @@
 .ex-vote svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linejoin: round; }
 .ex-vote.on { background: radial-gradient(circle at 50% 35%, #e0483b, #8f241b); border-color: #ff9a8a; color: #fff4e6; }
 .ex-vote.on svg { fill: currentColor; }
+.ex-music .ex-seg.small { display: flex; gap: 4px; }
+.ex-music .ex-seg.small button { flex: 1; padding: 5px 6px; font-size: 0.7rem; }
+.ex-music-add input::-webkit-search-cancel-button { filter: invert(1); }
+.ex-vote:disabled { opacity: 0.8; }
+.ex-tag.real::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 4px; border-radius: 50%; background: #3fbf8a; box-shadow: 0 0 4px #3fbf8a; vertical-align: 1px; }

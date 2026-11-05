@@ -1,6 +1,6 @@
 import { supabase } from "../supabase";
 
-// The lawn billboard's radio: friends suggest YouTube songs and vote, the top vote plays next,
+// The giant screen's radio: friends suggest YouTube songs and vote, the top vote plays next,
 // and everyone in the world hears the same second of the same song.
 // Sync runs over Supabase Realtime (no database table): the player who has been here longest is the
 // "host"; they keep the list and tell everyone what plays and when it started. When they leave,
@@ -8,16 +8,60 @@ import { supabase } from "../supabase";
 
 export type Song = { id: string; title: string; by: string; votes: string[] };
 export type Now = { id: string; title: string; by: string; startedAt: number } | null;
-export type RadioState = { queue: Song[]; now: Now };
+// played: recent songs, which come round again when nobody has suggested anything, so it never goes quiet
+export type RadioState = { queue: Song[]; now: Now; played?: { id: string; title: string; by: string }[] };
 
 type Msg =
   | { t: "state"; from: string; sentAt: number; state: RadioState }
   | { t: "hello"; from: string }
-  | { t: "suggest"; from: string; song: Song }
+  | { t: "suggest"; from: string; songs: Song[] }
   | { t: "vote"; from: string; id: string; on: boolean }
   | { t: "ended"; from: string; id: string; skip?: boolean };
 
-const MAX_QUEUE = 30;
+const MAX_QUEUE = 80;
+const MAX_PLAYED = 60;
+const KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
+export const canSearch = !!KEY;
+
+export type Found = { kind: "video" | "playlist"; id: string; title: string; channel: string; thumb: string };
+
+// a playlist link -> its id
+export function playlistId(text: string): string | null {
+  try {
+    const u = new URL(text.trim().startsWith("http") ? text.trim() : "https://" + text.trim());
+    const l = u.searchParams.get("list");
+    return l && /^[\w-]{10,64}$/.test(l) ? l : null;
+  } catch {
+    return null;
+  }
+}
+
+const unescape = (t: string) => { const e = document.createElement("textarea"); e.innerHTML = t; return e.value; };
+
+// YouTube search (official Data API; needs VITE_YOUTUBE_API_KEY)
+export async function search(q: string, kind: "video" | "playlist"): Promise<Found[]> {
+  if (!KEY) return [];
+  const p = new URLSearchParams({ part: "snippet", q, type: kind, maxResults: "15", key: KEY, safeSearch: "moderate" });
+  if (kind === "video") p.set("videoEmbeddable", "true");
+  const r = await fetch(`https://www.googleapis.com/youtube/v3/search?${p}`);
+  if (!r.ok) throw new Error(r.status === 403 ? "YouTube search limit reached for today" : "Search failed");
+  const j = (await r.json()) as { items: { id: { videoId?: string; playlistId?: string }; snippet: { title: string; channelTitle: string; thumbnails: { medium?: { url: string } } } }[] };
+  return j.items
+    .map((it) => ({ kind, id: (kind === "video" ? it.id.videoId : it.id.playlistId) ?? "", title: unescape(it.snippet.title), channel: unescape(it.snippet.channelTitle), thumb: it.snippet.thumbnails.medium?.url ?? "" }))
+    .filter((f) => f.id);
+}
+
+// the songs in a playlist (first 50)
+export async function playlistSongs(id: string): Promise<{ id: string; title: string }[]> {
+  if (!KEY) return [];
+  const p = new URLSearchParams({ part: "snippet", playlistId: id, maxResults: "50", key: KEY });
+  const r = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?${p}`);
+  if (!r.ok) throw new Error("Couldn't open that playlist");
+  const j = (await r.json()) as { items: { snippet: { title: string; resourceId: { videoId?: string } } }[] };
+  return j.items
+    .filter((it) => it.snippet.resourceId.videoId && it.snippet.title !== "Private video" && it.snippet.title !== "Deleted video")
+    .map((it) => ({ id: it.snippet.resourceId.videoId!, title: unescape(it.snippet.title).slice(0, 90) }));
+}
 
 // a YouTube link (or a bare 11-character id) -> the video id
 export function videoId(text: string): string | null {
@@ -64,7 +108,8 @@ export class Radio {
   private timer = 0;
   private listeners = new Set<() => void>();
 
-  constructor(room = "arasaka") {
+  constructor(room = "arasaka", id?: string) {
+    if (id) this.me = id; // signed in: your votes stay yours after a reload
     if (!supabase) {
       this.host = true;
       return;
@@ -117,10 +162,10 @@ export class Radio {
     this.listeners.clear();
   }
 
-  suggest(id: string, title: string, by: string) {
-    const song: Song = { id, title, by, votes: [this.me] };
-    if (this.host) this.apply({ t: "suggest", from: this.me, song });
-    else this.send({ t: "suggest", from: this.me, song });
+  suggest(list: { id: string; title: string }[], by: string) {
+    const songs: Song[] = list.map((x) => ({ id: x.id, title: x.title, by, votes: [this.me] }));
+    if (this.host) this.apply({ t: "suggest", from: this.me, songs });
+    else this.send({ t: "suggest", from: this.me, songs });
   }
 
   vote(id: string, on: boolean) {
@@ -173,16 +218,23 @@ export class Radio {
   private apply(m: Msg) {
     const q = this.state.queue;
     if (m.t === "suggest") {
-      if (this.state.now?.id === m.song.id) return;
-      const have = q.find((s) => s.id === m.song.id);
-      if (have) have.votes = [...new Set([...have.votes, m.from])];
-      else if (q.length < MAX_QUEUE) q.push({ ...m.song, title: m.song.title.slice(0, 90), by: m.song.by.slice(0, 12), votes: [m.from] });
+      for (const song of m.songs.slice(0, 50)) {
+        if (this.state.now?.id === song.id || !/^[\w-]{11}$/.test(song.id)) continue;
+        const have = q.find((s) => s.id === song.id);
+        if (have) have.votes = [...new Set([...have.votes, m.from])];
+        else if (q.length < MAX_QUEUE) q.push({ id: song.id, title: String(song.title).slice(0, 90), by: String(song.by).slice(0, 12), votes: [m.from] });
+      }
     } else if (m.t === "vote") {
       const s = q.find((x) => x.id === m.id);
       if (s) s.votes = m.on ? [...new Set([...s.votes, m.from])] : s.votes.filter((v) => v !== m.from);
     } else if (m.t === "ended") {
       // ignore stale reports and "ended" right after a song started
-      if (this.state.now?.id !== m.id || (!m.skip && this.elapsed() < 8)) return;
+      const now = this.state.now;
+      if (now?.id !== m.id || (!m.skip && this.elapsed() < 8)) return;
+      // finished songs go round again later; broken ones are dropped
+      const played = (this.state.played ?? []).filter((p) => p.id !== now.id);
+      if (!m.skip) played.push({ id: now.id, title: now.title, by: now.by });
+      this.state.played = played.slice(-MAX_PLAYED);
       this.state.now = null;
     }
     this.next();
@@ -190,10 +242,19 @@ export class Radio {
     this.emit();
   }
 
-  // host only: nothing playing -> the top vote goes on (ties: suggested first)
+  // host only: nothing playing -> the top vote goes on (ties: suggested first).
+  // With nothing suggested, an earlier song comes round again (not one of the last few).
   private next() {
-    if (this.state.now || !this.state.queue.length) return;
+    if (this.state.now) return;
     const q = this.state.queue;
+    if (!q.length) {
+      const old = this.state.played ?? [];
+      if (!old.length) return;
+      const pool = old.length > 4 ? old.slice(0, -3) : old;
+      const s = pool[Math.floor(Math.random() * pool.length)];
+      this.state.now = { ...s, startedAt: this.now() + 1500 };
+      return;
+    }
     let top = 0;
     q.forEach((s, i) => { if (s.votes.length > q[top].votes.length) top = i; });
     const [s] = q.splice(top, 1);

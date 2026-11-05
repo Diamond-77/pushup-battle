@@ -12,7 +12,6 @@ import type { Now } from "./music";
 const SW = 16, SH = 9; // screen size in metres
 const PX = 1280; // the YouTube page's width in CSS pixels
 const K = 100; // the CSS scene is drawn 100x bigger: tiny CSS 3D scales flicker on some phones
-const HEAR = 80; // metres: past this you hear nothing
 
 type Info = { playerState?: number; currentTime?: number; duration?: number; muted?: boolean };
 
@@ -41,9 +40,10 @@ export class Billboard {
   private done = false;
   listening = false;
 
-  constructor(host: HTMLElement, at: THREE.Vector3, ry: number) {
+  constructor(host: HTMLElement, at: THREE.Vector3, ry: number, size = 1) {
     this.root.position.copy(at);
     this.root.rotation.y = ry;
+    this.root.scale.setScalar(size);
     const iron = toon(0x1d1c22), red = toon(0x7e1c17), stone = toon(0x3a383f), brass = toon(0x8a6a3a);
     const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number) => {
       const m = new THREE.Mesh(geo, mat);
@@ -98,7 +98,7 @@ export class Billboard {
     // the legs block you; boxes are world-aligned so take each leg's footprint
     for (const s of [-1, 1]) {
       const p = new THREE.Vector3(s * 6.5, 0, -0.7).applyMatrix4(this.root.matrixWorld);
-      this.solid.push({ x0: p.x - 1.1, x1: p.x + 1.1, z0: p.z - 1.1, z1: p.z + 1.1, y0: at.y - 1, y1: at.y + cy });
+      this.solid.push({ x0: p.x - 1.1 * size, x1: p.x + 1.1 * size, z0: p.z - 1.1 * size, z1: p.z + 1.1 * size, y0: at.y - 1, y1: at.y + cy * size });
     }
 
     // the CSS layer for the YouTube page, behind the canvas
@@ -111,7 +111,7 @@ export class Billboard {
     this.obj = new CSS3DObject(this.box);
     this.obj.position.copy(this.center).multiplyScalar(K);
     this.obj.rotation.y = ry;
-    this.obj.scale.setScalar((SW * K) / PX);
+    this.obj.scale.setScalar((SW * size * K) / PX);
     this.cssScene.add(this.obj);
     window.addEventListener("message", this.onMessage);
   }
@@ -151,7 +151,7 @@ export class Billboard {
   }
 
   // every frame
-  tick(camera: THREE.PerspectiveCamera, w: number, h: number, you: THREE.Vector3, secs: number, dt: number) {
+  tick(camera: THREE.PerspectiveCamera, w: number, h: number, loud: number, secs: number, dt: number) {
     // keep the CSS layer lined up with the 3D camera
     const c = this.cssCam;
     if (c.fov !== camera.fov || c.aspect !== camera.aspect) {
@@ -169,9 +169,8 @@ export class Billboard {
     // say hello until the player answers
     if (!this.ready && this.loadedAt && (this.hello -= dt) <= 0) { this.listen(); this.hello = 1; }
 
-    // louder as you get closer
-    const d = you.distanceTo(this.center);
-    const vol = this.listening ? Math.round(100 * THREE.MathUtils.clamp(1 - (d - 14) / (HEAR - 14), 0, 1)) : 0;
+    // how loud: the caller decides (it fills the whole citadel, louder near the screen)
+    const vol = this.listening ? Math.round(100 * THREE.MathUtils.clamp(loud, 0, 1)) : 0;
     if (this.ready && Math.abs(vol - this.sentVol) >= 3) {
       if (vol === 0) this.cmd("mute");
       else { if (this.sentVol <= 0) this.cmd("unMute"); this.cmd("setVolume", [vol]); }

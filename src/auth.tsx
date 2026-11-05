@@ -61,7 +61,8 @@ function friendlyError(message: string) {
   return message;
 }
 
-export function AuthScreen() {
+// emailOnly: skip the Google button (the world test page, where Google can't send you back)
+export function AuthScreen({ emailOnly = false }: { emailOnly?: boolean }) {
   const [mode, setMode] = useState<"login" | "signup" | "forgot" | "check-email">("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -71,7 +72,7 @@ export function AuthScreen() {
     authUrlError ? "Google sign-in failed: " + authUrlError.replace(/\+/g, " ") : null,
   );
   const [canResend, setCanResend] = useState(false);
-  const [withEmail, setWithEmail] = useState(false); // Google first; email form only when asked
+  const [withEmail, setWithEmail] = useState(emailOnly); // Google first; email form only when asked
   const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
@@ -245,9 +246,11 @@ export function AuthScreen() {
             Back to log in
           </button>
         ) : (
-          <button className="link-btn" onClick={() => setWithEmail(false)}>
-            Back to Continue with Google
-          </button>
+          !emailOnly && (
+            <button className="link-btn" onClick={() => setWithEmail(false)}>
+              Back to Continue with Google
+            </button>
+          )
         )}
         <p className="fine">
           <b className="cam-promise">Your camera never leaves your phone. Only your rep count is shared.</b>

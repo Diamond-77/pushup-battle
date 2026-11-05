@@ -4,6 +4,7 @@ import { MapControls } from "three/examples/jsm/controls/MapControls.js";
 import { buildWorld, CROSSROADS, type Site } from "./buildWorld";
 import { CLANS, clanById } from "../clans";
 import ClanLogo from "../ClanLogo";
+import type { Me } from "./Explore";
 import "./world.css";
 
 const Palace3D = lazy(() => import("../palace/Palace3D"));
@@ -13,7 +14,7 @@ const WEATHER_WORD = { storm: "Eternal storm", sunset: "Endless sunset", night: 
 
 // The open-world map: where the three clan empires lie. Drag to move, pinch to zoom, twist to turn.
 // Tap an empire to fly to it, then visit its palace.
-export default function WorldMap({ onBack }: { onBack?: () => void }) {
+export default function WorldMap({ onBack, me }: { onBack?: () => void; me?: Me | null }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const labelRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const crossRef = useRef<HTMLDivElement>(null);
@@ -267,7 +268,7 @@ export default function WorldMap({ onBack }: { onBack?: () => void }) {
       {exploring && (
         <div className="wm-visit">
           <Suspense fallback={null}>
-            <Explore onBack={() => setExploring(false)} />
+            <Explore onBack={() => setExploring(false)} me={me} />
           </Suspense>
         </div>
       )}
