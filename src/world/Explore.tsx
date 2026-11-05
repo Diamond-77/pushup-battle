@@ -77,7 +77,7 @@ type Action = "door" | "battle" | "music" | "sit" | "chat" | "more";
 type Ui = { actions: Action[]; doorOpen: boolean; near: string[]; target: string | null; hear: boolean; row: number };
 type ChatMsg = { key: string; name: string; text: string; mine: boolean; at: number };
 // what the buttons call inside the 3D loop
-type Api = { jumpDown: () => void; jumpUp: () => void; act: (a: Action) => void; lock: (name: string) => void; challenged: (name: string | null) => void; wave: () => void; listen: (on: boolean) => void; challenge: (key: string, mode: string) => boolean; answer: (key: string, mode: string, ok: boolean) => boolean; chat: (text: string) => void };
+type Api = { jumpDown: () => void; jumpUp: () => void; act: (a: Action) => void; lock: (name: string) => void; challenged: (name: string | null) => void; wave: () => void; listen: (on: boolean) => void; progress: () => { t: number; d: number }; challenge: (key: string, mode: string) => boolean; answer: (key: string, mode: string, ok: boolean) => boolean; chat: (text: string) => void };
 
 export default function Explore({ onBack, me: account }: { onBack: () => void; me?: Me | null }) {
   const myName = shortName(account?.name || GUEST_NAME);
@@ -89,7 +89,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
   const flashRef = useRef<HTMLDivElement>(null);
   const youRef = useRef<HTMLDivElement>(null);
   const tagRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const api = useRef<Api>({ jumpDown: () => {}, jumpUp: () => {}, act: () => {}, lock: () => {}, challenged: () => {}, wave: () => {}, listen: () => {}, challenge: () => false, answer: () => false, chat: () => {} });
+  const api = useRef<Api>({ jumpDown: () => {}, jumpUp: () => {}, act: () => {}, lock: () => {}, challenged: () => {}, wave: () => {}, listen: () => {}, progress: () => ({ t: 0, d: 0 }), challenge: () => false, answer: () => false, chat: () => {} });
   const radioRef = useRef<Radio | null>(null);
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const settingsRef = useRef(settings);
@@ -203,15 +203,18 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     };
     const unsub = radio.subscribe(syncRadio);
     syncRadio();
+    let toldSkip = "";
     board.onEnded = (id, skip) => {
       const title = radio.state.now?.id === id ? radio.state.now.title : "That video";
       radio.ended(id, skip);
-      if (skip) {
+      if (skip && toldSkip !== id) {
+        toldSkip = id;
         setToast(`${title}: its owner only lets it play on YouTube itself, so it was skipped.`);
       }
     };
     board.onBlocked = () => { setListening(false); setToast("Your phone stopped the sound. Tap Listen again."); };
     api.current.listen = (on) => { board.setListening(on); setListening(on); };
+    api.current.progress = () => ({ t: radio.elapsed(), d: board.duration });
     const EMPTY: never[] = [];
     const cellAt = (x: number, z: number) => grid.get(Math.floor(x / CELL) + "," + Math.floor(z / CELL)) ?? EMPTY;
     const doorOpen = new Set<Box>();
@@ -1127,64 +1130,70 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
 
       {/* the song list: paste a link to suggest, tap a heart to vote; the most votes plays next */}
       {musicOpen && (
-        <div className="ex-music">
+        <div className="ex-music yt">
           <div className="ex-music-head">
-            <b>Arasaka Radio</b>
-            <button className="wm-round small" onClick={() => setMusicOpen(false)} aria-label="Close">×</button>
+            <b><span className="yt-logo" aria-hidden><svg viewBox="0 0 28 20"><rect width="28" height="20" rx="5" /><path d="M11 6l7 4-7 4z" /></svg></span>Arasaka Radio</b>
+            <button className="yt-x" onClick={() => setMusicOpen(false)} aria-label="Close">×</button>
           </div>
-          {music.now ? (
-            <div className="ex-music-now">
-              <img src={thumb(music.now.id)} alt="" />
-              <div>
-                <span>Now playing</span>
-                <b>{music.now.title}</b>
-                <em>picked by {music.now.by}</em>
-              </div>
-              <button className={`ex-np-btn ${listening ? "on" : ""}`} onClick={() => api.current.listen(!listening)}>{listening ? "Mute" : "Listen"}</button>
-            </div>
-          ) : (
-            <p className="ex-note">Nothing playing yet. Paste a song below and it goes on the screen.</p>
-          )}
-          <form className="ex-music-add" onSubmit={(e) => { e.preventDefault(); go(); }}>
-            <input type="search" enterKeyHint={isLink ? "done" : "search"} value={link} onChange={(e) => setLink(e.target.value)} placeholder={canSearch ? "Search YouTube or paste a link" : "Paste a YouTube link"} autoCapitalize="off" autoCorrect="off" />
-            <button className="game-btn jade" disabled={!link.trim() || adding}>{adding ? "…" : isLink || !canSearch ? "Add" : "Search"}</button>
+          <form className="yt-search" onSubmit={(e) => { e.preventDefault(); go(); }}>
+            <input type="search" enterKeyHint={isLink ? "done" : "search"} value={link} onChange={(e) => setLink(e.target.value)} placeholder={canSearch ? "Search" : "Paste a YouTube link"} autoCapitalize="off" autoCorrect="off" />
+            <button disabled={!link.trim() || adding} aria-label={isLink || !canSearch ? "Add" : "Search"}>
+              {adding ? "…" : isLink || !canSearch ? "+" : <svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5 21 21" /></svg>}
+            </button>
           </form>
           {canSearch && (
-            <div className="ex-seg small">
+            <div className="yt-chips">
+              {found && <button onClick={() => setFound(null)}>Up next</button>}
               <button className={kind === "video" ? "on" : ""} onClick={() => { setKind("video"); setFound(null); }}>Videos</button>
               <button className={kind === "playlist" ? "on" : ""} onClick={() => { setKind("playlist"); setFound(null); }}>Playlists</button>
-              {found && <button onClick={() => setFound(null)}>Song list</button>}
             </div>
           )}
           <div className="ex-music-list">
+            {!found && (music.now ? (
+              <div className="yt-now">
+                <div className="yt-thumb big">
+                  <img src={thumb(music.now.id)} alt="" />
+                  <span className="yt-live">ON SCREEN</span>
+                  <YtProgress get={api.current.progress} />
+                </div>
+                <b className="yt-title">{music.now.title}</b>
+                <div className="yt-meta-row">
+                  <em>picked by {music.now.by}</em>
+                  <button className={`yt-pill ${listening ? "" : "hot"}`} onClick={() => api.current.listen(!listening)}>{listening ? "Mute" : "Listen"}</button>
+                </div>
+              </div>
+            ) : (
+              <p className="ex-note">Nothing on the screen yet. Search or paste a link and it plays.</p>
+            ))}
             {found && found.length === 0 && <p className="ex-note">Nothing found.</p>}
             {found?.map((f) => {
               const queued = f.kind === "video" && (music.queue.some((q) => q.id === f.id) || music.now?.id === f.id);
               return (
-                <div key={f.id} className="ex-music-row">
-                  <img src={f.thumb} alt="" />
-                  <div>
+                <div key={f.id} className="yt-row">
+                  <div className="yt-thumb"><img src={f.thumb} alt="" />{f.kind === "playlist" && <span className="yt-badge">Playlist</span>}</div>
+                  <div className="yt-text">
                     <b>{f.title}</b>
-                    <em>{f.kind === "playlist" ? "Playlist · " : ""}{f.channel}</em>
+                    <em>{f.channel}</em>
                   </div>
-                  <button className={`ex-vote ${queued ? "on" : ""}`} disabled={queued || adding} onClick={() => (f.kind === "video" ? suggest([{ id: f.id, title: f.title.slice(0, 90) }]) : addPlaylist(f.id))} aria-label="Add">
-                    {queued ? "Added" : "+ Add"}
+                  <button className={`yt-add ${queued ? "on" : ""}`} disabled={queued || adding} onClick={() => (f.kind === "video" ? suggest([{ id: f.id, title: f.title.slice(0, 90) }]) : addPlaylist(f.id))} aria-label="Add">
+                    {queued ? "✓" : "+"}
                   </button>
                 </div>
               );
             })}
-            {!found && queue.length === 0 && <p className="ex-note">No songs waiting. The one with the most votes plays next, and when the list is empty earlier songs come round again.</p>}
+            {!found && <div className="yt-h">Up next{queue.length ? <span>{queue.length}</span> : null}</div>}
+            {!found && queue.length === 0 && <p className="ex-note">Nothing waiting. The most liked plays next, and when the list is empty earlier videos come round again.</p>}
             {!found && queue.map((q) => {
               const mine = q.votes.includes(meId);
               return (
-                <div key={q.id} className="ex-music-row">
-                  <img src={thumb(q.id)} alt="" />
-                  <div>
+                <div key={q.id} className="yt-row">
+                  <div className="yt-thumb"><img src={thumb(q.id)} alt="" /></div>
+                  <div className="yt-text">
                     <b>{q.title}</b>
                     <em>by {q.by}</em>
                   </div>
-                  <button className={`ex-vote ${mine ? "on" : ""}`} onClick={() => radioRef.current?.vote(q.id, !mine)} aria-label={mine ? "Take back vote" : "Vote"}>
-                    <svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" /></svg>
+                  <button className={`yt-like ${mine ? "on" : ""}`} onClick={() => radioRef.current?.vote(q.id, !mine)} aria-label={mine ? "Take back like" : "Like"}>
+                    <svg viewBox="0 0 24 24"><path d="M7 11v9H4v-9zM7 11l4-8c1.7 0 2.6 1.2 2.3 2.8L12.8 9H19a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 17.8 20H7" /></svg>
                     {q.votes.length}
                   </button>
                 </div>
@@ -1278,5 +1287,22 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
         </div>
       )}
     </div>
+  );
+}
+
+// the red bar under the now-playing picture, like YouTube's
+function YtProgress({ get }: { get: () => { t: number; d: number } }) {
+  const [p, setP] = useState(get);
+  useEffect(() => {
+    const id = setInterval(() => setP(get()), 1000);
+    return () => clearInterval(id);
+  }, [get]);
+  const clock = (x: number) => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, "0")}`;
+  const t = p.d ? Math.min(p.t, p.d) : p.t;
+  return (
+    <>
+      <span className="yt-time">{clock(t)}{p.d ? ` / ${clock(p.d)}` : ""}</span>
+      <div className="yt-bar"><i style={{ width: p.d ? `${(100 * t) / p.d}%` : "0%" }} /></div>
+    </>
   );
 }

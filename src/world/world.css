@@ -302,7 +302,7 @@
 .ex-music-now > div, .ex-music-row > div { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
 .ex-music-now img { width: 72px; height: 40px; object-fit: cover; border-radius: 8px; flex: none; }
 .ex-music-row img { width: 56px; height: 32px; object-fit: cover; border-radius: 6px; flex: none; }
-.ex-music span { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.08em; color: #e0483b; font-weight: 800; }
+.ex-music:not(.yt) span { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.08em; color: #e0483b; font-weight: 800; }
 .ex-music em { font-style: normal; font-size: 0.66rem; color: #b9ab90; }
 .ex-music-add { display: flex; gap: 6px; }
 .ex-music-add input {
@@ -360,3 +360,61 @@
 .ex-msg.mine { align-self: flex-end; border-radius: 12px 12px 4px 12px; background: #2f6b4f; }
 .ex-chat .ex-music-add input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; border: 1.5px solid var(--wood-rim); background: rgba(0, 0, 0, 0.35); color: var(--parch); font-size: 16px; }
 .ex-chat .ex-music-add .game-btn { padding: 6px 14px; min-width: 0; }
+
+/* the radio pop-up, dressed like YouTube's dark app */
+.ex-music.yt {
+  background: #0f0f0f; border: 1px solid #303030; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6); color: #f1f1f1; border-radius: 14px;
+  font-family: Roboto, "Helvetica Neue", Arial, system-ui, sans-serif; gap: 10px;
+}
+.yt .ex-music-head b { font-family: inherit; font-size: 1rem; font-weight: 700; letter-spacing: -0.01em; display: flex; align-items: center; gap: 7px; }
+.yt-logo svg { width: 26px; height: 18px; display: block; }
+.yt-logo rect { fill: #ff0033; }
+.yt-logo path { fill: #fff; }
+.yt-x { width: 32px; height: 32px; border-radius: 50%; border: 0; background: transparent; color: #f1f1f1; font-size: 1.4rem; line-height: 1; }
+.yt-x:active { background: #272727; }
+.yt-search { display: flex; height: 38px; }
+.yt-search input {
+  flex: 1; min-width: 0; padding: 0 14px; border-radius: 19px 0 0 19px; border: 1px solid #303030; border-right: 0; background: #121212;
+  color: #f1f1f1; font-size: 16px; outline: none;
+}
+.yt-search input:focus { border-color: #1c62b9; }
+.yt-search input::-webkit-search-cancel-button { filter: invert(1); }
+.yt-search button {
+  width: 54px; border-radius: 0 19px 19px 0; border: 1px solid #303030; background: #222; color: #f1f1f1; font-size: 1.2rem; font-weight: 500;
+  display: flex; align-items: center; justify-content: center;
+}
+.yt-search button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; }
+.yt-search button:disabled { color: #717171; }
+.yt-chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+.yt-chips button { flex: none; padding: 6px 12px; border-radius: 8px; border: 0; background: #272727; color: #f1f1f1; font-size: 0.8rem; font-weight: 500; }
+.yt-chips button.on { background: #f1f1f1; color: #0f0f0f; }
+.yt .ex-music-list { gap: 10px; }
+.yt .ex-note { color: #aaa; font-size: 0.78rem; }
+.yt-thumb { position: relative; flex: none; width: 112px; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: #272727; }
+.yt-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.yt-thumb.big { width: 100%; max-height: 30vh; border-radius: 12px; }
+.yt-live { position: absolute; left: 8px; top: 8px; padding: 2px 6px; border-radius: 4px; background: #cc0000; color: #fff; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.04em; }
+.yt-badge { position: absolute; right: 4px; bottom: 4px; padding: 1px 5px; border-radius: 4px; background: rgba(0, 0, 0, 0.8); color: #fff; font-size: 0.6rem; font-weight: 600; }
+.yt-time { position: absolute; right: 8px; bottom: 9px; padding: 1px 5px; border-radius: 4px; background: rgba(0, 0, 0, 0.8); color: #fff; font-size: 0.68rem; font-weight: 600; }
+.yt-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255, 255, 255, 0.25); }
+.yt-bar i { display: block; height: 100%; background: #ff0033; transition: width 1s linear; }
+.yt-now { display: flex; flex-direction: column; gap: 6px; }
+.yt-title { font-size: 0.95rem !important; font-weight: 700; line-height: 1.3; white-space: normal !important; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.yt-meta-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.yt em { font-style: normal; font-size: 0.72rem; color: #aaa; }
+.yt-pill { flex: none; padding: 7px 16px; border-radius: 18px; border: 0; background: #272727; color: #f1f1f1; font-weight: 600; font-size: 0.8rem; }
+.yt-pill.hot { background: #f1f1f1; color: #0f0f0f; }
+.yt-h { font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.yt-h span { font-size: 0.7rem; font-weight: 500; color: #aaa; }
+.yt-row { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
+.yt-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.yt-text b { font-size: 0.8rem !important; font-weight: 600; line-height: 1.3; white-space: normal !important; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.yt-like, .yt-add {
+  flex: none; align-self: center; display: flex; align-items: center; gap: 5px; padding: 6px 11px; border-radius: 16px; border: 0;
+  background: #272727; color: #f1f1f1; font-size: 0.78rem; font-weight: 600;
+}
+.yt-like svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.yt-like.on svg { fill: currentColor; }
+.yt-like.on { background: #f1f1f1; color: #0f0f0f; }
+.yt-add { width: 34px; height: 34px; padding: 0; justify-content: center; font-size: 1.2rem; border-radius: 50%; }
+.yt-add.on { background: #f1f1f1; color: #0f0f0f; font-size: 0.9rem; }

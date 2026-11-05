@@ -38,6 +38,9 @@ export class Billboard {
   private check = 0;
   private sentVol = -1;
   private done = false;
+  private doneAt = 0;
+  private skipped = false;
+  private switchedAt = 0;
   private infoAt = 0;
   listening = false;
 
@@ -121,13 +124,22 @@ export class Billboard {
   play(now: Now, secs: number) {
     if (now?.id === this.song?.id) return;
     this.song = now;
+    this.done = false;
+    this.switchedAt = performance.now();
+    this.info = { playerState: -1 };
+    this.screen.material = now ? this.hole : this.idle;
+    // the next song goes into the same player: phones keep the sound on that way, and it starts faster
+    if (now && this.frame && this.ready) {
+      this.frame.title = now.title;
+      this.cmd("loadVideoById", [{ videoId: now.id, startSeconds: Math.floor(Math.max(0, secs)) }]);
+      this.loadedAt = performance.now();
+      this.sentVol = -1;
+      return;
+    }
     this.frame?.remove();
     this.frame = null;
     this.ready = false;
-    this.info = {};
     this.sentVol = -1;
-    this.done = false;
-    this.screen.material = now ? this.hole : this.idle;
     if (!now) return;
     const f = document.createElement("iframe");
     const q = new URLSearchParams({
@@ -141,6 +153,11 @@ export class Billboard {
     f.onload = () => { this.loadedAt = performance.now(); this.hello = 0; this.listen(); };
     this.box.appendChild(f);
     this.frame = f;
+  }
+
+  // how long the current video is, in seconds (0 until YouTube says)
+  get duration() {
+    return this.info.duration ?? 0;
   }
 
   // call from a tap: browsers only allow sound after the player touched the screen
@@ -166,6 +183,9 @@ export class Billboard {
     this.obj.visible = !!this.song;
     this.css.render(this.cssScene, c);
     if (!this.song || !this.frame) return;
+
+    // we told everyone the song ended but it's still on: say it again (the message may have been lost)
+    if (this.done && performance.now() - this.doneAt > 6000) { this.doneAt = performance.now(); this.onEnded(this.song.id, this.skipped); }
 
     // say hello until the player answers
     if (!this.ready && this.loadedAt && (this.hello -= dt) <= 0) { this.listen(); this.hello = 1; }
@@ -212,7 +232,14 @@ export class Billboard {
   private end(skip: boolean) {
     if (this.done || !this.song) return;
     this.done = true;
+    this.doneAt = performance.now();
+    this.skipped = skip;
     this.onEnded(this.song.id, skip);
+  }
+
+  // right after switching songs the player may still report the old song's "ended"
+  private fresh() {
+    return performance.now() - this.switchedAt > 3000;
   }
 
   private listen() {
@@ -237,10 +264,10 @@ export class Billboard {
         Object.assign(this.info, m.info);
         if (m.info.currentTime !== undefined) this.infoAt = performance.now();
       }
-      if (this.info.playerState === 0) this.end(false);
+      if (this.info.playerState === 0 && this.fresh()) this.end(false);
     } else if (m.event === "onStateChange" && typeof m.info === "number") {
       this.info.playerState = m.info;
-      if (m.info === 0) this.end(false);
+      if (m.info === 0 && this.fresh()) this.end(false);
     } else if (m.event === "onError") this.end(true); // not allowed outside YouTube, removed, ...
   };
 }
