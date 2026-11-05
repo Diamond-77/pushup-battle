@@ -9,6 +9,7 @@ import ClanLogo from "../ClanLogo";
 import { Hero } from "./hero";
 import { Billboard } from "./billboard";
 import { buildNeon } from "./neon";
+import { buildAura } from "./aura";
 import { buildBenches, type Seat } from "./benches";
 import { playChime, unlockChime } from "./chime";
 import { Online, lookFor } from "./players";
@@ -184,6 +185,8 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
 
     const neon = buildNeon();
     scene.add(neon.root);
+    const aura = buildAura();
+    scene.add(aura.root);
 
     /* ----- the giant screen and its radio ----- */
     const board = new Billboard(host, BOARD_AT, BOARD_RY, BOARD_SIZE);
@@ -200,7 +203,13 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     };
     const unsub = radio.subscribe(syncRadio);
     syncRadio();
-    board.onEnded = (id, skip) => radio.ended(id, skip);
+    board.onEnded = (id, skip) => {
+      const title = radio.state.now?.id === id ? radio.state.now.title : "That video";
+      radio.ended(id, skip);
+      if (skip) {
+        setToast(`${title}: its owner only lets it play on YouTube itself, so it was skipped.`);
+      }
+    };
     board.onBlocked = () => { setListening(false); setToast("Your phone stopped the sound. Tap Listen again."); };
     api.current.listen = (on) => { board.setListening(on); setListening(on); };
     const EMPTY: never[] = [];
@@ -758,6 +767,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       online?.send(pos.x, pos.y, pos.z, facing, speed, !grounded, seat ? seat.i : -1);
       citadel.tick(t, dt);
       neon.tick(t, dt, pos);
+      aura.tick(t, dt);
 
       // third-person camera behind the hero, pulled in if a wall is in the way.
       // Below zero pitch the camera drops low behind you so you can look up at the sky.
@@ -1141,7 +1151,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
           </form>
           {canSearch && (
             <div className="ex-seg small">
-              <button className={kind === "video" ? "on" : ""} onClick={() => { setKind("video"); setFound(null); }}>Songs</button>
+              <button className={kind === "video" ? "on" : ""} onClick={() => { setKind("video"); setFound(null); }}>Videos</button>
               <button className={kind === "playlist" ? "on" : ""} onClick={() => { setKind("playlist"); setFound(null); }}>Playlists</button>
               {found && <button onClick={() => setFound(null)}>Song list</button>}
             </div>

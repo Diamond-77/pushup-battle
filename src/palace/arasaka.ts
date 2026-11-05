@@ -83,7 +83,7 @@ function mats(env: Env) {
   return {
     ...m,
     // the red lattice windows glow from the lamps inside (the black lacquer stays dark)
-    wall: toon(0, wallTex, { emissive: 0xffffff, emissiveMap: wallTex, emissiveIntensity: 0.12 + env.lamp * 0.18 }),
+    wall: toon(0, wallTex, { emissive: 0xff5040, emissiveMap: wallTex, emissiveIntensity: 0.55 + env.lamp * 0.35 }),
     wallPlain: toon(0x1c1a1f),
     roof: toon(0, roofTexture(0x2b2f39), { side: THREE.DoubleSide }),
     ridge: toon(0x18191e),
@@ -137,7 +137,8 @@ const solidBox = (c: ACtx, w: number, h: number, d: number, x = 0, y = 0, z = 0,
 // stairs plus their walking slope
 function steps(c: ACtx, w: number, h: number, depth: number, x: number, y: number, z: number) {
   stairs(c, w, h, depth, x, y, z);
-  const a = new THREE.Vector3(x, y, z + 0.2).applyMatrix4(c.T), b = new THREE.Vector3(x, y + h, z - depth).applyMatrix4(c.T);
+  // the walking ramp runs a little past the top step onto the landing, so there's never a gap to fall into
+  const a = new THREE.Vector3(x, y, z + 0.3).applyMatrix4(c.T), b = new THREE.Vector3(x, y + h, z - depth - 0.9).applyMatrix4(c.T);
   c.col.ramps.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, w, ya: a.y, yb: b.y });
 }
 
