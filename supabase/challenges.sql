@@ -6,6 +6,8 @@
 --   * The other player can accept, decline, or change the mode/time and send it back.
 --     Whoever didn't make the latest offer is the one who answers.
 --   * Only when it's accepted do both players put down 4 Respect.
+--   * Each offer can carry a note of up to 30 characters. Harmful notes can be reported (challenge_reports).
+--   * You can't book two battles within 30 minutes of each other.
 -- Safe to run again: it gives back stakes taken by the older version for challenges not yet accepted.
 --   * From 10 minutes before until 15 minutes after the time, both players check in and battle.
 --   * Afterwards: both showed up = both get their 4 back. Only one showed up = that player gets all 8.
@@ -37,6 +39,40 @@ drop policy if exists "Players see their own challenges" on public.challenges;
 create policy "Players see their own challenges" on public.challenges for select using (auth.uid() in (from_user, to_user));
 -- no insert/update policies: only the functions below write here
 
+-- a short note (up to 30 characters) that goes with the latest offer
+alter table public.challenges add column if not exists note text check (char_length(note) <= 30);
+alter table public.challenges add column if not exists bot_countered boolean not null default false;
+
+-- Reported notes. Only you (the owner) read these, in Table Editor > challenge_reports.
+create table if not exists public.challenge_reports (
+  id bigint generated always as identity primary key,
+  challenge_id bigint not null references public.challenges(id) on delete cascade,
+  reporter uuid not null references public.profiles(id) on delete cascade,
+  author uuid not null references public.profiles(id) on delete cascade, -- who wrote the note
+  note text not null,
+  created_at timestamptz not null default now(),
+  unique (challenge_id, reporter, note)
+);
+alter table public.challenge_reports enable row level security;
+
+create or replace function public._clean_note(p_note text)
+returns text
+as $fn$
+  select nullif(left(regexp_replace(btrim(coalesce(p_note, '')), '\s+', ' ', 'g'), 30), '')
+$fn$ language sql immutable;
+
+-- Another open challenge of mine within 30 minutes of this time? Returns the other player's name.
+create or replace function public._challenge_clash(p_me uuid, p_at timestamptz, p_skip bigint, p_accepted_only boolean default false)
+returns text
+as $fn$
+  select p.username from public.challenges c
+    join public.profiles p on p.id = case when c.from_user = p_me then c.to_user else c.from_user end
+   where p_me in (c.from_user, c.to_user) and c.id <> coalesce(p_skip, -1)
+     and (c.status = 'accepted' or (not p_accepted_only and c.status = 'pending'))
+     and abs(extract(epoch from c.at - p_at)) < 1800
+   order by abs(extract(epoch from c.at - p_at)) limit 1
+$fn$ language sql stable security definer set search_path = public;
+
 create or replace function public._check_challenge_slot(p_mode text, p_at timestamptz)
 returns void
 as $fn$
@@ -47,14 +83,16 @@ begin
 end;
 $fn$ language plpgsql;
 
--- Send a challenge (puts down 4 Respect)
-create or replace function public.send_challenge(p_to uuid, p_mode text, p_at timestamptz)
+-- Send a challenge (nothing is taken until it's accepted), with an optional short note
+drop function if exists public.send_challenge(uuid, text, timestamptz);
+create or replace function public.send_challenge(p_to uuid, p_mode text, p_at timestamptz, p_note text default null)
 returns bigint
 as $fn$
 declare
   me uuid := auth.uid();
   bal integer;
   cid bigint;
+  clash text;
 begin
   if me is null then raise exception 'Please sign in again'; end if;
   if p_to = me then raise exception 'You cannot challenge yourself'; end if;
@@ -64,8 +102,10 @@ begin
   end if;
   select respect into bal from public.profiles where id = me;
   if bal < 4 then raise exception 'You need 4 Respect to send a challenge'; end if;
-  insert into public.challenges (from_user, to_user, mode, at, proposer)
-  values (me, p_to, p_mode, p_at, me) returning id into cid;
+  clash := public._challenge_clash(me, p_at, null);
+  if clash is not null then raise exception 'You already booked a battle with % around then. Pick a time at least 30 minutes away.', clash; end if;
+  insert into public.challenges (from_user, to_user, mode, at, proposer, note)
+  values (me, p_to, p_mode, p_at, me, public._clean_note(p_note)) returning id into cid;
   return cid;
 end;
 $fn$ language plpgsql security definer set search_path = public;
@@ -79,13 +119,16 @@ begin
 end;
 $fn$ language plpgsql security definer set search_path = public;
 
--- Answer a challenge: 'accept', 'decline', or 'counter' (with a new mode and/or time)
-create or replace function public.respond_challenge(p_id bigint, p_action text, p_mode text default null, p_at timestamptz default null)
+-- Answer a challenge: 'accept', 'decline', or 'counter' (send it back with a new mode and/or time and a note;
+-- then the one who sent it is the one who answers)
+drop function if exists public.respond_challenge(bigint, text, text, timestamptz);
+create or replace function public.respond_challenge(p_id bigint, p_action text, p_mode text default null, p_at timestamptz default null, p_note text default null)
 returns void
 as $fn$
 declare
   me uuid := auth.uid();
   c public.challenges;
+  clash text;
 begin
   select * into c from public.challenges where id = p_id for update;
   if c.id is null or me not in (c.from_user, c.to_user) then raise exception 'This is not your challenge'; end if;
@@ -98,11 +141,16 @@ begin
     update public.challenges set status = 'declined', updated_at = now() where id = p_id;
   elsif p_action = 'counter' then
     perform public._check_challenge_slot(coalesce(p_mode, c.mode), coalesce(p_at, c.at));
-    update public.challenges set mode = coalesce(p_mode, c.mode), at = coalesce(p_at, c.at), proposer = me, updated_at = now() where id = p_id;
+    clash := public._challenge_clash(me, coalesce(p_at, c.at), p_id);
+    if clash is not null then raise exception 'You already booked a battle with % around then. Pick a time at least 30 minutes away.', clash; end if;
+    update public.challenges set mode = coalesce(p_mode, c.mode), at = coalesce(p_at, c.at), proposer = me,
+      note = public._clean_note(p_note), updated_at = now() where id = p_id;
   elsif p_action = 'accept' then
     -- now both players put down their 4 Respect
     perform 1 from public.profiles where id in (c.from_user, c.to_user) for update;
     if (select respect from public.profiles where id = me) < 4 then raise exception 'You need 4 Respect to accept'; end if;
+    clash := public._challenge_clash(me, c.at, p_id, true);
+    if clash is not null then raise exception 'You already have a battle with % around then. Send this one back with another time.', clash; end if;
     if (select respect from public.profiles where id = case when me = c.from_user then c.to_user else c.from_user end) < 4 then
       raise exception 'The other player doesn''t have 4 Respect right now';
     end if;
@@ -198,7 +246,23 @@ begin
 end;
 $fn$ language plpgsql security definer set search_path = public;
 
+-- Report a note that's harmful. The note is copied so it stays even if it's changed later.
+create or replace function public.report_challenge_note(p_id bigint)
+returns void
+as $fn$
+declare c public.challenges;
+begin
+  select * into c from public.challenges where id = p_id;
+  if c.id is null or auth.uid() not in (c.from_user, c.to_user) then raise exception 'This is not your challenge'; end if;
+  if c.note is null then raise exception 'There is no note to report'; end if;
+  if c.proposer = auth.uid() then raise exception 'That''s your own note'; end if;
+  insert into public.challenge_reports (challenge_id, reporter, author, note)
+  values (c.id, auth.uid(), c.proposer, c.note) on conflict do nothing;
+end;
+$fn$ language plpgsql security definer set search_path = public;
+
 revoke all on function public._refund_challenge(public.challenges) from public, anon, authenticated;
+revoke all on function public._challenge_clash(uuid, timestamptz, bigint, boolean) from public, anon, authenticated;
 revoke all on function public._settle_challenge(bigint) from public, anon, authenticated;
 
 -- 2. Throne motto: the player on the throne can write a line shown on the throne (80 characters).

@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Avatar from "./Avatar";
 import { MODES, type ModeId } from "./config";
 import type { BotMatch, Player } from "./lobby";
 import { askBadgePermission } from "./badge";
 import {
-  answerChallenge, cancelChallenge, checkInChallenge, isHot, startChallengeMatch, markAcceptedSeen, sendChallenge, untilText, whenText,
-  CHALLENGE_STAKE, type ChallengeView,
+  answerChallenge, cancelChallenge, checkInChallenge, clashWith, isHot, reportNote, startChallengeMatch, markAcceptedSeen, sendChallenge, untilText, whenText,
+  CHALLENGE_STAKE, CLASH_MIN, NOTE_MAX, type ChallengeView,
 } from "./challenges";
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -14,12 +15,14 @@ const roundUp = (d: Date, min = 15) => new Date(Math.ceil(d.getTime() / (min * 6
 const at = (days: number, h: number) => { const d = new Date(); d.setDate(d.getDate() + days); d.setHours(h, 0, 0, 0); return d; };
 
 // Pick a battle mode and a time. Used to send a challenge and to send back a changed one.
-export function ChallengeComposer({ name, avatar, start, onSend, onClose, title = "Challenge" }: {
-  name: string; avatar: string | null; start?: { mode: ModeId; at: Date };
-  onSend: (mode: ModeId, at: Date) => Promise<string | null>; onClose: () => void; title?: string;
+export function ChallengeComposer({ name, avatar, start, onSend, onClose, title = "Challenge", skipId, sendLabel = "Send" }: {
+  name: string; avatar: string | null; start?: { mode: ModeId; at: Date }; skipId?: number; sendLabel?: string;
+  onSend: (mode: ModeId, at: Date, note: string) => Promise<string | null>; onClose: () => void; title?: string;
 }) {
   const [mode, setMode] = useState<ModeId>(start?.mode ?? "classic");
   const [when, setWhen] = useState(localInput(start?.at ?? roundUp(new Date(Date.now() + 3600000))));
+  const [note, setNote] = useState("");
+  const clash = clashWith(new Date(when), skipId);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const quick: [string, Date][] = [
@@ -30,11 +33,12 @@ export function ChallengeComposer({ name, avatar, start, onSend, onClose, title 
   const send = async () => {
     setBusy(true);
     setErr(null);
-    const e = await onSend(mode, new Date(when));
+    const e = await onSend(mode, new Date(when), note);
     setBusy(false);
     if (e) setErr(e); else onClose();
   };
-  return (
+  // drawn on top of everything (above the dock and the challenge window it may open from)
+  return createPortal(
     <div className="modal-back challenge-back" onClick={onClose}>
       <div className="modal panel composer" onClick={(e) => e.stopPropagation()}>
         <div className="composer-head">
@@ -60,16 +64,25 @@ export function ChallengeComposer({ name, avatar, start, onSend, onClose, title 
           ))}
         </div>
         <input className="time-input" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
+        {clash && (
+          <div className="clash-warn">
+            <Avatar url={clash.other.avatar_url} color="opp" size={30} />
+            <span>You already booked <b>{clash.other.username}</b> at {whenText(clash.when)}. Pick a time at least {CLASH_MIN} min away.</span>
+          </div>
+        )}
+        <div className="section-title">Note <span className="note-count">· {note.length}/{NOTE_MAX}</span></div>
+        <input className="note-input" maxLength={NOTE_MAX} placeholder="Say something short (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
         <p className="muted small stake-note">
           Nothing is taken now. Once it's accepted, you both put down <b>{CHALLENGE_STAKE} Respect</b>. Don't show up and the other player gets it. Both show up and you get it back.
         </p>
         {err && <p className="form-msg">{err}</p>}
         <div className="row stretch">
           <button className="game-btn wood" onClick={onClose}>Cancel</button>
-          <button className="game-btn red" disabled={busy} onClick={send}>{busy ? "Sending…" : "Send"}</button>
+          <button className="game-btn red" disabled={busy || !!clash} onClick={send}>{busy ? "Sending…" : sendLabel}</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -78,7 +91,7 @@ export function SendChallenge({ id, name, avatar, mode, onClose, onSent }: { id:
   return (
     <ChallengeComposer name={name} avatar={avatar} start={mode ? { mode, at: roundUp(new Date(Date.now() + 3600000)) } : undefined}
       onClose={onClose}
-      onSend={async (m, d) => { const e = await sendChallenge(id, m, d); if (!e) onSent?.(); return e; }} />
+      onSend={async (m, d, n) => { const e = await sendChallenge(id, m, d, n); if (!e) onSent?.(); return e; }} />
   );
 }
 
@@ -107,16 +120,21 @@ export function ChallengeBox({ list, now, online, onStart, onBot, onChanged, onP
               <div className="cb-text">
                 <div className="pl-name">{c.mine ? `You vs ${c.other.username}` : `${c.other.username} challenges you`}</div>
                 <div className="cb-when"><b>{MODES[c.mode].name}</b> · {whenText(c.when)} <span>({untilText(ms)})</span></div>
+                {c.note && <ChallengeNote c={c} />}
                 <div className="cb-status">
-                  {c.status === "pending" && (c.myTurn ? (c.proposer === c.from_user && !c.mine ? "Waiting for your answer" : "They changed it. Your answer?") : `Waiting for ${c.other.username}`)}
+                  {c.status === "pending" && (c.myTurn ? (c.proposer === c.from_user && !c.mine ? "Waiting for your answer" : `${c.other.username} sent it back with a new plan. Your answer?`) : `Waiting for ${c.other.username}`)}
                   {c.status === "accepted" && c.window === "early" && (c.proposer === (c.mine ? c.from_user : c.to_user) ? `${c.other.username} accepted! You'll be reminded.` : "Accepted. You'll be reminded.")}
                   {c.status === "accepted" && c.window === "open" && (c.iIn ? (c.theyIn ? "Both here. Start!" : `Waiting for ${c.other.username} to check in`) : "It's time! Check in.")}
                 </div>
                 <div className="cb-actions">
                   {c.status === "pending" && c.myTurn && (
                     <>
-                      <button className="pill" onClick={() => act(answerChallenge(c.id, "accept"))}>Accept</button>
-                      <button className="pill ghost" onClick={() => setEditing(c)}>Change</button>
+                      <button className="pill" onClick={() => {
+                        const x = clashWith(c.when, c.id);
+                        if (x && x.status === "accepted") return setMsg(`You already booked ${x.other.username} at ${whenText(x.when)}. Tap Suggest a time to send this one back.`);
+                        act(answerChallenge(c.id, "accept"));
+                      }}>Accept</button>
+                      <button className="pill ghost" onClick={() => setEditing(c)}>Suggest a time</button>
                       <button className="pill ghost" onClick={() => act(answerChallenge(c.id, "decline"))}>Decline</button>
                     </>
                   )}
@@ -137,10 +155,41 @@ export function ChallengeBox({ list, now, online, onStart, onBot, onChanged, onP
         })}
       </ul>
       {editing && (
-        <ChallengeComposer title="Change challenge" name={editing.other.username} avatar={editing.other.avatar_url}
+        <ChallengeComposer title="Suggest a time" sendLabel="Send back" skipId={editing.id} name={editing.other.username} avatar={editing.other.avatar_url}
           start={{ mode: editing.mode, at: editing.when }} onClose={() => setEditing(null)}
-          onSend={async (m, d) => { const e = await answerChallenge(editing.id, "counter", m, d); onChanged(); return e; }} />
+          onSend={async (m, d, n) => { const e = await answerChallenge(editing.id, "counter", m, d, n); onChanged(); return e; }} />
       )}
+    </div>
+  );
+}
+
+// The note that came with the latest offer. Under it, a small line takes turns between a few tips;
+// one of them is the reminder to report anything harmful, so the warning isn't there all the time.
+const NOTE_TIPS = ["Only you two can see this note.", "Something harmful? Tap Report.", "Reply by sending it back with a note.", "Keep it friendly. Fight with push-ups."];
+function ChallengeNote({ c }: { c: ChallengeView }) {
+  const theirs = c.proposer !== (c.mine ? c.from_user : c.to_user);
+  const [tip, setTip] = useState(() => Math.floor(Math.random() * NOTE_TIPS.length));
+  const [state, setState] = useState<"idle" | "ask" | "sent" | string>("idle");
+  useEffect(() => { const t = setInterval(() => setTip((i) => (i + 1) % NOTE_TIPS.length), 4500); return () => clearInterval(t); }, []);
+  return (
+    <div className="cb-note">
+      <div className="cb-note-text">
+        <span className="cb-note-from">{theirs ? c.other.username : "You"}:</span> “{c.note}”
+        {theirs && state === "idle" && <button className="note-report" onClick={() => setState("ask")} aria-label="Report this note">⚑ Report</button>}
+      </div>
+      {theirs && state === "ask" ? (
+        <div className="note-ask">
+          <span>Report this note as harmful?</span>
+          <button className="pill" onClick={async () => { const e = await reportNote(c.id); setState(e ?? "sent"); }}>Report</button>
+          <button className="pill ghost" onClick={() => setState("idle")}>No</button>
+        </div>
+      ) : state === "sent" ? (
+        <div className="note-tip done">Thanks. We'll take a look.</div>
+      ) : state !== "idle" ? (
+        <div className="note-tip done">{state}</div>
+      ) : theirs ? (
+        <div className="note-tip" key={tip}>{NOTE_TIPS[tip]}</div>
+      ) : null}
     </div>
   );
 }

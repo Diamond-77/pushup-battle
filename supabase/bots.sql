@@ -35,6 +35,62 @@ create table if not exists public.bot_matches (
 );
 alter table public.bot_matches enable row level security;
 
+-- Bots keep human hours (India time). Each bot has its own rhythm: it sleeps at night, drops in and
+-- out during the day (in 25-minute stretches), and now and then has a lazy day.
+--   Sensei (fair): early riser, trains mornings and evenings, in bed by about 11 PM.
+--   Ultra: night owl, gets going around noon, most active late at night, sleeps around 2 AM.
+-- The others keep ordinary hours. While a bot is "away" it isn't in the lobby, doesn't battle other
+-- bots, and the two named ones (Sensei, Ultra) can't be matched or answer challenges.
+create or replace function public._bot_awake(p_bot uuid, p_tier text, p_at timestamptz default now())
+returns boolean
+as $fn$
+declare
+  lt timestamp := p_at at time zone 'Asia/Kolkata';
+  h numeric := extract(hour from lt) + extract(minute from lt) / 60.0;
+  d1 numeric;
+  d2 numeric;
+  wake numeric;
+  bed numeric;
+begin
+  if p_tier = 'ultra' and h < 5 then
+    h := h + 24; lt := lt - interval '1 day'; -- after midnight still counts as the night before
+  end if;
+  d1 := (abs(hashtext(p_bot::text || to_char(lt, 'YYYYMMDD') || 'w')) % 1000) / 1000.0;
+  d2 := (abs(hashtext(p_bot::text || to_char(lt, 'YYYYMMDD') || 'b')) % 1000) / 1000.0;
+  wake := case p_tier when 'fair' then 5.5 when 'ultra' then 10.5 else 7 end + d1 * 1.5;
+  bed := case p_tier when 'fair' then 22.3 when 'ultra' then 25.4 else 23 end + d2 * 1.3;
+  return h >= wake and h < bed;
+end;
+$fn$ language plpgsql immutable;
+
+create or replace function public._bot_online(p_bot uuid, p_tier text, p_at timestamptz default now())
+returns boolean
+as $fn$
+declare
+  lt timestamp := p_at at time zone 'Asia/Kolkata';
+  h integer := extract(hour from lt);
+  blk integer := floor((extract(hour from lt) * 60 + extract(minute from lt)) / 25);
+  roll numeric := (abs(hashtext(p_bot::text || to_char(lt, 'YYYYMMDD') || blk::text)) % 1000) / 1000.0;
+  lazy boolean := (abs(hashtext(p_bot::text || to_char(lt, 'YYYYMMDD') || 'lazy')) % 100) < 13; -- about 1 day in 8
+  p numeric;
+begin
+  if not public._bot_awake(p_bot, p_tier, p_at) then return false; end if;
+  p := case p_tier
+    when 'fair' then case when h between 6 and 8 then 0.6 when h between 18 and 21 then 0.6 when h between 12 and 13 then 0.35 else 0.15 end
+    when 'ultra' then case when h >= 21 or h < 3 then 0.7 when h between 16 and 20 then 0.4 else 0.18 end
+    else case when h between 18 and 22 then 0.5 else 0.3 end end;
+  if lazy then p := p * 0.3; end if;
+  return roll < p;
+end;
+$fn$ language plpgsql immutable;
+revoke all on function public._bot_awake(uuid, text, timestamptz) from public, anon, authenticated;
+revoke all on function public._bot_online(uuid, text, timestamptz) from public, anon, authenticated;
+
+-- Sensei and Ultra behave like people: no matching while they're away
+create or replace function public._bot_human(p_tier text)
+returns boolean
+as $fn$ select p_tier in ('fair', 'ultra') $fn$ language sql immutable;
+
 -- 2. How many push-ups a bot does: per-minute pace that tires a little each minute, plus some luck.
 create or replace function public._bot_total(p_tier text, p_mode text)
 returns integer
@@ -81,12 +137,14 @@ create table if not exists public.bot_life (id integer primary key, last_run tim
 alter table public.bot_life enable row level security;
 insert into public.bot_life (id, last_run) values (1, now()) on conflict (id) do nothing;
 
-create or replace function public._bot_free()
+drop function if exists public._bot_free();
+create or replace function public._bot_free(p_at timestamptz default now())
 returns table (user_id uuid, tier text, respect integer)
 as $fn$
   select b.user_id, b.tier, p.respect
   from public.bot_accounts b join public.profiles p on p.id = b.user_id
   where (b.online_until is null or b.online_until < now())
+    and public._bot_online(b.user_id, b.tier, p_at)
     and not exists (select 1 from public.matches x where x.settled_at is null and b.user_id in (x.player_a, x.player_b)
                     and x.started_at > now() - interval '10 minutes')
 $fn$ language sql stable security definer set search_path = public;
@@ -108,6 +166,7 @@ declare
   earned integer;
   gain integer;
   win uuid;
+  t timestamptz;
 begin
   select last_run into st from public.bot_life where id = 1 for update skip locked;
   if st is null then return; end if; -- someone else is running it right now
@@ -117,20 +176,24 @@ begin
   slots := least(slots, 6);
 
   for i in 1..slots loop
-    -- training
-    for r in select * from public._bot_free() loop
+    t := now() - make_interval(secs => (slots - i) * 1200); -- the moment this slot stands for
+    -- training (only bots that are around then)
+    for r in select * from public._bot_free(t) loop
       select coalesce(sum(delta), 0) into earned from public.respect_log
         where user_id = r.user_id and reason = 'training' and delta > 0 and created_at > now() - interval '24 hours';
       gain := least(50 - earned, case r.tier when 'weak' then 2 when 'fair' then 3 when 'strong' then 3 else 4 end);
       if gain > 0 then perform public._add_respect(r.user_id, gain, 'training', null); end if;
     end loop;
 
-    -- a battle between two bots, most of the time
-    continue when random() > 0.65;
-    -- a bot sitting on 600+ rests, so one bot can't drain all the others
-    select * into a from public._bot_free() f where f.respect between 5 and 599 order by random() limit 1;
+    -- sometimes two bots that are around battle each other
+    continue when random() > 0.55;
+    -- a bot sitting on 600+ rests, so one bot can't drain all the others; nobody fights more than 6 bot battles a day
+    select * into a from public._bot_free(t) f where f.respect between 5 and 599
+      and (select count(*) from public.matches x where f.user_id in (x.player_a, x.player_b) and x.started_at > t - interval '24 hours'
+           and exists (select 1 from public.bot_accounts o where o.user_id = case when x.player_a = f.user_id then x.player_b else x.player_a end)) < 6
+      order by random() limit 1;
     continue when a.user_id is null;
-    select * into b from public._bot_free() f where f.respect between 5 and 599 and f.user_id <> a.user_id order by random() limit 1;
+    select * into b from public._bot_free(t) f where f.respect between 5 and 599 and f.user_id <> a.user_id order by random() limit 1;
     continue when b.user_id is null;
     md := case
       when 'fair' in (a.tier, b.tier) then 'brawl'
@@ -143,7 +206,7 @@ begin
     mid := gen_random_uuid();
     insert into public.matches (id, mode, player_a, player_b, bet, a_paid, b_paid, started_at)
       values (mid, md, a.user_id, b.user_id, bet, true, true,
-              now() - make_interval(secs => public.mode_seconds(md) + 30 + (random() * 900)::integer));
+              t - make_interval(secs => public.mode_seconds(md) + 30 + (random() * 900)::integer));
     perform public._add_respect(a.user_id, -bet, 'bet ' || md, mid);
     perform public._add_respect(b.user_id, -bet, 'bet ' || md, mid);
     win := case when ra > rb then a.user_id when rb > ra then b.user_id end;
@@ -159,7 +222,7 @@ begin
 end;
 $fn$ language plpgsql security definer set search_path = public;
 revoke all on function public._bot_life() from public, anon, authenticated;
-revoke all on function public._bot_free() from public, anon, authenticated;
+revoke all on function public._bot_free(timestamptz) from public, anon, authenticated;
 
 -- Makes the battle against a chosen bot: pays both bets and decides the bot's count.
 create or replace function public._create_bot_match(p_me uuid, p_bot uuid, p_mode text)
@@ -228,9 +291,12 @@ begin
     from public.bot_accounts b join public.profiles p on p.id = b.user_id
    where (b.online_until is null or b.online_until < now()) and p.respect >= bet
      and (b.tier <> 'fair' or p_mode = 'brawl')
+     and (not public._bot_human(b.tier) or public._bot_online(b.user_id, b.tier))
      and not exists (select 1 from public.matches x where x.settled_at is null and b.user_id in (x.player_a, x.player_b)
                      and x.started_at > now() - interval '10 minutes')
-   order by (b.tier = want) desc, random() limit 1;
+   order by (b.tier = want) desc,
+            (b.tier = case want when 'ultra' then 'boss' when 'fair' then 'strong' else want end) desc,
+            public._bot_online(b.user_id, b.tier) desc, random() limit 1;
   if bot.user_id is null then raise exception 'No opponent found right now. Try again in a moment.'; end if;
 
   return public._create_bot_match(me, bot.user_id, p_mode);
@@ -358,21 +424,66 @@ revoke all on function public._settle_match(uuid) from public, anon, authenticat
 -- checks in when the time comes, and battles when you tap Start.
 alter table public.challenges add column if not exists bot_match uuid;
 
-create or replace function public._bot_accept(p_id bigint)
+drop function if exists public._bot_accept(bigint);
+-- How a bot answers. Sensei and Ultra answer like people: if the time is when they'd be asleep, or the
+-- mode isn't theirs, they send it back once with another time or mode and a short note (then it's your
+-- turn to accept). The others just say yes.
+create or replace function public._bot_answer(p_id bigint)
 returns void
 as $fn$
 declare
   c public.challenges;
   human uuid;
   bot uuid;
+  bt text;
+  hb integer;
+  new_mode text;
+  new_at timestamptz;
+  msg text;
+  tries integer := 0;
 begin
   select * into c from public.challenges where id = p_id for update;
   if c.status <> 'pending' then return; end if;
   bot := case when c.proposer = c.from_user then c.to_user else c.from_user end;
   human := c.proposer;
+  select tier into bt from public.bot_accounts where user_id = bot;
   perform 1 from public.profiles where id in (c.from_user, c.to_user) for update;
-  if (select respect from public.profiles where id = human) < 4
-     or (c.mode <> 'brawl' and exists (select 1 from public.bot_accounts where user_id = bot and tier = 'fair')) then
+  select respect into hb from public.profiles where id = human;
+  if hb < 4 then
+    perform public._refund_challenge(c);
+    update public.challenges set status = 'declined', updated_at = now() where id = p_id;
+    return;
+  end if;
+
+  if public._bot_human(bt) and not c.bot_countered then
+    new_mode := c.mode;
+    new_at := c.at;
+    if bt = 'fair' and c.mode <> 'brawl' then
+      new_mode := 'brawl';
+      msg := (array['Brawl only for me, friend.', 'I only fight Brawl.', 'Brawl? I keep it short.'])[1 + floor(random() * 3)::integer];
+    elsif bt = 'ultra' and c.mode <> 'rank' and hb >= 120 and random() < 0.15 then
+      new_mode := 'rank';
+      msg := (array['Why so small? Rank me.', 'Rank or nothing.'])[1 + floor(random() * 2)::integer];
+    end if;
+    if not public._bot_awake(bot, bt, c.at) then
+      -- the same day at their usual time (7 PM for Sensei, 10 PM for Ultra), or the next day if that's gone
+      new_at := (date_trunc('day', c.at at time zone 'Asia/Kolkata') + make_interval(hours => case bt when 'ultra' then 22 else 19 end)) at time zone 'Asia/Kolkata';
+      if new_at < now() + interval '20 minutes' then new_at := new_at + interval '1 day'; end if;
+      while public._challenge_clash(human, new_at, c.id) is not null and tries < 4 loop
+        new_at := new_at + interval '1 hour'; tries := tries + 1;
+      end loop;
+      if msg is null then
+        msg := case bt when 'ultra' then (array['Too early. I wake up late.', 'Night is my time. Here.', 'I''m asleep then. This?'])[1 + floor(random() * 3)::integer]
+                       else (array['I''m asleep then. This work?', 'Too late for me. This time?', 'Early to bed. How''s this?'])[1 + floor(random() * 3)::integer] end;
+      end if;
+    end if;
+    if msg is not null and new_at <= now() + interval '14 days' then
+      update public.challenges set mode = new_mode, at = new_at, proposer = bot, note = msg, bot_countered = true, updated_at = now() where id = p_id;
+      return;
+    end if;
+  end if;
+
+  if c.mode <> 'brawl' and bt = 'fair' then
     perform public._refund_challenge(c);
     update public.challenges set status = 'declined', updated_at = now() where id = p_id;
     return;
@@ -389,13 +500,17 @@ returns void
 as $fn$
 declare r record;
 begin
-  -- bots answer: 1 to 12 minutes after the offer
+  -- bots answer: the others 1 to 12 minutes after the offer; Sensei and Ultra only while they're around
+  -- (3 to 27 minutes after), or within 90 minutes if they're awake but busy
   for r in select c.id from public.challenges c
            join public.bot_accounts b on b.user_id = case when c.proposer = c.from_user then c.to_user else c.from_user end
            where c.status = 'pending' and auth.uid() in (c.from_user, c.to_user) and c.at > now()
-             and c.updated_at < now() - make_interval(mins => 1 + abs(hashtext(c.id::text || c.updated_at::text)) % 12)
+             and case when public._bot_human(b.tier) then
+                   (public._bot_online(b.user_id, b.tier) and c.updated_at < now() - make_interval(mins => 3 + abs(hashtext(c.id::text || c.updated_at::text)) % 25))
+                   or (public._bot_awake(b.user_id, b.tier) and c.updated_at < now() - interval '90 minutes')
+                 else c.updated_at < now() - make_interval(mins => 1 + abs(hashtext(c.id::text || c.updated_at::text)) % 12) end
   loop
-    perform public._bot_accept(r.id);
+    perform public._bot_answer(r.id);
   end loop;
   -- bots check in as soon as the check-in opens
   update public.challenges c set from_in = coalesce(c.from_in, c.at - interval '10 minutes' + make_interval(secs => abs(hashtext(c.id::text)) % 300))
@@ -436,7 +551,7 @@ begin
   return res;
 end;
 $fn$ language plpgsql security definer set search_path = public;
-revoke all on function public._bot_accept(bigint) from public, anon, authenticated;
+revoke all on function public._bot_answer(bigint) from public, anon, authenticated;
 revoke all on function public._bot_regen() from public, anon, authenticated;
 revoke all on function public._create_bot_match(uuid, uuid, text) from public, anon, authenticated;
 
@@ -455,7 +570,8 @@ begin
     'busy', p.respect < 5 or exists (select 1 from public.matches x where x.settled_at is null and p.id in (x.player_a, x.player_b) and x.started_at > now() - interval '10 minutes')
   )), '[]'::json)
   from public.bot_accounts b join public.profiles p on p.id = b.user_id
-  where (b.online_until is null or b.online_until < now()) and auth.uid() is not null and auth.uid() <> b.user_id into res;
+  where (b.online_until is null or b.online_until < now()) and auth.uid() is not null and auth.uid() <> b.user_id
+    and public._bot_online(b.user_id, b.tier) into res;
   return res;
 end;
 $fn$ language plpgsql security definer set search_path = public;
@@ -471,7 +587,8 @@ begin
   if me is null then raise exception 'Please sign in again'; end if;
   if public.mode_bet(p_mode) is null then raise exception 'Unknown battle mode'; end if;
   perform public._bot_regen();
-  if not exists (select 1 from public.bot_accounts where user_id = p_bot and (online_until is null or online_until < now())) then
+  if not exists (select 1 from public.bot_accounts where user_id = p_bot and (online_until is null or online_until < now())
+                 and public._bot_online(user_id, tier)) then
     raise exception 'They went offline';
   end if;
   if exists (select 1 from public.matches x where x.settled_at is null and p_bot in (x.player_a, x.player_b) and x.started_at > now() - interval '10 minutes') then

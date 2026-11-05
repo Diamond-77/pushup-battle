@@ -1402,3 +1402,29 @@ body:has(.challenge-sheet) .challenge-note { display: none; }
 .rank-list li.rk-top .rank-no { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 1rem;
   background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--t1) 70%, #fff), var(--t1) 55%, var(--t2)); border: 2px solid #08080a; }
 .rank-list li.rk-top.me .pl-name { color: var(--me); }
+
+/* ---- Challenge call: the big "time to battle" window ---- */
+.battle-call-back { z-index: 60; background: rgba(10, 6, 4, 0.72); }
+.battle-call { width: min(380px, calc(100% - 32px)); display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 26px 22px 20px; text-align: center; animation: call-in 0.4s cubic-bezier(.2,1.4,.4,1); border: 3px solid #df4b3f; box-shadow: 0 0 0 4px rgba(223,75,63,0.25), 0 20px 60px rgba(0,0,0,0.6); }
+.battle-call-flag { font-family: var(--brush); font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; font-size: 1.05rem; color: #b22c22; }
+.battle-call-vs { font-size: 1.15rem; }
+.battle-call-text { font-size: 1.25rem; font-weight: 700; line-height: 1.3; }
+.battle-call .game-btn { width: 100%; }
+@keyframes call-in { from { transform: scale(0.8); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ---- Challenge notes ---- */
+.note-count { font-weight: 400; opacity: 0.6; letter-spacing: 0; }
+.challenge-back { position: fixed; z-index: 200; }
+.note-input { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 14px; border: 2px solid var(--wood-rim); background: rgba(0,0,0,0.35); color: var(--parch); font: inherit; font-size: 1rem; }
+.note-input::placeholder { color: rgba(243,230,204,0.45); }
+.clash-warn { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: rgba(223,75,63,0.16); border: 1.5px solid rgba(223,75,63,0.6); color: #ffd9d2; font-size: 0.85rem; text-align: left; }
+.cb-note { margin: 6px 0 4px; padding: 7px 10px; border-radius: 10px; background: rgba(255,240,210,0.08); border-left: 3px solid #c9a36a; color: #f3e6cc; }
+.cb-note-text { font-size: 0.9rem; font-style: italic; line-height: 1.35; }
+.note-report { float: right; margin-left: 8px; }
+.cb-note-from { font-style: normal; font-weight: 700; }
+.note-report { font-style: normal; font-size: 0.72rem; padding: 2px 8px; border-radius: 8px; border: 1px solid rgba(240,110,95,0.5); background: transparent; color: #f08a7c; }
+.note-tip { font-size: 0.72rem; opacity: 0.6; margin-top: 3px; animation: tip-in 0.6s ease; }
+.note-tip.done { opacity: 0.85; }
+.note-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 5px; font-size: 0.8rem; }
+.note-ask .pill { padding: 4px 10px; font-size: 0.78rem; }
+@keyframes tip-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 0.6; transform: none; } }

@@ -32,6 +32,7 @@ export function useLobby(me: Omit<Player, "status">) {
   const [notice, setNotice] = useState<string | null>(null);
   const [match, setMatch] = useState<MatchInfo | null>(null);
   const [extras, setExtras] = useState<Player[]>([]); // bots, shown as online players
+  const [following, setFollowing] = useState<Set<string>>(new Set()); // the lobby list shows only these
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const statusRef = useRef<PlayerStatus>("idle");
@@ -149,6 +150,19 @@ export function useLobby(me: Omit<Player, "status">) {
     return () => { stop = true; clearInterval(t); };
   }, [me.id]);
 
+  // Who I follow (my friends): the lobby list only shows them
+  useEffect(() => {
+    if (!supabase) return;
+    let stop = false;
+    const load = () => supabase!.from("follows").select("followee").eq("follower", me.id).then(({ data }) => {
+      if (!stop && Array.isArray(data)) setFollowing(new Set(data.map((r) => r.followee as string)));
+    });
+    load();
+    window.addEventListener("pb:follows", load);
+    const t = setInterval(load, 120000);
+    return () => { stop = true; clearInterval(t); window.removeEventListener("pb:follows", load); };
+  }, [me.id]);
+
   // Re-announce when the name or picture changes.
   useEffect(() => {
     channelRef.current?.track(self());
@@ -156,6 +170,7 @@ export function useLobby(me: Omit<Player, "status">) {
 
   return {
     players: [...players, ...extras.filter((b) => !players.some((p) => p.id === b.id))],
+    following,
     status,
     incoming,
     notice,

@@ -19,6 +19,7 @@ export type ChallengeRow = {
   from_in: string | null;
   to_in: string | null;
   outcome: string | null;
+  note: string | null; // goes with the latest offer (written by the proposer)
   other: { id: string; username: string; avatar_url: string | null; legendary?: boolean };
 };
 
@@ -81,9 +82,24 @@ const call = async (fn: string, args: Record<string, unknown>) => {
   if (!error) return null;
   return /function|schema cache/i.test(error.message) ? "Challenges aren't set up yet (run challenges.sql)" : error.message;
 };
-export const sendChallenge = (to: string, mode: ModeId, at: Date) => call("send_challenge", { p_to: to, p_mode: mode, p_at: at.toISOString() });
-export const answerChallenge = (id: number, action: "accept" | "decline" | "counter", mode?: ModeId, at?: Date) =>
-  call("respond_challenge", { p_id: id, p_action: action, p_mode: mode ?? null, p_at: at ? at.toISOString() : null });
+export const NOTE_MAX = 30;
+// until the newer challenges.sql is run, the server doesn't know about notes: try again without one
+const withNote = async (fn: string, args: Record<string, unknown>, note?: string) => {
+  const e = await call(fn, { ...args, p_note: note?.trim() || null });
+  return e && /run challenges\.sql/.test(e) ? call(fn, args) : e;
+};
+export const sendChallenge = (to: string, mode: ModeId, at: Date, note?: string) =>
+  withNote("send_challenge", { p_to: to, p_mode: mode, p_at: at.toISOString() }, note);
+export const answerChallenge = (id: number, action: "accept" | "decline" | "counter", mode?: ModeId, at?: Date, note?: string) =>
+  withNote("respond_challenge", { p_id: id, p_action: action, p_mode: mode ?? null, p_at: at ? at.toISOString() : null }, note);
+export const reportNote = (id: number) => call("report_challenge_note", { p_id: id });
+
+// My booked and pending challenges, so a new one can't land on top of them (the server checks too).
+let openList: ChallengeView[] = [];
+export const CLASH_MIN = 30;
+export function clashWith(at: Date, skip?: number) {
+  return openList.find((c) => c.id !== skip && (c.status === "pending" || c.status === "accepted") && Math.abs(c.when.getTime() - at.getTime()) < CLASH_MIN * 60000);
+}
 export const cancelChallenge = (id: number) => call("cancel_challenge", { p_id: id });
 export const checkInChallenge = (id: number) => call("check_in_challenge", { p_id: id });
 
@@ -101,6 +117,7 @@ export function useChallenges(me: string) {
     return () => { clearInterval(t); clearInterval(tick); window.removeEventListener("pb:challenges", ev); };
   }, [refresh]);
   const list = rows.map((r) => viewOf(r, me, now)).filter((c) => c.window !== "over" || c.status === "pending");
+  openList = list;
   // red ping: challenges waiting for my answer, or ready to check in
   const ping = list.filter(isHot).length;
   return { list, ping, refresh, now };

@@ -9,6 +9,7 @@ const STATUS_LABEL: Record<PlayerStatus, string> = { idle: "Online", searching: 
 
 type Props = {
   players: Player[];
+  following: Set<string>;
   status: PlayerStatus;
   notice: string | null;
   onChallenge: (p: Player, mode: ModeId) => void;
@@ -42,13 +43,14 @@ function useShots() {
   return shots;
 }
 
-export default function LobbyPage({ players, status, notice, onChallenge, onFindMatch, onCancel, field, onField, respect, onTrain, onPlayer }: Props) {
+export default function LobbyPage({ players, following, status, notice, onChallenge, onFindMatch, onCancel, field, onField, respect, onTrain, onPlayer }: Props) {
   const shots = useShots();
   const trackRef = useRef<HTMLDivElement>(null);
   const isMode = field !== "training";
   const M = isMode ? MODES[field as ModeId] : null;
   const canPlay = !M || respect >= M.minRespect;
-  const shown = players.filter((p) => p.status !== "searching" || p.mode === field);
+  // only friends (people I follow) are listed; anyone else is met through Find match
+  const shown = players.filter((p) => following.has(p.id) && (p.status !== "searching" || p.mode === field));
 
   // Swipe: whichever card is closest to the middle is the selected battlefield.
   const onScroll = () => {
@@ -125,8 +127,8 @@ export default function LobbyPage({ players, status, notice, onChallenge, onFind
 
         {(
           <div className="parchment">
-            <div className="section-title">People in the lobby · {shown.length}</div>
-            {shown.length === 0 && <div className="muted">Tap Find match and you'll be paired with a warrior in a few seconds.</div>}
+            <div className="section-title">Friends online · {shown.length}</div>
+            {shown.length === 0 && <div className="muted">None of the warriors you follow are online right now. Follow someone from their profile to see them here, or tap Find match to fight anyone.</div>}
             <ul className="player-list">
               {shown.map((p) => (
                 <li key={p.id}>

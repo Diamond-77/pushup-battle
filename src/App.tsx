@@ -106,28 +106,30 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
     return () => clearInterval(t);
   }, []);
   const seenNotes = useRef(new Set<string>());
-  const [note, setNote] = useState<{ key: string; text: string; avatar: string | null } | null>(null);
+  const [note, setNote] = useState<{ key: string; text: string; avatar: string | null; big?: boolean; name?: string; mode?: string } | null>(null);
   useEffect(() => {
     if (inMatch || note) return;
-    for (const c of ch.list) {
+    // the big "time to battle" call comes before the small notices
+    const order = [...ch.list].sort((a, b) => Number(b.status === "accepted" && b.window === "open") - Number(a.status === "accepted" && a.window === "open"));
+    for (const c of order) {
       const ms = c.when.getTime() - ch.now;
       const mode = MODES[c.mode].name;
       const n =
+        c.status === "accepted" && c.theyIn && !c.iIn ? { key: `here-${c.id}`, big: true, text: `${c.other.username} is here and waiting for you!` } :
+        c.status === "accepted" && !c.iIn && ms <= 5 * 60000 && c.window !== "over" ? { key: `soon-${c.id}`, big: true, text: ms > 0 ? `Your battle starts ${untilText(ms)}. Check in!` : "It's time! Check in." } :
         c.myTurn ? { key: `ask-${c.id}-${c.proposer}-${c.at}-${c.mode}`, text: c.proposer === c.from_user && !c.mine ? `${c.other.username} challenged you to ${mode}!` : `${c.other.username} changed your challenge. Your answer?` } :
         c.justAccepted ? { key: `acc-${c.id}`, text: `${c.other.username} accepted your ${mode} challenge!` } :
-        c.status === "accepted" && c.theyIn && !c.iIn ? { key: `here-${c.id}`, text: `${c.other.username} is here and waiting for your ${mode} battle!` } :
-        c.status === "accepted" && !c.iIn && ms <= 5 * 60000 && c.window !== "over" ? { key: `soon-${c.id}`, text: `Your ${mode} vs ${c.other.username} starts ${untilText(ms)}. Check in!` } :
         c.status === "accepted" && !c.iIn && ms <= 60 * 60000 && ms > 50 * 60000 ? { key: `hour-${c.id}`, text: `Reminder: ${mode} vs ${c.other.username} ${untilText(ms)}.` } :
         null;
       if (n && !seenNotes.current.has(n.key)) {
         seenNotes.current.add(n.key);
-        setNote({ ...n, avatar: c.other.avatar_url });
+        setNote({ ...n, avatar: c.other.avatar_url, name: c.other.username, mode });
         countdownSound();
         break;
       }
     }
   }, [ch.list, ch.now, inMatch, note]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (!note) return; const t = setTimeout(() => setNote(null), 9000); return () => clearTimeout(t); }, [note]);
+  useEffect(() => { if (!note) return; const t = setTimeout(() => setNote(null), note.big ? 45000 : 9000); return () => clearTimeout(t); }, [note]);
 
   // Sounds for the countdown and the result
   useEffect(() => {
@@ -250,6 +252,7 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
         {!inMatch && tab === "battle" && (
           <LobbyPage
             players={lobby.players}
+            following={lobby.following}
             status={lobby.status}
             notice={lobby.notice}
             onChallenge={lobby.challenge}
@@ -328,7 +331,19 @@ function Game({ profile, email, onProfile }: { profile: Profile; email?: string;
         {devDesktop && ((inMatch && m.phase === "match") || (!inMatch && tab === "train")) && (
           <div className="test-btns"><button onClick={onRep}>+1 me</button></div>
         )}
-        {note && !inMatch && (
+        {note && !inMatch && note.big && (
+          <div className="modal-back battle-call-back" onClick={() => setNote(null)}>
+            <div className="modal panel battle-call" onClick={(e) => e.stopPropagation()}>
+              <div className="battle-call-flag">{note.mode} battle</div>
+              <Avatar url={note.avatar} color="opp" size={96} glow="#df4b3f" />
+              <div className="battle-call-vs">vs <b>{note.name}</b></div>
+              <div className="battle-call-text">{note.text}</div>
+              <button className="game-btn red big wide find-glow" onClick={() => { setNote(null); setViewPlayer(null); setTab("home"); openChallenges(); }}>Enter the battle</button>
+              <button className="game-btn wood wide" onClick={() => setNote(null)}>Later</button>
+            </div>
+          </div>
+        )}
+        {note && !inMatch && !note.big && (
           <button className="challenge-note" onClick={() => { setNote(null); setViewPlayer(null); setTab("home"); openChallenges(); }}>
             <Avatar url={note.avatar} color="opp" size={38} />
             <span>{note.text}</span>

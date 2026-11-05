@@ -48,6 +48,7 @@ export async function setFollow(me: string, id: string, on: boolean) {
   if (!supabase) return;
   if (on) await supabase.from("follows").insert({ follower: me, followee: id });
   else await supabase.from("follows").delete().eq("follower", me).eq("followee", id);
+  window.dispatchEvent(new Event("pb:follows")); // the lobby list shows only people I follow
 }
 
 // Tapping the same vote again removes it.
