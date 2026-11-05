@@ -173,7 +173,15 @@ export function ClanPage({ clan, preview, onPreview, onMembers }: { clan: ClanSt
   );
 }
 
-type Ranked = { id: string; username: string; avatar_url: string | null; respect: number; title?: string | null; legendary?: boolean; throne_motto?: string | null };
+type Ranked = { id: string; username: string; avatar_url: string | null; respect: number; title?: string | null; legendary?: boolean; throne_motto?: string | null;
+  song_url?: string | null; song_title?: string | null; song_artist?: string | null; song_start?: number | null };
+
+// The king's song on the throne: their own uploaded profile song, else a built-in one
+function kingSong(k: Ranked) {
+  if (k.song_url) return { src: k.song_url, start: k.song_start ?? 0, title: k.song_title || "Throne song", artist: k.song_artist || k.username, art: k.avatar_url ?? undefined };
+  const b = PLAYER_SONGS[k.username];
+  return b?.throne ?? b?.profile ?? null;
+}
 
 // The line the player on the throne writes. Only they can edit it, and only while they sit there.
 function ThroneMotto({ king, mine }: { king: Ranked; mine: boolean }) {
@@ -239,38 +247,49 @@ export function ThronePage({ clanRespect, myId, onPlayer, onKingClan }: { clanRe
       </div>
       {view === "players" ? (
         <>
-          <div key={king?.id ?? "none"} className={`throne-wrap ${king && PLAYER_SONGS[king.username]?.celebrate ? "assemble" : ""}`} style={{ ["--m-glow" as string]: METALS[kingClan?.id ?? "lone"].glow }}>
-          {king && <Crest clan={kingClan?.id ?? "lone"} m={METALS[kingClan?.id ?? "lone"]} />}
-          {king && (
-            <>
-              <SideGuard clan={kingClan?.id ?? "lone"} />
-              <SideGuard clan={kingClan?.id ?? "lone"} right />
-              <Pauldron clan={kingClan?.id ?? "lone"} m={METALS[kingClan?.id ?? "lone"]} />
-              <Pauldron clan={kingClan?.id ?? "lone"} m={METALS[kingClan?.id ?? "lone"]} right />
-            </>
-          )}
-          {king && PLAYER_SONGS[king.username]?.throne && <SongPlayer song={PLAYER_SONGS[king.username].throne!} color={METALS[kingClan?.id ?? "lone"].glow} className="throne-song" />}
-          <div className={`throne-seat ${kingClan ? `themed theme-${kingClan.id}` : ""} ${king && PLAYER_SONGS[king.username]?.celebrate ? "special" : ""}`}>
-            {king && PLAYER_SONGS[king.username]?.celebrate && <div className="throne-sweep" />}
-            {kingClan && <div className="theme-fx" />}
-            {kingClan?.id === "arasaka" && <div className="ara-run" />}
-            <div className="throne-label">THE THRONE</div>
-            {king ? <button className="member-row center-row" onClick={() => onPlayer(king.id)}><Avatar url={king.avatar_url} color="me" size={132} legendary={king.legendary} glow={METALS[kingClan?.id ?? "lone"].glow} /></button> : <div className="throne-empty">?</div>}
-            <div className="throne-holder">{king ? king.username : failed ? "Respect isn't set up yet" : "…"}</div>
-            {king && <div className="respect">{king.respect} <span className="respect-word">Respect</span> <span className="rank-title">{respectTitle(king.respect)}</span></div>}
-            {king && <ThroneMotto king={king} mine={king.id === myId} />}
-            {king && (
-              <div className="throne-clan">
-                {kingClan ? <><ClanLogo clan={kingClan} size={30} /><span>{kingClan.name}</span></> : <span>Lone Warrior</span>}
+          {(() => {
+            const cid = kingClan?.id ?? "lone";
+            const m = METALS[cid];
+            const song = king ? kingSong(king) : null;
+            return (
+              <div key={king?.id ?? "none"} className={`throne-wrap throne2 t2-${cid} ${king ? "assemble" : ""}`} style={{ ["--m-glow" as string]: m.glow, ["--m-mid" as string]: m.mid, ["--m-dark" as string]: m.dark, ["--m-cord" as string]: m.cord }}>
+                {king && <Crest clan={cid} m={m} />}
+                {king && (
+                  <>
+                    <SideGuard clan={cid} />
+                    <SideGuard clan={cid} right />
+                    <Pauldron clan={cid} m={m} />
+                    <Pauldron clan={cid} m={m} right />
+                    <i className="t2-arm left" />
+                    <i className="t2-arm right" />
+                  </>
+                )}
+                {song && <SongPlayer song={song} color={m.glow} className="throne-song" />}
+                <div className={`throne-seat ${kingClan ? `themed theme-${kingClan.id}` : ""}`}>
+                  {king && <div className="throne-sweep" />}
+                  {kingClan && <div className="theme-fx" />}
+                  {king && <div className="t2-embers">{Array.from({ length: 9 }, (_, i) => <i key={i} style={{ ["--i" as string]: i }} />)}</div>}
+                  <div className="throne-label">THE THRONE</div>
+                  {king ? <button className="member-row center-row" onClick={() => onPlayer(king.id)}><Avatar url={king.avatar_url} color="me" size={124} legendary={king.legendary} glow={m.glow} /></button> : <div className="throne-empty">?</div>}
+                  <div className="throne-holder">{king ? king.username : failed ? "Respect isn't set up yet" : "…"}</div>
+                  {king && <div className="respect">{king.respect} <span className="respect-word">Respect</span> <span className="rank-title">{respectTitle(king.respect)}</span></div>}
+                  {king && <ThroneMotto king={king} mine={king.id === myId} />}
+                  {king && (
+                    <div className="throne-clan">
+                      {kingClan ? <><ClanLogo clan={kingClan} size={30} /><span>{kingClan.name}</span></> : <span>Lone Warrior</span>}
+                    </div>
+                  )}
+                </div>
+                {king && <div className="t2-steps"><i /><i /></div>}
+                {king && <Knot m={m} />}
               </div>
-            )}
-          </div>
-          {king && <Knot m={METALS[kingClan?.id ?? "lone"]} />}
-          </div>
+            );
+          })()}
           <div className="parchment">
             <ol className="rank-list">
               {(top ?? []).slice(1).map((p, i) => (
-                <li key={p.id} className={p.id === myId ? "me" : ""} onClick={() => onPlayer(p.id)}>
+                <li key={p.id} className={`rk rk-${clanOf[p.id] ?? "lone"} ${i < 4 ? "rk-top" : ""} ${p.id === myId ? "me" : ""}`} onClick={() => onPlayer(p.id)}
+                  style={{ ["--t1" as string]: METALS[clanOf[p.id] ?? "lone"]?.glow ?? METALS.lone.glow, ["--t2" as string]: METALS[clanOf[p.id] ?? "lone"]?.dark ?? METALS.lone.dark, ["--t3" as string]: METALS[clanOf[p.id] ?? "lone"]?.mid ?? METALS.lone.mid }}>
                   <span className="rank-no">{i + 2}</span>
                   <Avatar url={p.avatar_url} color="neutral" size={46} legendary={p.legendary} />
                   <div className="pl-text">

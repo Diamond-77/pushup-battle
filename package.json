@@ -12,6 +12,7 @@
     "prebuild": "node scripts/copy-mediapipe.mjs"
   },
   "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "@mediapipe/tasks-vision": "1.2.0",
     "@supabase/supabase-js": "^2.118.0",
     "@types/three": "^0.169.0",

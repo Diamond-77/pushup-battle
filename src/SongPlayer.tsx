@@ -1,3 +1,4 @@
+import { isVideo, videoToMp3 } from "./extractAudio";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { SONG_VOLUME, type PlayerSong } from "./config";
@@ -160,8 +161,20 @@ function SongEdit({ editor, song, now }: { editor: SongEditor; song: PlayerSong 
   const file = useRef<HTMLInputElement>(null);
   const pick = async (f: File | undefined) => {
     if (!f) return;
-    if (f.size > 15 * 1024 * 1024) return setErr("That file is over 15 MB. Try a shorter or smaller one.");
-    setBusy("Uploading…"); setErr(null);
+    setErr(null);
+    if (isVideo(f)) {
+      // a video: take just the sound out, on the phone, as an MP3
+      if (f.size > 300 * 1024 * 1024) return setErr("That video is too big (over 300 MB). Try a shorter clip.");
+      setBusy("Taking the sound out…");
+      try {
+        f = await videoToMp3(f);
+      } catch (e) {
+        setBusy(null);
+        return setErr(e instanceof Error ? e.message : "Couldn't take the sound out of that video.");
+      }
+    }
+    if (f.size > 15 * 1024 * 1024) { setBusy(null); return setErr("That song is over 15 MB. Try a shorter or smaller one."); }
+    setBusy("Uploading…");
     const e = await editor.upload(f);
     setBusy(null); if (e) setErr(e);
   };
@@ -179,9 +192,9 @@ function SongEdit({ editor, song, now }: { editor: SongEditor; song: PlayerSong 
         {song && <button className="song-chip" onClick={async () => { setBusy("Saving…"); await editor.setStart(Math.floor(now)); setBusy(null); }}>Start from {mmss(now)}</button>}
         {song && <button className="song-chip ghost" onClick={() => editor.remove()}>Remove</button>}
       </div>
-      <input ref={file} type="file" accept="audio/*" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} />
+      <input ref={file} type="file" accept="audio/*,video/*" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} />
       {err && <div className="song-err">{err}</div>}
-      <div className="song-hint">From your phone or computer (MP3 or M4A, up to 15 MB). Songs from Apple Music or Spotify can't be picked.</div>
+      <div className="song-hint">From your phone or computer: a song (MP3, M4A) or a video, and we keep just its sound. Songs from Apple Music or Spotify can't be picked.</div>
     </div>
   );
 }

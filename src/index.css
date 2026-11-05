@@ -1335,3 +1335,70 @@ body:has(.challenge-sheet) .challenge-note { display: none; }
 .howto-next, .howto-back { height: 44px; }
 .howto-back { width: 44px; }
 .howto .mode-tag { display: none; }
+
+/* ---------- Throne v2: wider samurai throne for every king ---------- */
+.throne2.throne-wrap { width: min(420px, calc(100% - 44px)); margin-top: 70px; margin-bottom: 70px; }
+.throne2 .throne-seat { padding: 52px 40px 26px; min-height: 360px; gap: 9px; border-width: 3px;
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,0.6), inset 0 0 0 5px color-mix(in srgb, var(--m-glow) 35%, transparent), 0 14px 30px rgba(0,0,0,0.55); }
+.throne2 .throne-label { margin-top: 2px; letter-spacing: 0.32em; font-size: 0.68rem; }
+.throne2 .side-guard { width: 58px; top: 26px; height: calc(100% - 30px); }
+.throne2 .side-guard.left { left: -24px; }
+.throne2 .side-guard.right { right: -24px; }
+.throne2 .pauldron { width: 84px; top: -18px; }
+.throne2 .pauldron.left { left: -30px; }
+.throne2 .pauldron.right { right: -30px; }
+.throne2 .crest { top: -72px; width: 250px; }
+/* armrests: lacquer bars with gold caps reaching out of the sides */
+.t2-arm { position: absolute; z-index: 5; top: 62%; width: 54px; height: 16px; border-radius: 8px; pointer-events: none;
+  background: linear-gradient(180deg, var(--m-mid), var(--m-dark)); border: 2px solid #08080a; box-shadow: 0 4px 8px rgba(0,0,0,0.5); }
+.t2-arm::after { content: ""; position: absolute; top: -5px; width: 22px; height: 22px; border-radius: 50%; border: 2px solid #08080a;
+  background: radial-gradient(circle at 35% 30%, #fff3c4, #e0b04a 50%, #8a5a14); }
+.t2-arm.left { left: -18px; } .t2-arm.left::after { left: -10px; }
+.t2-arm.right { right: -18px; } .t2-arm.right::after { right: -10px; }
+/* two lacquered steps under the seat */
+.t2-steps { position: relative; z-index: 2; margin: -4px auto 0; width: 108%; margin-left: -4%; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+.t2-steps i { display: block; height: 16px; border: 2px solid #08080a; border-top-color: color-mix(in srgb, var(--m-glow) 60%, #08080a);
+  background: linear-gradient(180deg, var(--m-mid), var(--m-dark)); box-shadow: inset 0 2px 0 rgba(255,255,255,0.12); }
+.t2-steps i:first-child { width: 92%; border-radius: 6px 6px 0 0; }
+.t2-steps i:last-child { width: 100%; border-radius: 4px; border-top: 3px solid #e0b04a; }
+.throne2 .knot { bottom: -58px; }
+/* embers rising in the clan's colour */
+.throne-seat > .t2-embers { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; border-radius: inherit; }
+.t2-embers i { position: absolute; bottom: -8px; left: calc(8% + var(--i) * 10.5%); width: 5px; height: 5px; border-radius: 50%;
+  background: var(--m-glow); box-shadow: 0 0 8px 2px var(--m-glow); opacity: 0;
+  animation: ember-rise calc(5s + var(--i) * 0.45s) calc(var(--i) * -0.9s + 1.6s) linear infinite; }
+@keyframes ember-rise { 0% { transform: translate(0, 0) scale(1); opacity: 0; } 10% { opacity: 0.9; } 70% { opacity: 0.5; } 100% { transform: translate(14px, -360px) scale(0.3); opacity: 0; } }
+/* the build-up when the page opens: calmer, in order, then a slow sheen */
+.throne2.assemble > .throne-seat { animation: t2-rise 0.8s cubic-bezier(.2,1,.3,1) both, as-flash 1.2s 1.3s ease-out both; }
+.throne2.assemble .t2-steps { animation: t2-steps 0.6s 0.1s cubic-bezier(.2,1,.3,1) both; }
+.throne2.assemble .side-guard.left { animation: t2-left 0.75s 0.35s cubic-bezier(.2,1.1,.3,1) both; }
+.throne2.assemble .side-guard.right { animation: t2-right 0.75s 0.35s cubic-bezier(.2,1.1,.3,1) both; }
+.throne2.assemble .t2-arm { animation: t2-arm 0.5s 0.7s cubic-bezier(.2,1.3,.4,1) both; }
+.throne2.assemble .pauldron.left { animation: as-pl 0.6s 0.85s cubic-bezier(.2,1.3,.4,1) both; }
+.throne2.assemble .pauldron.right { animation: as-pr 0.6s 0.85s cubic-bezier(.2,1.3,.4,1) both; }
+.throne2.assemble .crest { animation: as-crest 0.7s 1s cubic-bezier(.2,1.3,.4,1) both; }
+.throne2.assemble .knot { animation: as-knot 0.6s 1.15s cubic-bezier(.2,1.3,.4,1) both; }
+@keyframes t2-rise { from { opacity: 0; transform: translateY(26px) scale(0.96); } }
+@keyframes t2-steps { from { opacity: 0; transform: translateY(14px); } }
+@keyframes t2-left { from { opacity: 0; translate: -50px 0; rotate: -14deg; } }
+@keyframes t2-right { from { opacity: 0; translate: 50px 0; rotate: 14deg; } }
+@keyframes t2-arm { from { opacity: 0; scale: 0.2 1; } }
+.throne2 .throne-sweep::before { animation: sweep 7s 2.2s ease-in-out infinite; background: linear-gradient(100deg, transparent, color-mix(in srgb, var(--m-glow) 28%, transparent), transparent); }
+.throne2 .throne-song { z-index: 6; }
+
+/* ---------- Throne list: each warrior on a plaque in their clan's colours ---------- */
+.rank-list li.rk { position: relative; overflow: hidden; padding: 6px 10px 6px 8px; border-radius: 12px; border-left: 4px solid var(--t1); background: linear-gradient(90deg, color-mix(in srgb, var(--t1) 16%, transparent), transparent 70%); }
+.rank-list li.rk-top { padding: 9px 12px 9px 10px; border-radius: 14px; border: 2px solid #08080a; border-left: 5px solid var(--t1); color: #f3ead8;
+  background: linear-gradient(100deg, var(--t3), var(--t2) 55%, #0b0a0c); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 3px 0 rgba(0,0,0,0.35); }
+.rank-list li.rk-top::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.35; }
+.rank-list li.rk-arasaka.rk-top::before { background: repeating-linear-gradient(115deg, transparent 0 10px, rgba(224,69,58,0.35) 10px 11px); }
+.rank-list li.rk-soraran-gate.rk-top::before { background: repeating-conic-gradient(from 0deg at 92% 50%, rgba(242,165,65,0.45) 0 6deg, transparent 6deg 18deg); }
+.rank-list li.rk-sleepbuilders.rk-top::before { background: radial-gradient(circle, rgba(255,255,255,0.8) 0 1px, transparent 1.5px) 0 0 / 22px 18px, radial-gradient(circle, rgba(169,139,255,0.7) 0 1px, transparent 1.5px) 11px 9px / 22px 18px; }
+.rank-list li.rk-lone.rk-top::before { background: repeating-linear-gradient(90deg, transparent 0 18px, rgba(159,179,200,0.18) 18px 19px); }
+.rank-list li.rk-top > * { position: relative; }
+.rank-list li.rk-top .pl-name { color: #fff; font-weight: 800; }
+.rank-list li.rk-top .pl-status { color: color-mix(in srgb, var(--t1) 70%, #fff); }
+.rank-list li.rk-top .gold-text { color: #ffd77a; text-shadow: 0 0 10px rgba(255,200,90,0.45); }
+.rank-list li.rk-top .rank-no { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 1rem;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--t1) 70%, #fff), var(--t1) 55%, var(--t2)); border: 2px solid #08080a; }
+.rank-list li.rk-top.me .pl-name { color: var(--me); }
