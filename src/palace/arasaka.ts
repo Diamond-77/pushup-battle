@@ -134,6 +134,31 @@ function aabb(c: ACtx, w: number, h: number, d: number, x: number, y: number, z:
 const walkBox = (c: ACtx, w: number, h: number, d: number, x = 0, y = 0, z = 0, ry = 0) => c.col.walk.push(aabb(c, w, h, d, x, y, z, ry));
 const solidBox = (c: ACtx, w: number, h: number, d: number, x = 0, y = 0, z = 0, ry = 0) => c.col.solid.push(aabb(c, w, h, d, x, y, z, ry));
 
+// a railing you can't walk through: the railing itself plus thin solid boxes along it.
+// gaps: [centre along the segment (0..len), width] per segment index, where a path goes through
+function fence(c: ACtx, pts: THREE.Vector3[], h: number, mat: THREE.Material, closed = false, gaps: Record<number, [number, number][]> = {}) {
+  const path = closed ? [...pts, pts[0]] : pts;
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i], b = path[i + 1], len = a.distanceTo(b), dir = b.clone().sub(a).normalize();
+    // the pieces of this side between its gaps
+    const cuts = (gaps[i] ?? []).map(([at, w]) => [at - w / 2, at + w / 2]).sort((p, q) => p[0] - q[0]);
+    let from = 0;
+    for (const [g0, g1] of [...cuts, [len, len]]) {
+      if (g0 - from > 0.3) {
+        const p = a.clone().addScaledVector(dir, from), q = a.clone().addScaledVector(dir, g0);
+        railing(c, [p, q], h, mat);
+        // short solid pieces, so a slanted side doesn't become one fat box
+        const n = Math.max(1, Math.ceil((g0 - from) / 1.5)), ry = -Math.atan2(dir.z, dir.x);
+        for (let k = 0; k < n; k++) {
+          const m = p.clone().lerp(q, (k + 0.5) / n);
+          solidBox(c, (g0 - from) / n, h + 0.15, 0.3, m.x, m.y, m.z, ry);
+        }
+      }
+      from = g1;
+    }
+  }
+}
+
 // stairs plus their walking slope
 function steps(c: ACtx, w: number, h: number, depth: number, x: number, y: number, z: number) {
   stairs(c, w, h, depth, x, y, z);
@@ -254,7 +279,8 @@ function roof(c: ACtx, W: number, D: number, iw: number, id: number, y: number, 
 
 /* ---------- buildings ---------- */
 
-type BOpts = { floors: number; wallH?: number; shrink?: number; veranda?: number; door?: boolean; spire?: number; topRatio?: number; banners?: boolean };
+type Side = "x+" | "x-" | "z+" | "z-";
+type BOpts = { openings?: { floor: number; side: Side; w: number }[]; floors: number; wallH?: number; shrink?: number; veranda?: number; door?: boolean; spire?: number; topRatio?: number; banners?: boolean };
 
 // A multi-storey hall or tower. Returns the height of each floor's walking surface (slab top), and the top.
 export function building(c: ACtx, w: number, d: number, o: BOpts) {
@@ -301,7 +327,15 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
       }
     }
     // upper floors: railing round the balcony
-    if (f > 0) railing(c, rect(hx, hz, y), 1.0, c.m.rail, true);
+    if (f > 0) {
+      // rect() goes (-x,+z) -> (+x,+z) -> (+x,-z) -> (-x,-z): sides z+, x+, z-, x-
+      const order: Side[] = ["z+", "x+", "z-", "x-"], gaps: Record<number, [number, number][]> = {};
+      for (const o2 of o.openings ?? []) if (o2.floor === f) {
+        const i = order.indexOf(o2.side), len = i % 2 ? 2 * hz : 2 * hx;
+        (gaps[i] ??= []).push([len / 2, o2.w]);
+      }
+      fence(c, rect(hx, hz, y), 1.0, c.m.rail, true, gaps);
+    }
     // beam band: a solid ring over the pillars and the wall tops (the ceiling)
     box(c, 2 * hx + 0.7, 0.8, 2 * hz + 0.7, c.m.wood, 0, y + H, 0);
     c.col.roofs.push(aabb(c, 2 * hx + 0.7, 0.8, 2 * hz + 0.7, 0, y + H, 0));
@@ -350,8 +384,13 @@ function wallPanel(c: ACtx, len: number, h: number, x: number, y: number, z: num
 }
 
 // covered walkway on posts from a to b (floor heights may differ: it becomes a ramp)
-function corridor(c: ACtx, a: THREE.Vector3, b: THREE.Vector3, width = 3.2, postH = 3.2) {
+function corridor(c: ACtx, a: THREE.Vector3, b: THREE.Vector3, width = 3.2, postH = 3.2, ground = false) {
   const dir = b.clone().sub(a), len = dir.length();
+  // the deck is walkable (a ramp if the ends differ in height)
+  {
+    const pa = a.clone().setY(a.y + 0.2).applyMatrix4(c.T), pb = b.clone().setY(b.y + 0.2).applyMatrix4(c.T);
+    c.col.ramps.push({ ax: pa.x, az: pa.z, bx: pb.x, bz: pb.z, w: width, ya: pa.y, yb: pb.y });
+  }
   const n = new THREE.Vector3(-dir.z, 0, dir.x).normalize().multiplyScalar(width / 2);
   beam(c, a, b, width, 0.4, c.m.wood); // deck
   const k = Math.max(1, Math.round(len / BAY));
@@ -361,7 +400,7 @@ function corridor(c: ACtx, a: THREE.Vector3, b: THREE.Vector3, width = 3.2, post
   }
   for (const s of [-1, 1]) {
     const off = n.clone().multiplyScalar(s);
-    railing(c, [a.clone().add(off), b.clone().add(off)], 0.9, c.m.rail);
+    fence(c, [a.clone().add(off), b.clone().add(off)], 0.9, c.m.rail, false, ground ? { 0: [[len / 2, 3]] } : {});
     beam(c, a.clone().add(off).setY(a.y + postH), b.clone().add(off).setY(b.y + postH), 0.35, 0.45, c.m.wood, false);
   }
   // pitched roof: two sloped planks meeting at a ridge
@@ -507,10 +546,12 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   for (let z = 46; z <= 70; z += 12) for (const sx of [-1, 1]) bannerPole(c, sx * 9, 0.3, z, 12, sx > 0 ? 0 : Math.PI);
 
   // barracks yard: two long barracks, a sand training square with dummies and weapon racks
-  for (const sx of [-1, 1]) building(sub(c, M(sx * 52, T2, -18, -sx * Math.PI / 2)) as ACtx, 46, 12, { floors: 2, wallH: 4 });
+  // (set out at x 59 so their podiums clear the keep terrace's front face at x 50)
+  for (const sx of [-1, 1]) building(sub(c, M(sx * 59, T2, -18, -sx * Math.PI / 2)) as ACtx, 46, 12, { floors: 2, wallH: 4 });
   box(c, 40, 0.25, 26, m.sand, 0, T2, -4, 0, false);
   walkBox(c, 40, 0.25, 26, 0, T2, -4);
-  railing(c, rect(20, 13, T2 + 0.25), 1, m.wood, true);
+  // the fence round the sand yard: solid, with a gate in the middle of the north and south sides
+  fence(c, rect(20, 13, T2 + 0.25).map((v) => v.setZ(v.z - 4)), 1, m.wood, true, { 0: [[20, 4]], 2: [[20, 4]] });
   for (let i = 0; i < 6; i++) {
     const x = -14 + (i % 3) * 14, z = i < 3 ? -11 : 3;
     put(c, new THREE.CylinderGeometry(0.5, 0.55, 3.4, 8), m.wood, M(x, T2 + 1.9, z));
@@ -521,22 +562,23 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
     for (let k = 0; k < 6; k++) put(c, new THREE.CylinderGeometry(0.06, 0.06, 3.8, 4), m.iron, M(sx * 21.2, T2 + 2.1, -6.5 + k), false);
   }
   // covered walkways from the barracks to the top of the grand stairs
-  for (const sx of [-1, 1]) corridor(c, new THREE.Vector3(sx * 9, T2, 13), new THREE.Vector3(sx * 40, T2, 13));
+  for (const sx of [-1, 1]) corridor(c, new THREE.Vector3(sx * 9, T2, 13), new THREE.Vector3(sx * 47.5, T2, 13), 3.2, 3.2, true);
 
   // the keep platform: Thunder Keep with two watchtowers and sky bridges
   const kz = -66;
   stone(c, 44, 5, 38, 0, T3, kz, 1);
   steps(c, 8, 5, 6, 0, T3, kz + 19 + 6);
   const KW = 30, KS = 0.85;
-  const keep = building(sub(c, M(0, T3 + 5, kz)) as ACtx, KW, 25, { floors: 6, wallH: 5.4, shrink: KS, veranda: 1.6, spire: 14 });
+  const keep = building(sub(c, M(0, T3 + 5, kz)) as ACtx, KW, 25, { floors: 6, wallH: 5.4, shrink: KS, veranda: 1.6, spire: 14, openings: [{ floor: 2, side: "x+", w: 3.4 }, { floor: 2, side: "x-", w: 3.4 }] });
   for (const sx of [-1, 1]) {
     const tx = sx * 38, tz = kz - 4;
     stone(c, 14, 5, 14, tx, T3, tz, 0.8);
-    const tower = building(sub(c, M(tx, T3 + 5, tz)) as ACtx, 8, 8, { floors: 5, wallH: 4.6, shrink: 0.9 });
+    const tower = building(sub(c, M(tx, T3 + 5, tz)) as ACtx, 8, 8, { floors: 5, wallH: 4.6, shrink: 0.9, openings: [{ floor: 2, side: sx > 0 ? "x-" : "x+", w: 3.4 }] });
     // bridge from the tower's 3rd floor to the keep's 3rd floor
     const fy = T3 + 5 + tower.floors[2], ky = T3 + 5 + keep.floors[2];
     const kw = (KW * KS * KS) / 2 + 1.6 + 0.3;
-    corridor(c, new THREE.Vector3(tx - sx * 5.9, fy, tz), new THREE.Vector3(sx * kw, ky, tz), 3, 3);
+    // the bridge lands right on the tower's balcony slab (no gap)
+    corridor(c, new THREE.Vector3(tx - sx * ((8 * 0.81) / 2 + 1.6), fy, tz), new THREE.Vector3(sx * kw, ky, tz), 3, 3);
     // long war banners down the keep's face
     put(c, new THREE.PlaneGeometry(3, 16), m.banner, M(sx * 7.5, T3 + 5 + keep.floors[1] + 2, kz + 12.5 + 1.6 + 0.35), false);
   }
