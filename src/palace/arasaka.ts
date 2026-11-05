@@ -655,7 +655,7 @@ function tatamiTex() {
 
 // The upper floors of the Keep. The back strip of every room holds the stairs, and the lift stands
 // right of centre, so the props sit in the front half and along the side walls.
-function keepFloors(kc: ACtx, keep: KeepInfo, extras: THREE.Object3D[]) {
+function keepFloors(kc: ACtx, keep: KeepInfo) {
   const m = kc.m, gold = toon(0xb08a3e), glowOrange = toon(0x000000, undefined, { emissive: 0xff8a3a, emissiveIntensity: 0.6 });
   const room = (f: number) => ({ y: keep.floors[f], H: keep.sizes[f].h, W: keep.sizes[f].w, D: keep.sizes[f].d });
 
@@ -976,7 +976,7 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   }
   for (const sx of [-1, 1]) brazier(c, sx * 17, T3 + 5, kz + 16, fires);
   const keepLights = greatHall(kc, keep, fires, extras);
-  keepFloors(kc, keep, extras);
+  keepFloors(kc, keep);
   const lift = thunderLift(kc, keep, col);
   // the emblem high on the keep's top storey, facing the gate
   const topF = keep.sizes.length - 1, topS = keep.sizes[topF];
