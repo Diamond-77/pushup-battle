@@ -6,6 +6,8 @@ import { ENVS } from "../palace/weather";
 import { clanById } from "../clans";
 import ClanLogo from "../ClanLogo";
 import { Hero } from "./hero";
+import { Billboard } from "./billboard";
+import { Radio, videoId, videoTitle, thumb, type RadioState } from "./music";
 
 // Walk around the Arasaka citadel in third person (landscape, MLBB-style controls):
 // - left thumb: the joystick steers
@@ -13,6 +15,7 @@ import { Hero } from "./hero";
 // - the curved button round it is the action of the moment: BATTLE turns red when someone is near,
 //   OPEN DOOR at a door; with more than one, it splits into small skill buttons
 // - with 2+ people near, their portraits appear (target lock): tap one to pick who to battle
+// - the lawn billboard outside the gate plays friends' voted YouTube songs, in sync for everyone
 // On a computer: WASD or arrows, Space to jump, Shift to run, E for the action, drag to look.
 
 const R = 0.38; // body radius
@@ -20,6 +23,11 @@ const TALL = 1.7;
 const STEP = 0.75; // highest ledge you can step onto
 const WALK = 4.2, RUN = 8.2, JUMP = 7.2, GRAVITY = 22;
 const BATTLE_RANGE = 8;
+const RADIO_RANGE = 30; // close enough to open the song list
+const HEAR = 80; // close enough to hear the billboard
+// the billboard stands on the lawn left of the road, turned toward where you arrive
+const BOARD_AT = new THREE.Vector3(-30, 0, 100);
+const BOARD_RY = Math.atan2(ARASAKA_SPAWN.x - BOARD_AT.x, ARASAKA_SPAWN.z - BOARD_AT.z);
 
 const MODES = [
   { id: "brawl", name: "Brawl", time: "1 min", bet: 5 },
@@ -51,10 +59,10 @@ function loadSettings(): Settings {
   }
 }
 
-type Action = "door" | "battle" | "more";
-type Ui = { actions: Action[]; doorOpen: boolean; near: string[]; target: string | null };
+type Action = "door" | "battle" | "music" | "more";
+type Ui = { actions: Action[]; doorOpen: boolean; near: string[]; target: string | null; hear: boolean };
 // what the buttons call inside the 3D loop
-type Api = { jumpDown: () => void; jumpUp: () => void; act: (a: Action) => void; lock: (name: string) => void; challenged: (name: string | null) => void; wave: () => void };
+type Api = { jumpDown: () => void; jumpUp: () => void; act: (a: Action) => void; lock: (name: string) => void; challenged: (name: string | null) => void; wave: () => void; listen: (on: boolean) => void };
 
 export default function Explore({ onBack }: { onBack: () => void }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -65,13 +73,19 @@ export default function Explore({ onBack }: { onBack: () => void }) {
   const flashRef = useRef<HTMLDivElement>(null);
   const youRef = useRef<HTMLDivElement>(null);
   const tagRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const api = useRef<Api>({ jumpDown: () => {}, jumpUp: () => {}, act: () => {}, lock: () => {}, challenged: () => {}, wave: () => {} });
+  const api = useRef<Api>({ jumpDown: () => {}, jumpUp: () => {}, act: () => {}, lock: () => {}, challenged: () => {}, wave: () => {}, listen: () => {} });
+  const radioRef = useRef<Radio | null>(null);
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const settingsRef = useRef(settings);
   const [showSettings, setShowSettings] = useState(false);
   const [portrait, setPortrait] = useState(() => window.innerHeight > window.innerWidth);
   const [dismissed, setDismissed] = useState(false);
-  const [ui, setUi] = useState<Ui>({ actions: [], doorOpen: false, near: [], target: null });
+  const [ui, setUi] = useState<Ui>({ actions: [], doorOpen: false, near: [], target: null, hear: false });
+  const [music, setMusic] = useState<RadioState>({ queue: [], now: null });
+  const [musicOpen, setMusicOpen] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [link, setLink] = useState("");
+  const [adding, setAdding] = useState(false);
   const [avatars, setAvatars] = useState<Record<string, string>>({});
   const [picker, setPicker] = useState<string | null>(null);
   const [incoming, setIncoming] = useState<string | null>(null);
@@ -103,7 +117,7 @@ export default function Explore({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     const host = hostRef.current!;
     const env = ENVS.storm;
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     host.prepend(renderer.domElement);
 
@@ -136,6 +150,22 @@ export default function Explore({ onBack }: { onBack: () => void }) {
     col.walk.forEach((b) => add(b, "walk"));
     col.solid.forEach((b) => add(b, "solid"));
     col.doors.forEach((d) => add(d.box, "door", d));
+
+    /* ----- the lawn billboard and its radio ----- */
+    const board = new Billboard(host, BOARD_AT.clone().setY(groundAt(BOARD_AT.x, BOARD_AT.z)), BOARD_RY);
+    scene.add(board.root);
+    board.solid.forEach((b) => add(b, "solid"));
+    const radio = new Radio("arasaka");
+    radioRef.current = radio;
+    const syncRadio = () => {
+      setMusic({ queue: radio.state.queue.map((x) => ({ ...x })), now: radio.state.now });
+      board.play(radio.state.now, radio.elapsed());
+    };
+    const unsub = radio.subscribe(syncRadio);
+    syncRadio();
+    board.onEnded = (id, skip) => radio.ended(id, skip);
+    board.onBlocked = () => { setListening(false); setToast("Your phone stopped the sound. Tap Listen again."); };
+    api.current.listen = (on) => { board.setListening(on); setListening(on); };
     const EMPTY: never[] = [];
     const cellAt = (x: number, z: number) => grid.get(Math.floor(x / CELL) + "," + Math.floor(z / CELL)) ?? EMPTY;
     const doorOpen = new Set<Box>();
@@ -227,7 +257,7 @@ export default function Explore({ onBack }: { onBack: () => void }) {
     }
 
     // dev only: lets automated checks teleport the hero and turn him
-    if (import.meta.env.DEV) (window as unknown as { __ex: unknown }).__ex = { pos, face: (a: number) => (facing = a), doors: () => col.doors.map((d) => d.open) };
+    if (import.meta.env.DEV) (window as unknown as { __ex: unknown }).__ex = { pos, face: (a: number) => (facing = a), yaw: (a: number) => (yaw = a, pitch = 0.15), doors: () => col.doors.map((d) => d.open) };
 
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1500);
     let yaw = 0, pitch = 0.3; // camera sits behind (at +z of) the hero to start
@@ -279,7 +309,7 @@ export default function Explore({ onBack }: { onBack: () => void }) {
       if (b) { b.style.left = ""; b.style.top = ""; b.style.bottom = ""; b.classList.remove("live"); }
     };
     const start = (id: number, x: number, y: number, target: EventTarget | null) => {
-      if ((target as HTMLElement | null)?.closest?.("button, .ex-pop, .ex-modes, .ex-lock, .ex-settings")) return;
+      if ((target as HTMLElement | null)?.closest?.("button, input, a, .ex-pop, .ex-modes, .ex-lock, .ex-settings, .ex-music, .ex-np")) return;
       const r = host.getBoundingClientRect();
       if (x - r.left < r.width * 0.42 && stick.id < 0) {
         // any touch on the left side takes the joystick; with "follows thumb" it jumps to where you touched
@@ -312,13 +342,13 @@ export default function Explore({ onBack }: { onBack: () => void }) {
       if (look && id === look.id) look = null;
     };
     // touch events: the most reliable way to follow two thumbs at once on iPhone
-    const UI = "button, .ex-pop, .ex-modes, .ex-lock, .ex-settings";
+    const UI = "button, input, a, .ex-pop, .ex-modes, .ex-lock, .ex-settings, .ex-music, .ex-np";
     const ts = (e: TouchEvent) => {
       if (!(e.target as HTMLElement).closest?.(UI)) e.preventDefault(); // no page scroll, zoom or long-press menu
       for (const t of Array.from(e.changedTouches)) start(t.identifier, t.clientX, t.clientY, t.target);
     };
     const tm = (e: TouchEvent) => {
-      if (!(e.target as HTMLElement).closest?.(".ex-settings")) e.preventDefault();
+      if (!(e.target as HTMLElement).closest?.(".ex-settings, .ex-music")) e.preventDefault();
       for (const t of Array.from(e.changedTouches)) drag(t.identifier, t.clientX, t.clientY);
     };
     const te = (e: TouchEvent) => { for (const t of Array.from(e.changedTouches)) end(t.identifier); };
@@ -359,6 +389,7 @@ export default function Explore({ onBack }: { onBack: () => void }) {
         for (const d of pair) { d.target = opening ? 1 : 0; if (opening) doorKeepOpen.add(d); else doorKeepOpen.delete(d); }
       } else if (a === "battle" && near.length) setPicker(near.find((p) => p.name === locked)?.name ?? near[0].name);
       else if (a === "more") setMore((v) => !v);
+      else if (a === "music") setMusicOpen((v) => !v);
     };
     api.current.lock = (name) => { locked = name; uiKey = ""; };
     let challenger: string | null = null, nextChallenge = 8, nearTime = 0;
@@ -369,6 +400,7 @@ export default function Explore({ onBack }: { onBack: () => void }) {
     api.current.wave = () => hero.wave();
 
     const kd = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.("input, textarea")) return; // typing a song link
       const k = e.key.toLowerCase();
       keys.add(k);
       if (k === " ") jump();
@@ -500,13 +532,16 @@ export default function Explore({ onBack }: { onBack: () => void }) {
 
       // which buttons to show
       const actions: Action[] = [];
+      const boardD = Math.hypot(pos.x - board.center.x, pos.z - board.center.z);
       if (nearDoor) actions.push("door");
       if (near.length) actions.push("battle");
+      if (boardD < RADIO_RANGE) actions.push("music");
       if (near.length) actions.push("more");
-      const key = actions.join() + (nearDoor && nearDoor.target > 0.5 ? "o" : "") + near.map((p) => p.name).join() + "|" + target;
+      const hear = boardD < HEAR;
+      const key = actions.join() + (nearDoor && nearDoor.target > 0.5 ? "o" : "") + near.map((p) => p.name).join() + "|" + target + hear;
       if (key !== uiKey) {
         uiKey = key;
-        setUi({ actions, doorOpen: !!nearDoor && nearDoor.target > 0.5, near: near.map((p) => p.name), target });
+        setUi({ actions, doorOpen: !!nearDoor && nearDoor.target > 0.5, near: near.map((p) => p.name), target, hear });
       }
 
       hero.root.position.copy(pos);
@@ -559,11 +594,16 @@ export default function Explore({ onBack }: { onBack: () => void }) {
       if (flashRef.current) flashRef.current.style.opacity = String(f * 0.4);
 
       renderer.render(scene, camera);
+      board.tick(camera, host.clientWidth, host.clientHeight, pos, radio.elapsed(), dt);
     });
 
     return () => {
       renderer.setAnimationLoop(null);
       ro.disconnect();
+      unsub();
+      radio.close();
+      radioRef.current = null;
+      board.dispose();
       host.removeEventListener("touchstart", ts);
       host.removeEventListener("touchmove", tm);
       host.removeEventListener("touchend", te);
@@ -596,9 +636,22 @@ export default function Explore({ onBack }: { onBack: () => void }) {
     );
   };
   const set = <K extends keyof Settings>(k: K, val: Settings[K]) => setSettings((s) => ({ ...s, [k]: val }));
-  const multi = ui.actions.includes("door") && ui.actions.includes("battle");
-  const arc: Action = ui.actions.includes("battle") ? "battle" : ui.actions.includes("door") ? "door" : "battle";
-  const label = (a: Action) => (a === "door" ? (ui.doorOpen ? "Close door" : "Open door") : a === "battle" ? "Battle" : "More");
+  const main = ui.actions.filter((a) => a !== "more");
+  const multi = main.length > 1;
+  const arc: Action = (["battle", "door", "music"] as const).find((a) => ui.actions.includes(a)) ?? "battle";
+  const label = (a: Action) => (a === "door" ? (ui.doorOpen ? "Close door" : "Open door") : a === "battle" ? "Battle" : a === "music" ? "Radio" : "More");
+  const me = radioRef.current?.myId ?? "";
+  const queue = [...music.queue].sort((a, b) => b.votes.length - a.votes.length);
+  const addSong = async () => {
+    const id = videoId(link);
+    if (!id) { setToast("That doesn't look like a YouTube link."); return; }
+    setAdding(true);
+    const title = await videoTitle(id);
+    setAdding(false);
+    radioRef.current?.suggest(id, title, MY_NAME);
+    setLink("");
+    if (!listening) api.current.listen(true); // you picked a song, so you want to hear it
+  };
   const pointed = incoming ?? ui.target; // who the red triangle points at
 
   return (
@@ -687,6 +740,7 @@ export default function Explore({ onBack }: { onBack: () => void }) {
               <button key={a} className={`ex-skill s${i} ${a}`} onPointerUp={() => act(a)} aria-label={label(a)}>
                 {a === "door" && <svg viewBox="0 0 24 24"><path d="M6 21V4h9l3 2v15M6 21h12M13 12h1" /></svg>}
                 {a === "battle" && <svg viewBox="0 0 24 24"><path d="M4 20 15 9M15 9l2-5 3 3-5 2M20 20 9 9M9 9 7 4 4 7l5 2" /></svg>}
+                {a === "music" && <svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>}
                 {a === "more" && <svg viewBox="0 0 24 24"><path d="M6 12h.01M12 12h.01M18 12h.01" /></svg>}
                 <span>{label(a)}</span>
               </button>
@@ -737,6 +791,65 @@ export default function Explore({ onBack }: { onBack: () => void }) {
                 <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></svg>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* now playing, while you can hear the billboard */}
+      {ui.hear && music.now && !musicOpen && (
+        <div className="ex-np">
+          <img src={thumb(music.now.id)} alt="" />
+          <div className="ex-np-text">
+            <b>{music.now.title}</b>
+            <span>picked by {music.now.by}</span>
+          </div>
+          <button className={`ex-np-btn ${listening ? "on" : ""}`} onClick={() => api.current.listen(!listening)}>{listening ? "Mute" : "Listen"}</button>
+        </div>
+      )}
+
+      {/* the song list: paste a link to suggest, tap a heart to vote; the most votes plays next */}
+      {musicOpen && (
+        <div className="ex-music">
+          <div className="ex-music-head">
+            <b>Arasaka Radio</b>
+            <button className="wm-round small" onClick={() => setMusicOpen(false)} aria-label="Close">×</button>
+          </div>
+          {music.now ? (
+            <div className="ex-music-now">
+              <img src={thumb(music.now.id)} alt="" />
+              <div>
+                <span>Now playing</span>
+                <b>{music.now.title}</b>
+                <em>picked by {music.now.by}</em>
+              </div>
+              <button className={`ex-np-btn ${listening ? "on" : ""}`} onClick={() => api.current.listen(!listening)}>{listening ? "Mute" : "Listen"}</button>
+            </div>
+          ) : (
+            <p className="ex-note">Nothing playing yet. Paste a song below and it goes on the screen.</p>
+          )}
+          <form className="ex-music-add" onSubmit={(e) => { e.preventDefault(); if (!adding) addSong(); }}>
+            <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="Paste a YouTube link" inputMode="url" autoCapitalize="off" autoCorrect="off" />
+            <button className="game-btn jade" disabled={!link.trim() || adding}>{adding ? "…" : "Add"}</button>
+          </form>
+          <a className="ex-music-find" href="https://www.youtube.com/" target="_blank" rel="noreferrer">Find a song on YouTube, then Share → Copy link</a>
+          <div className="ex-music-list">
+            {queue.length === 0 && <p className="ex-note">No songs waiting. The one with the most votes plays next.</p>}
+            {queue.map((q) => {
+              const mine = q.votes.includes(me);
+              return (
+                <div key={q.id} className="ex-music-row">
+                  <img src={thumb(q.id)} alt="" />
+                  <div>
+                    <b>{q.title}</b>
+                    <em>by {q.by}</em>
+                  </div>
+                  <button className={`ex-vote ${mine ? "on" : ""}`} onClick={() => radioRef.current?.vote(q.id, !mine)} aria-label={mine ? "Take back vote" : "Vote"}>
+                    <svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" /></svg>
+                    {q.votes.length}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

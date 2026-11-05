@@ -76,7 +76,7 @@
 .wm-explore .game-btn { max-width: 360px; }
 
 /* Explore on foot: landscape first. Joystick bottom left, drag anywhere on the right to look. */
-.ex { position: absolute; inset: 0; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.ex { position: absolute; inset: 0; overflow: hidden; isolation: isolate; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .ex canvas { display: block; width: 100%; height: 100%; }
 .ex .lightning-flash { z-index: 1; }
 .ex-top {
@@ -264,3 +264,55 @@
 .ex-note { margin: 0; font-size: 0.72rem; color: #b9ab90; }
 .ex-settings-foot { display: flex; gap: 10px; justify-content: flex-end; align-items: center; }
 .ex-settings-foot .game-btn { height: 44px; font-size: 1.1rem !important; }
+
+/* lawn billboard: the YouTube layer sits behind the see-through screen in the canvas */
+.ex-css { position: absolute !important; inset: 0; z-index: -1; pointer-events: none; background: #120d0c; }
+.ex-arc.on.music .band { stroke: url(#ex-arc-door); filter: drop-shadow(0 0 6px rgba(255, 200, 120, 0.6)); }
+.ex-skill.music { background: radial-gradient(circle at 50% 35%, #3f8a83, #1d4440); }
+.ex-skill.s3 { right: 156px; bottom: 156px; }
+
+.ex-np {
+  position: absolute; z-index: 6; left: 50%; top: calc(env(safe-area-inset-top) + 10px); transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px; max-width: min(360px, 46vw); padding: 5px 5px 5px 5px; border-radius: 14px;
+  background: rgba(18, 12, 10, 0.82); border: 1.5px solid var(--wood-rim); color: var(--parch); animation: wm-up 0.2s ease-out;
+}
+.ex-np img { width: 48px; height: 27px; object-fit: cover; border-radius: 6px; flex: none; }
+.ex-np-text { min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+.ex-np-text b, .ex-music b { font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ex-np-text span { font-size: 0.62rem; color: #b9ab90; }
+.ex-np-btn {
+  flex: none; padding: 6px 12px; border-radius: 10px; border: 1.5px solid #ff9a8a; color: #fff4e6; font-weight: 800; font-size: 0.75rem;
+  background: radial-gradient(circle at 50% 35%, #e0483b, #8f241b);
+}
+.ex-np-btn.on { background: rgba(243, 233, 210, 0.1); border-color: var(--wood-rim); color: var(--parch); }
+
+.ex-music {
+  position: absolute; z-index: 8; right: max(176px, calc(env(safe-area-inset-right) + 166px)); top: calc(env(safe-area-inset-top) + 58px); bottom: calc(env(safe-area-inset-bottom) + 12px);
+  width: min(330px, 48vw); padding: 10px; border-radius: 16px; display: flex; flex-direction: column; gap: 8px; color: var(--parch);
+  background: linear-gradient(180deg, #3b2216, #24140d); border: 2px solid var(--wood-rim); box-shadow: 0 5px 0 var(--wood-shadow), 0 10px 30px rgba(0, 0, 0, 0.5);
+  animation: wm-up 0.2s ease-out;
+}
+.ex-music-head { display: flex; align-items: center; justify-content: space-between; }
+.ex-music-head b { font-family: var(--brush); font-size: 1.05rem; letter-spacing: 0.04em; }
+.ex-music-now, .ex-music-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ex-music-now > div, .ex-music-row > div { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.ex-music-now img { width: 72px; height: 40px; object-fit: cover; border-radius: 8px; flex: none; }
+.ex-music-row img { width: 56px; height: 32px; object-fit: cover; border-radius: 6px; flex: none; }
+.ex-music span { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.08em; color: #e0483b; font-weight: 800; }
+.ex-music em { font-style: normal; font-size: 0.66rem; color: #b9ab90; }
+.ex-music-add { display: flex; gap: 6px; }
+.ex-music-add input {
+  flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; border: 1.5px solid var(--wood-rim); background: rgba(0, 0, 0, 0.35);
+  color: var(--parch); font-size: 16px; /* 16px stops iPhone zooming in */
+}
+.ex-music-add .game-btn { padding: 6px 14px; min-width: 0; }
+.ex-music-find { font-size: 0.68rem; color: #d8c9aa; text-decoration: underline; }
+.ex-music-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+.ex-music .ex-note { margin: 0; }
+.ex-vote {
+  flex: none; display: flex; align-items: center; gap: 4px; padding: 5px 9px; border-radius: 10px; border: 1.5px solid var(--wood-rim);
+  background: rgba(243, 233, 210, 0.07); color: var(--parch); font-weight: 800; font-size: 0.8rem;
+}
+.ex-vote svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linejoin: round; }
+.ex-vote.on { background: radial-gradient(circle at 50% 35%, #e0483b, #8f241b); border-color: #ff9a8a; color: #fff4e6; }
+.ex-vote.on svg { fill: currentColor; }
