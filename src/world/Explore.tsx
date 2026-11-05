@@ -266,9 +266,10 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       for (const { b, kind } of cellAt(p.x, p.z)) if (kind !== "door" && p.x > b.x0 && p.x < b.x1 && p.z > b.z0 && p.z < b.z1 && b.y0 > p.y + 1.9 && b.y0 < p.y + 40) return true;
       return false;
     };
+    // for the camera: low things (railings, fences, parapets, benches) don't pull it in, it just looks over them
     const insideSolid = (v: THREE.Vector3) => {
       for (const { b, kind } of cellAt(v.x, v.z))
-        if (v.x > b.x0 && v.x < b.x1 && v.z > b.z0 && v.z < b.z1 && v.y > b.y0 && v.y < b.y1 && (kind !== "door" || !doorOpen.has(b))) return true;
+        if (b.y1 - b.y0 > 1.6 && v.x > b.x0 && v.x < b.x1 && v.z > b.z0 && v.z < b.z1 && v.y > b.y0 && v.y < b.y1 && (kind !== "door" || !doorOpen.has(b))) return true;
       return false;
     };
 

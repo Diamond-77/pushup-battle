@@ -400,7 +400,7 @@ function corridor(c: ACtx, a: THREE.Vector3, b: THREE.Vector3, width = 3.2, post
   }
   for (const s of [-1, 1]) {
     const off = n.clone().multiplyScalar(s);
-    fence(c, [a.clone().add(off), b.clone().add(off)], 0.9, c.m.rail, false, ground ? { 0: [[len / 2, 3]] } : {});
+    fence(c, [a.clone().add(off), b.clone().add(off)], 0.9, c.m.rail, false, ground ? { 0: [[len / 2, 4]] } : {});
     beam(c, a.clone().add(off).setY(a.y + postH), b.clone().add(off).setY(b.y + postH), 0.35, 0.45, c.m.wood, false);
   }
   // pitched roof: two sloped planks meeting at a ridge
@@ -551,7 +551,7 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   box(c, 40, 0.25, 26, m.sand, 0, T2, -4, 0, false);
   walkBox(c, 40, 0.25, 26, 0, T2, -4);
   // the fence round the sand yard: solid, with a gate in the middle of the north and south sides
-  fence(c, rect(20, 13, T2 + 0.25).map((v) => v.setZ(v.z - 4)), 1, m.wood, true, { 0: [[20, 4]], 2: [[20, 4]] });
+  fence(c, rect(20, 13, T2 + 0.25).map((v) => v.setZ(v.z - 4)), 1, m.wood, true, { 0: [[20, 5]], 2: [[20, 5]] });
   for (let i = 0; i < 6; i++) {
     const x = -14 + (i % 3) * 14, z = i < 3 ? -11 : 3;
     put(c, new THREE.CylinderGeometry(0.5, 0.55, 3.4, 8), m.wood, M(x, T2 + 1.9, z));
