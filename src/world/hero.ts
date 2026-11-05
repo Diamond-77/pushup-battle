@@ -19,9 +19,13 @@ export class Hero {
   private phase = 0;
   private ink = new THREE.MeshBasicMaterial({ color: C.ink, side: THREE.BackSide });
   private mats: Record<string, THREE.MeshToonMaterial> = {};
+  private air = 0;
+  private waveT = -1;
 
-  constructor() {
-    const mat = (k: keyof typeof C) => (this.mats[k] ??= new THREE.MeshToonMaterial({ color: C[k], gradientMap: toonGradient() }));
+  // colors: swap any part's colour (e.g. a blue tee for another player)
+  constructor(colors: Partial<typeof C> = {}) {
+    const pal = { ...C, ...colors };
+    const mat = (k: keyof typeof C) => (this.mats[k] ??= new THREE.MeshToonMaterial({ color: pal[k], gradientMap: toonGradient() }));
     // a part with an ink outline (a slightly bigger back-facing copy)
     const part = (geo: THREE.BufferGeometry, k: keyof typeof C, parent: THREE.Object3D, x = 0, y = 0, z = 0, line = 0.018) => {
       const m = new THREE.Mesh(geo, mat(k));
@@ -109,8 +113,13 @@ export class Hero {
     this.root.add(shadow);
   }
 
-  // speed in m/s (0 = standing); call every frame
-  animate(speed: number, dt: number, t: number) {
+  wave() {
+    this.waveT = 0;
+  }
+
+  // speed in m/s (0 = standing), airborne while jumping or falling; call every frame
+  animate(speed: number, dt: number, t: number, airborne = false) {
+    this.air += ((airborne ? 1 : 0) - this.air) * Math.min(1, dt * 12);
     const run = THREE.MathUtils.clamp(speed / 7, 0, 1);
     const walk = THREE.MathUtils.clamp(speed / 2, 0, 1);
     this.phase += dt * (speed > 0.05 ? 3.2 + speed * 1.15 : 0);
@@ -129,6 +138,26 @@ export class Hero {
     this.body.rotation.x = run * 0.22 + walk * 0.04;
     this.body.rotation.y = sw * 0.08 * walk;
     this.head.rotation.x = -run * 0.15;
+    // in the air: knees tucked, arms up and out
+    const a = this.air;
+    if (a > 0.01)
+      for (let i = 0; i < 2; i++) {
+        const s = i === 0 ? 1 : -1;
+        this.hips[i].rotation.x = THREE.MathUtils.lerp(this.hips[i].rotation.x, i === 0 ? -0.9 : -0.3, a);
+        this.knees[i].rotation.x = THREE.MathUtils.lerp(this.knees[i].rotation.x, i === 0 ? 1.4 : 0.7, a);
+        this.shoulders[i].rotation.x = THREE.MathUtils.lerp(this.shoulders[i].rotation.x, -0.6, a);
+        this.shoulders[i].rotation.z = THREE.MathUtils.lerp(this.shoulders[i].rotation.z, s * 0.9, a);
+      }
+    // wave with the right hand for two seconds
+    if (this.waveT >= 0) {
+      this.waveT += dt;
+      const k = Math.min(1, this.waveT * 5, (2 - this.waveT) * 5);
+      this.shoulders[1].rotation.z = THREE.MathUtils.lerp(this.shoulders[1].rotation.z, -2.6, k);
+      this.shoulders[1].rotation.x = THREE.MathUtils.lerp(this.shoulders[1].rotation.x, 0, k);
+      this.elbows[1].rotation.x = 0;
+      this.elbows[1].rotation.z = Math.sin(this.waveT * 12) * 0.5 * k;
+      if (this.waveT > 2) { this.waveT = -1; this.elbows[1].rotation.z = 0; }
+    }
     this.tails.forEach((tl, i) => {
       tl.rotation.x = -0.4 - run * 0.9 + Math.sin(t * 7 + i) * 0.12;
       tl.rotation.z = (i ? 1 : -1) * 0.15;
