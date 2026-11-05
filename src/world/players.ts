@@ -4,8 +4,11 @@ import { supabase } from "../supabase";
 // Presence says who is here; broadcasts carry where they are (about 8 times a second while moving)
 // and challenges between two players.
 
-export type Peer = { id: string; name: string; x: number; y: number; z: number; f: number; s: number; air: boolean; at: number };
-type Pos = { id: string; x: number; y: number; z: number; f: number; s: number; air: boolean };
+// seat: the bench seat they sit on, or -1
+export type Peer = { id: string; name: string; x: number; y: number; z: number; f: number; s: number; air: boolean; seat: number; at: number };
+type Pos = { id: string; x: number; y: number; z: number; f: number; s: number; air: boolean; seat: number };
+type Call = { id: string; x: number; y: number; z: number };
+type Chat = { id: string; row: number; text: string };
 type Ask = { from: string; to: string; mode: string };
 type Answer = { from: string; to: string; mode: string; ok: boolean };
 
@@ -14,8 +17,10 @@ export class Online {
   onRoster: () => void = () => {};
   onChallenge: (from: string, mode: string) => void = () => {};
   onAnswer: (from: string, mode: string, ok: boolean) => void = () => {};
+  onCall: (from: string, at: { x: number; y: number; z: number }) => void = () => {};
+  onChat: (from: string, row: number, text: string) => void = () => {};
   private ch: ReturnType<NonNullable<typeof supabase>["channel"]> | null = null;
-  private last = { x: 0, z: 0, f: 0, t: 0 };
+  private last = { x: 0, z: 0, f: 0, t: 0, seat: -1 };
 
   private me: { id: string; name: string };
 
@@ -27,7 +32,7 @@ export class Online {
       const here = new Map<string, string>();
       for (const [id, metas] of Object.entries(ch.presenceState<{ name: string }>())) if (id !== me.id) here.set(id, metas[0]?.name ?? "Player");
       for (const id of [...this.peers.keys()]) if (!here.has(id)) this.peers.delete(id);
-      for (const [id, name] of here) if (!this.peers.has(id)) this.peers.set(id, { id, name, x: NaN, y: 0, z: 0, f: 0, s: 0, air: false, at: 0 });
+      for (const [id, name] of here) if (!this.peers.has(id)) this.peers.set(id, { id, name, x: NaN, y: 0, z: 0, f: 0, s: 0, air: false, seat: -1, at: 0 });
       this.onRoster();
     })
       .on("broadcast", { event: "pos" }, ({ payload }) => {
@@ -38,6 +43,14 @@ export class Online {
         const a = payload as Ask;
         if (a.to === me.id && this.peers.has(a.from)) this.onChallenge(a.from, a.mode);
       })
+      .on("broadcast", { event: "call" }, ({ payload }) => {
+        const c = payload as Call;
+        if (this.peers.has(c.id)) this.onCall(c.id, c);
+      })
+      .on("broadcast", { event: "chat" }, ({ payload }) => {
+        const c = payload as Chat;
+        if (this.peers.has(c.id)) this.onChat(c.id, c.row, String(c.text).slice(0, 200));
+      })
       .on("broadcast", { event: "answer" }, ({ payload }) => {
         const a = payload as Answer;
         if (a.to === me.id) this.onAnswer(a.from, a.mode, a.ok);
@@ -47,14 +60,22 @@ export class Online {
   }
 
   // call every frame with where you are; sends only when it's worth it
-  send(x: number, y: number, z: number, f: number, s: number, air: boolean) {
+  send(x: number, y: number, z: number, f: number, s: number, air: boolean, seat = -1) {
     if (!this.ch) return;
     const t = performance.now(), L = this.last;
-    const moved = Math.hypot(x - L.x, z - L.z) > 0.05 || Math.abs(f - L.f) > 0.05 || air;
+    const moved = Math.hypot(x - L.x, z - L.z) > 0.05 || Math.abs(f - L.f) > 0.05 || air || seat !== L.seat;
     if (t - L.t < (moved ? 120 : 1000)) return;
-    Object.assign(L, { x, z, f, t });
+    Object.assign(L, { x, z, f, t, seat });
     const r = (v: number) => Math.round(v * 100) / 100;
-    this.ch.send({ type: "broadcast", event: "pos", payload: { id: this.me.id, x: r(x), y: r(y), z: r(z), f: r(f), s: r(s), air } satisfies Pos });
+    this.ch.send({ type: "broadcast", event: "pos", payload: { id: this.me.id, x: r(x), y: r(y), z: r(z), f: r(f), s: r(s), air, seat } satisfies Pos });
+  }
+
+  call(x: number, y: number, z: number) {
+    this.ch?.send({ type: "broadcast", event: "call", payload: { id: this.me.id, x, y, z } satisfies Call });
+  }
+
+  chat(row: number, text: string) {
+    this.ch?.send({ type: "broadcast", event: "chat", payload: { id: this.me.id, row, text } satisfies Chat });
   }
 
   challenge(to: string, mode: string) {

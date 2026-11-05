@@ -20,7 +20,9 @@ export class Hero {
   private ink = new THREE.MeshBasicMaterial({ color: C.ink, side: THREE.BackSide });
   private mats: Record<string, THREE.MeshToonMaterial> = {};
   private air = 0;
+  private seat = 0; // 0 standing .. 1 sitting
   private waveT = -1;
+  private callT = -1;
 
   // colors: swap any part's colour (e.g. a blue tee for another player)
   constructor(colors: Partial<typeof C> = {}) {
@@ -117,9 +119,15 @@ export class Hero {
     this.waveT = 0;
   }
 
+  // the call: chin up, arms spread for a moment
+  call() {
+    this.callT = 0;
+  }
+
   // speed in m/s (0 = standing), airborne while jumping or falling; call every frame
-  animate(speed: number, dt: number, t: number, airborne = false) {
+  animate(speed: number, dt: number, t: number, airborne = false, sitting = false) {
     this.air += ((airborne ? 1 : 0) - this.air) * Math.min(1, dt * 12);
+    this.seat += ((sitting ? 1 : 0) - this.seat) * Math.min(1, dt * 8);
     const run = THREE.MathUtils.clamp(speed / 7, 0, 1);
     const walk = THREE.MathUtils.clamp(speed / 2, 0, 1);
     this.phase += dt * (speed > 0.05 ? 3.2 + speed * 1.15 : 0);
@@ -148,6 +156,34 @@ export class Hero {
         this.shoulders[i].rotation.x = THREE.MathUtils.lerp(this.shoulders[i].rotation.x, -0.6, a);
         this.shoulders[i].rotation.z = THREE.MathUtils.lerp(this.shoulders[i].rotation.z, s * 0.9, a);
       }
+    // sitting on a bench: thighs forward, shins down, hands on the knees
+    const st = this.seat;
+    if (st > 0.01) {
+      for (let i = 0; i < 2; i++) {
+        const s = i === 0 ? 1 : -1;
+        this.hips[i].rotation.x = THREE.MathUtils.lerp(this.hips[i].rotation.x, -1.5, st);
+        this.knees[i].rotation.x = THREE.MathUtils.lerp(this.knees[i].rotation.x, 1.5, st);
+        this.shoulders[i].rotation.x = THREE.MathUtils.lerp(this.shoulders[i].rotation.x, -0.55, st);
+        this.shoulders[i].rotation.z = THREE.MathUtils.lerp(this.shoulders[i].rotation.z, s * 0.12, st);
+        this.elbows[i].rotation.x = THREE.MathUtils.lerp(this.elbows[i].rotation.x, -0.7, st);
+      }
+      this.body.position.y = THREE.MathUtils.lerp(this.body.position.y, 0.6 + Math.sin(t * 2) * 0.004, st);
+      this.body.rotation.x = THREE.MathUtils.lerp(this.body.rotation.x, -0.05, st);
+      this.body.position.z = THREE.MathUtils.lerp(0, -0.12, st);
+    } else this.body.position.z = 0;
+    // the call: arms out and up, head back
+    if (this.callT >= 0) {
+      this.callT += dt;
+      const k = Math.min(1, this.callT * 8, (1.1 - this.callT) * 6);
+      for (let i = 0; i < 2; i++) {
+        const s = i === 0 ? 1 : -1;
+        this.shoulders[i].rotation.z = THREE.MathUtils.lerp(this.shoulders[i].rotation.z, s * 1.9, k);
+        this.shoulders[i].rotation.x = THREE.MathUtils.lerp(this.shoulders[i].rotation.x, -0.3, k);
+        this.elbows[i].rotation.x = THREE.MathUtils.lerp(this.elbows[i].rotation.x, -0.2, k);
+      }
+      this.head.rotation.x = THREE.MathUtils.lerp(this.head.rotation.x, -0.45, k);
+      if (this.callT > 1.1) this.callT = -1;
+    }
     // wave with the right hand for two seconds
     if (this.waveT >= 0) {
       this.waveT += dt;
