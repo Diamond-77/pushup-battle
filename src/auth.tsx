@@ -81,7 +81,7 @@ export function AuthScreen({ emailOnly = false }: { emailOnly?: boolean }) {
     return () => clearTimeout(t);
   }, [cooldown]);
 
-  const redirectTo = window.location.origin + "/";
+  const redirectTo = window.location.origin + window.location.pathname; // back to this page (the game, or world.html)
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
