@@ -4,28 +4,30 @@ import * as THREE from "three";
 // and warning signs, for a dark cyberpunk edge on the old fortress.
 
 type Kind = "sign" | "ticker" | "warn";
-type Spec = { text: string; kind: Kind; x: number; y: number; z: number; ry: number; w: number; h: number };
+// lean: the wall's slope (stone walls lean back), so the sign sits flat on it
+type Spec = { text: string; kind: Kind; x: number; y: number; z: number; ry: number; w: number; h: number; lean: number };
 
 const T2 = 9, T3 = 20;
+const WALL = Math.atan(1.2 / 10), TERRACE = Math.atan(0.8 / 9), TERRACE3 = Math.atan(0.8 / 11), KEEP = Math.atan(1 / 5);
+// each sign sits a quarter metre in front of its wall face, measured at the sign's middle
 const SIGNS: Spec[] = [
   // outside the front wall, seen as you walk up
-  { text: "JOIN ARASAKA", kind: "sign", x: -48, y: 5.5, z: 83.2, ry: 0, w: 20, h: 3.2 },
-  { text: "STRENGTH IS LAW", kind: "sign", x: 48, y: 5.5, z: 83.2, ry: 0, w: 20, h: 3.2 },
+  { text: "JOIN ARASAKA", kind: "sign", x: -48, y: 5.5, z: 83.1, ry: 0, w: 20, h: 3.2, lean: WALL },
+  { text: "STRENGTH IS LAW", kind: "sign", x: 48, y: 5.5, z: 83.1, ry: 0, w: 20, h: 3.2, lean: WALL },
   // inside the front wall
-  { text: "RESTRICTED ZONE", kind: "warn", x: -48, y: 6, z: 76.8, ry: Math.PI, w: 18, h: 2.8 },
-  { text: "NO WEAKNESS PAST THIS POINT", kind: "warn", x: 48, y: 6, z: 76.8, ry: Math.PI, w: 22, h: 2.4 },
+  { text: "RESTRICTED ZONE", kind: "warn", x: -36, y: 6, z: 76.95, ry: Math.PI, w: 16, h: 2.6, lean: WALL },
+  { text: "NO WEAKNESS PAST HERE", kind: "warn", x: 36, y: 6, z: 76.95, ry: Math.PI, w: 16, h: 2.2, lean: WALL },
   // the side walls of the lower court
-  { text: "JOIN ARASAKA  //  100 PUSHUPS A DAY  //  RANK UP OR STEP ASIDE  //  THE STORM NEVER SLEEPS  //", kind: "ticker", x: -73.1, y: 6, z: 42, ry: Math.PI / 2, w: 26, h: 2.4 },
-  { text: "CONSTRUCTION ZONE", kind: "warn", x: 73.1, y: 6, z: 42, ry: -Math.PI / 2, w: 22, h: 2.8 },
+  { text: "JOIN ARASAKA  //  100 PUSHUPS A DAY  //  RANK UP OR STEP ASIDE  //  THE STORM NEVER SLEEPS  //", kind: "ticker", x: -72.95, y: 6, z: 42, ry: Math.PI / 2, w: 26, h: 2.4, lean: WALL },
+  { text: "CONSTRUCTION ZONE", kind: "warn", x: 72.95, y: 6, z: 42, ry: -Math.PI / 2, w: 22, h: 2.8, lean: WALL },
   // the terrace face, right of the grand stairs (the giant screen is on the left)
-  { text: "ARASAKA RECRUITING  //  ARE YOU STRONG ENOUGH?  //  ENLIST AT THE GATE  //", kind: "ticker", x: 40, y: 4.6, z: 20.1, ry: 0, w: 28, h: 2.6 },
-  // the barracks, facing the training yard
-  { text: "BARRACKS", kind: "sign", x: -45.6, y: T2 + 3.4, z: -30, ry: Math.PI / 2, w: 10, h: 1.8 },
-  { text: "BARRACKS", kind: "sign", x: 45.6, y: T2 + 3.4, z: -30, ry: -Math.PI / 2, w: 10, h: 1.8 },
-  // the upper terrace and the keep
-  { text: "ELITE ONLY", kind: "warn", x: -28, y: T2 + 5.5, z: -31.8, ry: 0, w: 14, h: 2.4 },
-  { text: "SYSTEM ERROR", kind: "warn", x: 28, y: T2 + 5.5, z: -31.8, ry: 0, w: 14, h: 2.4 },
-  { text: "THUNDER KEEP", kind: "sign", x: 0, y: T3 + 2.5, z: -46.8, ry: 0, w: 18, h: 2.4 },
+  { text: "ARASAKA RECRUITING  //  ARE YOU STRONG ENOUGH?  //  ENLIST AT THE GATE  //", kind: "ticker", x: 40, y: 4.6, z: 19.85, ry: 0, w: 28, h: 2.6, lean: TERRACE },
+  // the upper terrace face, either side of its stairs
+  { text: "ELITE ONLY", kind: "warn", x: -28, y: T2 + 5.5, z: -32.15, ry: 0, w: 14, h: 2.4, lean: TERRACE3 },
+  { text: "SYSTEM ERROR", kind: "warn", x: 28, y: T2 + 5.5, z: -32.15, ry: 0, w: 14, h: 2.4, lean: TERRACE3 },
+  // the keep's platform, either side of its steps
+  { text: "THUNDER KEEP", kind: "sign", x: -13, y: T3 + 2.5, z: -47.25, ry: 0, w: 13, h: 2.2, lean: KEEP },
+  { text: "AUTHORIZED ONLY", kind: "warn", x: 13, y: T3 + 2.5, z: -47.25, ry: 0, w: 13, h: 2.2, lean: KEEP },
 ];
 
 const CW = 1024;
@@ -56,7 +58,7 @@ class Sign {
     this.mat = new THREE.MeshBasicMaterial({ map: this.tex, toneMapped: false });
     this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.h), this.mat);
     this.mesh.position.set(s.x, s.y, s.z);
-    this.mesh.rotation.y = s.ry;
+    this.mesh.rotation.set(-s.lean, s.ry, 0, "YXZ");
     // a soft red haze on the wall around it
     this.glow = new THREE.Mesh(
       new THREE.PlaneGeometry(s.w * 1.35, s.h * 2.6),
@@ -130,7 +132,8 @@ class Sign {
     const room = W - pad * 2;
     let x: number;
     const sx = s.kind !== "ticker" && tw > room ? room / tw : 1; // squeeze long words to fit
-    if (s.kind === "ticker") x = W - ((t * 140) % (tw + W));
+    const period = tw + 120; // tickers loop with no empty gap
+    if (s.kind === "ticker") x = -((t * 140) % period);
     else x = pad + (room - tw * sx) / 2;
     const line = (dx: number, color: string, blur: number) => {
       g.save();
@@ -140,6 +143,7 @@ class Sign {
       g.shadowBlur = blur;
       g.fillStyle = color;
       g.fillText(text, 0, 0);
+      if (s.kind === "ticker") for (let k = 1; x + k * period < W; k++) g.fillText(text, k * period, 0);
       g.restore();
     };
     if (s.kind !== "warn") {

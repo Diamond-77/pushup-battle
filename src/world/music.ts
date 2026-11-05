@@ -104,6 +104,7 @@ export class Radio {
   private joinedAt = Date.now();
   private hostId: string | null = null;
   private offset = 0; // host clock minus our clock, in ms
+  private clockFrom = "";
   private channel: ReturnType<NonNullable<typeof supabase>["channel"]> | null = null;
   private timer = 0;
   private listeners = new Set<() => void>();
@@ -205,7 +206,11 @@ export class Radio {
   private receive(m: Msg) {
     if (m.t === "state") {
       if (m.from !== this.hostId && this.hostId !== null) return;
-      this.offset = m.sentAt - Date.now(); // good to within the message delay
+      // the host's clock minus ours. Each message arrives a little late, so the biggest
+      // reading is the closest to the truth; start over when a new host takes over.
+      const sample = m.sentAt - Date.now();
+      if (m.from !== this.clockFrom) { this.clockFrom = m.from; this.offset = sample; }
+      else this.offset = Math.max(this.offset - 2, sample); // allow slow drift back down
       this.state = m.state;
       this.emit();
     } else if (this.host) {

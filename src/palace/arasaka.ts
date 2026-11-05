@@ -114,7 +114,8 @@ export type Box = { x0: number; x1: number; z0: number; z1: number; y0: number; 
 // stairs: height rises from a (low end) to b (high end), across width w
 export type Ramp = { ax: number; az: number; bx: number; bz: number; w: number; ya: number; yb: number };
 export type Door = { pivot: THREE.Group; base: THREE.Quaternion; sign: number; open: number; target: number; at: THREE.Vector3; box: Box };
-export type Collision = { walk: Box[]; solid: Box[]; ramps: Ramp[]; doors: Door[] };
+// roofs: ceilings and roofs overhead (no effect on walking; rain stops on them, and you're indoors under one)
+export type Collision = { walk: Box[]; solid: Box[]; ramps: Ramp[]; doors: Door[]; roofs: Box[] };
 type ACtx = Ctx & { m: AMats; col: Collision };
 
 const _v = new THREE.Vector3();
@@ -298,6 +299,7 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
     if (f > 0) railing(c, rect(hx, hz, y), 1.0, c.m.rail, true);
     // beam band: a solid ring over the pillars and the wall tops (the ceiling)
     box(c, 2 * hx + 0.7, 0.8, 2 * hz + 0.7, c.m.wood, 0, y + H, 0);
+    c.col.roofs.push(aabb(c, 2 * hx + 0.7, 0.8, 2 * hz + 0.7, 0, y + H, 0));
     box(c, 2 * hx + 0.9, 0.22, 2 * hz + 0.9, c.m.bracket, 0, y + H + 0.1, 0, 0, false);
     y += H + 0.8;
     const W = hx + 2.4, D = hz + 2.4;
@@ -359,6 +361,11 @@ function corridor(c: ACtx, a: THREE.Vector3, b: THREE.Vector3, width = 3.2, post
   }
   // pitched roof: two sloped planks meeting at a ridge
   const up = new THREE.Vector3(0, postH + 1.3, 0);
+  {
+    const wa = c.T.clone().multiply(M(a.x, a.y, a.z)), wb = c.T.clone().multiply(M(b.x, b.y, b.z));
+    const pa = new THREE.Vector3().setFromMatrixPosition(wa), pb = new THREE.Vector3().setFromMatrixPosition(wb), r = width / 2 + 1.6;
+    c.col.roofs.push({ x0: Math.min(pa.x, pb.x) - r, x1: Math.max(pa.x, pb.x) + r, z0: Math.min(pa.z, pb.z) - r, z1: Math.max(pa.z, pb.z) + r, y0: Math.min(pa.y, pb.y) + postH, y1: Math.max(pa.y, pb.y) + postH + 1.3 });
+  }
   for (const s of [-1, 1]) {
     const eave = n.clone().multiplyScalar(s * 1.6).setY(postH - 0.1);
     const qa = a.clone().add(eave), qb = b.clone().add(eave), ra = a.clone().add(up), rb = b.clone().add(up);
@@ -419,7 +426,7 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   const rand = rngFrom("arasaka-citadel");
   const root = new THREE.Group();
   const b = new Builder();
-  const col: Collision = { walk: [], solid: [], ramps: [], doors: [] };
+  const col: Collision = { walk: [], solid: [], ramps: [], doors: [], roofs: [] };
   const c: ACtx = { b, T: new THREE.Matrix4(), m: mats(env), col };
   const m = c.m;
   const fires: THREE.Vector3[] = [];

@@ -38,6 +38,7 @@ export class Billboard {
   private check = 0;
   private sentVol = -1;
   private done = false;
+  private infoAt = 0;
   listening = false;
 
   constructor(host: HTMLElement, at: THREE.Vector3, ry: number, size = 1) {
@@ -179,11 +180,17 @@ export class Billboard {
 
     // stay on the same second as everyone else
     if ((this.check -= dt) > 0 || !this.ready) return;
-    this.check = 2;
-    const st = this.info.playerState, cur = this.info.currentTime ?? 0, dur = this.info.duration ?? 0;
+    this.check = 1;
+    const st = this.info.playerState, dur = this.info.duration ?? 0;
+    // YouTube reports the time now and then: add how long ago that was
+    const cur = (this.info.currentTime ?? 0) + (st === 1 ? (performance.now() - this.infoAt) / 1000 : 0);
     if (dur > 0 && secs > dur + 5) { this.end(false); return; }
     if (secs < 2) return;
-    if (st === 1 && Math.abs(cur - secs) > 3) this.cmd("seekTo", [secs, true]);
+    if (st === 1 && Math.abs(cur - secs) > 0.6) {
+      // jump a little ahead to cover the moment it takes to buffer, then give it time to settle
+      this.cmd("seekTo", [secs + 0.4, true]);
+      this.check = 4;
+    }
     else if (st === 2 && this.listening) {
       // the phone paused it when sound came on without a tap: back to muted so the video keeps going
       this.listening = false;
@@ -226,7 +233,10 @@ export class Billboard {
     }
     if (m.event === "onReady" || m.event === "infoDelivery" || m.event === "initialDelivery") {
       this.ready = true;
-      if (m.info && typeof m.info === "object") Object.assign(this.info, m.info);
+      if (m.info && typeof m.info === "object") {
+        Object.assign(this.info, m.info);
+        if (m.info.currentTime !== undefined) this.infoAt = performance.now();
+      }
       if (this.info.playerState === 0) this.end(false);
     } else if (m.event === "onStateChange" && typeof m.info === "number") {
       this.info.playerState = m.info;

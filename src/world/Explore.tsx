@@ -156,8 +156,8 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
 
     /* ----- the world's shape, bucketed in a grid so each check only looks at nearby boxes ----- */
     const CELL = 10;
-    const grid = new Map<string, { b: Box; kind: "walk" | "solid" | "door"; door?: Door }[]>();
-    const add = (b: Box, kind: "walk" | "solid" | "door", door?: Door) => {
+    const grid = new Map<string, { b: Box; kind: "walk" | "solid" | "door" | "roof"; door?: Door }[]>();
+    const add = (b: Box, kind: "walk" | "solid" | "door" | "roof", door?: Door) => {
       for (let cx = Math.floor(b.x0 / CELL); cx <= Math.floor(b.x1 / CELL); cx++)
         for (let cz = Math.floor(b.z0 / CELL); cz <= Math.floor(b.z1 / CELL); cz++) {
           const k = cx + "," + cz;
@@ -168,6 +168,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     col.walk.forEach((b) => add(b, "walk"));
     col.solid.forEach((b) => add(b, "solid"));
     col.doors.forEach((d) => add(d.box, "door", d));
+    col.roofs.forEach((b) => add(b, "roof"));
 
     const neon = buildNeon();
     scene.add(neon.root);
@@ -226,6 +227,17 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
           if (!blocks(b, p.y)) continue;
           if (kind === "solid" || (kind === "walk" && b.y1 > p.y + STEP) || (kind === "door" && !doorOpen.has(b))) test(b);
         }
+    };
+    // the highest surface below y at (x, z): where rain lands
+    const coverAt = (x: number, z: number, y: number) => {
+      let best = groundAt(x, z);
+      for (const { b } of cellAt(x, z)) if (x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1 && b.y1 <= y && b.y1 > best) best = b.y1;
+      return best;
+    };
+    // something overhead: a ceiling, an upper floor, a roof, the gate passage
+    const indoors = (p: THREE.Vector3) => {
+      for (const { b, kind } of cellAt(p.x, p.z)) if (kind !== "door" && p.x > b.x0 && p.x < b.x1 && p.z > b.z0 && p.z < b.z1 && b.y0 > p.y + 1.9 && b.y0 < p.y + 40) return true;
+      return false;
     };
     const insideSolid = (v: THREE.Vector3) => {
       for (const { b, kind } of cellAt(v.x, v.z))
@@ -467,8 +479,11 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     /* ----- rain around the hero, lightning ----- */
     const RAIN = 900;
     const rp = new Float32Array(RAIN * 6);
+    const land = new Float32Array(RAIN); // each drop stops on the first roof or floor under it
     const drop = (i: number, top = false) => {
-      const x = pos.x + (Math.random() - 0.5) * 60, z = pos.z + (Math.random() - 0.5) * 60, y = pos.y + (top ? 30 : Math.random() * 30);
+      const x = pos.x + (Math.random() - 0.5) * 60, z = pos.z + (Math.random() - 0.5) * 60, sky = pos.y + 30;
+      land[i] = coverAt(x, z, sky);
+      const y = top ? sky : land[i] + Math.random() * Math.max(0, sky - land[i]);
       rp.set([x, y, z, x + 0.15, y + 0.9, z], i * 6);
     };
     for (let i = 0; i < RAIN; i++) drop(i);
@@ -477,7 +492,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     const rain = new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: 0xa9b8cc, transparent: true, opacity: 0.4 }));
     rain.frustumCulled = false;
     scene.add(rain);
-    let nextFlash = 3, flashT = -1;
+    let nextFlash = 3, flashT = -1, inAir = 1;
 
     // name tags follow heads on screen
     const v = new THREE.Vector3();
@@ -652,7 +667,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
           rp[o + 4] -= dt * 28;
           rp[o] -= dt * 4;
           rp[o + 3] -= dt * 4;
-          if (rp[o + 1] < pos.y - 3 || Math.abs(rp[o] - pos.x) > 32 || Math.abs(rp[o + 2] - pos.z) > 32) drop(i, true);
+          if (rp[o + 1] < land[i] || Math.abs(rp[o] - pos.x) > 32 || Math.abs(rp[o + 2] - pos.z) > 32) drop(i, true);
         }
         rg.attributes.position.needsUpdate = true;
       }
@@ -665,8 +680,11 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
         f = flashT < 0.08 ? 1 : flashT < 0.16 ? 0.25 : flashT < 0.26 ? 0.8 : Math.max(0, 1 - (flashT - 0.26) * 4);
         if (flashT > 0.6) flashT = -1;
       }
-      hemi.intensity = env.hemi + 0.35 + f * 2.5;
-      if (flashRef.current) flashRef.current.style.opacity = String(f * 0.4);
+      // indoors you only catch a little of the flash through the windows
+      const inside = indoors(pos);
+      inAir += ((inside ? 0 : 1) - inAir) * Math.min(1, dt * 3);
+      hemi.intensity = env.hemi + 0.35 + f * 2.5 * (0.15 + 0.85 * inAir);
+      if (flashRef.current) flashRef.current.style.opacity = String(f * 0.4 * inAir);
 
       renderer.render(scene, camera);
       board.tick(camera, host.clientWidth, host.clientHeight, loudness(pos, board.center), radio.elapsed(), dt);
@@ -825,11 +843,16 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
           onPointerLeave={() => api.current.jumpUp()}
           onContextMenu={(e) => e.preventDefault()}
         >
-          <svg viewBox="0 0 40 40" aria-hidden>
-            <circle cx="21" cy="7.5" r="3.6" />
-            <path d="M20 12.5 17 21l5 4-2 9M17 21l-6 4M19 14l6 4 5-3M14 16l5-3" />
+          {/* tap: leap up (chevrons up); held: sprint (chevrons forward) */}
+          <svg className="ic-jump" viewBox="0 0 40 40" aria-hidden>
+            <path d="M10 21 20 11l10 10" />
+            <path className="lo" d="M12 30 20 22l8 8" />
           </svg>
-          <em>Hold to run</em>
+          <svg className="ic-run" viewBox="0 0 40 40" aria-hidden>
+            <path d="M12 10l10 10-10 10" />
+            <path className="lo" d="M21 13l7 7-7 7" />
+          </svg>
+          <em>Jump · hold run</em>
         </button>
         {!multi ? (
           <button className={`ex-arc ${arc} ${ui.actions.includes(arc) ? "on" : ""}`} disabled={!ui.actions.includes(arc)} onPointerUp={() => act(arc)}>
