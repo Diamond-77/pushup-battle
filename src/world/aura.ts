@@ -81,10 +81,8 @@ export function buildAura() {
     g.fillRect(0, 0, 4, 128);
     return new THREE.CanvasTexture(c);
   })();
-  const haze = new THREE.Mesh(
-    new THREE.PlaneGeometry(420, 170),
-    new THREE.MeshBasicMaterial({ map: hazeTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }),
-  );
+  const hazeMat = new THREE.MeshBasicMaterial({ map: hazeTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+  const haze = new THREE.Mesh(new THREE.PlaneGeometry(420, 170), hazeMat);
   haze.position.set(0, 90, -180);
   haze.renderOrder = -2;
   root.add(haze);
@@ -112,7 +110,8 @@ export function buildAura() {
     g.fillRect(0, 0, 32, 32);
     return new THREE.CanvasTexture(c);
   })();
-  const embers = new THREE.Points(geo, new THREE.PointsMaterial({ map: dot, size: 1.4, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+  const emberMat = new THREE.PointsMaterial({ map: dot, size: 1.4, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+  const embers = new THREE.Points(geo, emberMat);
   embers.frustumCulled = false;
   root.add(embers);
 
@@ -121,8 +120,16 @@ export function buildAura() {
   light.position.set(0, 25, -125);
   root.add(light);
 
-  function tick(t: number, dt: number) {
-    for (const m of mats) m.uniforms.uTime.value = t;
+  // strength: 1 at night, fading to 0 by day (the hellfire only burns after dark)
+  function tick(t: number, dt: number, strength = 1) {
+    // the light stays (intensity 0) so the number of lights never changes, which would recompile shaders
+    const on = strength > 0.02;
+    for (const o of root.children) if (o !== light) o.visible = on;
+    light.intensity = 0;
+    if (!on) return;
+    mats.forEach((m, i) => { m.uniforms.uTime.value = t; m.uniforms.uPower.value = layers[i][4] * strength; });
+    hazeMat.opacity = strength;
+    emberMat.opacity = strength;
     for (let k = 0; k < N; k++) {
       pos[k * 3 + 1] += speed[k] * dt;
       pos[k * 3] += Math.sin(t * 0.8 + k) * dt * 1.5;
@@ -130,7 +137,7 @@ export function buildAura() {
       if (pos[k * 3 + 1] > 130) reset(k, false);
     }
     geo.attributes.position.needsUpdate = true;
-    light.intensity = 2.2 + Math.sin(t * 7) * 0.3 + Math.sin(t * 13.1) * 0.2;
+    light.intensity = (2.2 + Math.sin(t * 7) * 0.3 + Math.sin(t * 13.1) * 0.2) * strength;
   }
 
   return { root, tick };

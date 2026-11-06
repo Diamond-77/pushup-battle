@@ -83,7 +83,7 @@ function mats(env: Env) {
   return {
     ...m,
     // the red lattice windows glow from the lamps inside (the black lacquer stays dark)
-    wall: toon(0, wallTex, { emissive: 0xff5040, emissiveMap: wallTex, emissiveIntensity: 0.55 + env.lamp * 0.35 }),
+    wall: toon(0, wallTex, { emissive: 0xff3a2a, emissiveMap: wallTex, emissiveIntensity: 1.1 + env.lamp * 0.5 }),
     wallPlain: toon(0x1c1a1f),
     roof: toon(0, roofTexture(0x2b2f39), { side: THREE.DoubleSide }),
     ridge: toon(0x18191e),
@@ -294,7 +294,7 @@ function roof(c: ACtx, W: number, D: number, iw: number, id: number, y: number, 
 /* ---------- buildings ---------- */
 
 type Side = "x+" | "x-" | "z+" | "z-";
-type BOpts = { shaft?: Rect; spiral?: boolean; openings?: { floor: number; side: Side; w: number }[]; floors: number; wallH?: number; shrink?: number; veranda?: number; door?: boolean; spire?: number; topRatio?: number; banners?: boolean };
+type BOpts = { shaft?: Rect; spiral?: boolean; openings?: { floor: number; side: Side; w: number }[]; floors: number; wallH?: number; shrink?: number; veranda?: number; door?: boolean; spire?: number; topRatio?: number; banners?: boolean; skin?: (f: number) => THREE.Material };
 
 // A multi-storey hall or tower. Returns the height of each floor's walking surface (slab top), and the top.
 // Buildings you can walk into get a stair to every floor (a straight flight along the back wall, or a
@@ -323,12 +323,17 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
     const T = 0.4;
     const opens = (side: Side) => inside && f > 0 && (side === "z+" || (o.openings ?? []).some((q) => q.floor === f && q.side === side));
     const ddw = Math.min(2.4, cw * 0.3), ddh = Math.min(3, H - 0.8);
-    const wall = (side: Side, len: number, x: number, z: number, ry: number) => (opens(side) ? doorway(c, len, H, x, y, z, ry, ddw, ddh) : wallPanel(c, len, H, x, y, z, ry));
+    const sk = o.skin?.(f);
+    const wall = (side: Side, len: number, x: number, z: number, ry: number) => {
+      if (sk) skin(c, len, H, x, y, z, T, sk, opens(side) ? [ddw, ddh] : null);
+      return opens(side) ? doorway(c, len, H, x, y, z, ry, ddw, ddh) : wallPanel(c, len, H, x, y, z, ry);
+    };
     wall("z-", cw, 0, -cd / 2 + T / 2, 0);
     wall("x-", cd, -cw / 2 + T / 2, 0, Math.PI / 2);
     wall("x+", cd, cw / 2 - T / 2, 0, Math.PI / 2);
     if (f === 0 && inside) {
       const dw = Math.min(3.2, cw * 0.3), dh = Math.min(3.6, H - 0.8), side = (cw - dw) / 2;
+      if (sk) skin(c, cw, H, 0, y, cd / 2 - T / 2, T, sk, [dw, dh]);
       wallPanel(c, side, H, -cw / 2 + side / 2, y, cd / 2 - T / 2);
       wallPanel(c, side, H, cw / 2 - side / 2, y, cd / 2 - T / 2);
       box(c, dw, H - dh, T, c.m.wallPlain, 0, y + dh, cd / 2 - T / 2);
@@ -482,6 +487,56 @@ function spiralStair(c: ACtx, nw: number, nd: number, y0: number, y1: number): H
   return { x0: -r - 0.1, x1: r + 0.1, z0: -r - 0.1, z1: r + 0.1 };
 }
 
+// an inner lining on a wall (len long, standing at x, z, thickness T), facing the room's centre,
+// with a gap for a doorway (dw wide, dh high) in the middle
+function skin(c: ACtx, len: number, H: number, x: number, y: number, z: number, T: number, mat: THREE.Material, gap: [number, number] | null) {
+  const ry = Math.atan2(-x, -z), nx = Math.sin(ry), nz = Math.cos(ry);
+  const at = (u: number, w: number, y0: number, h: number) => {
+    const g = new THREE.PlaneGeometry(w, h);
+    const uv = g.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (u + (uv.getX(i) - 0.5) * w) / BAY, (y0 - y + uv.getY(i) * h) / H);
+    // u runs along the wall to the plane's right
+    const px = x + nx * (T / 2 + 0.02) + Math.cos(ry) * u, pz = z + nz * (T / 2 + 0.02) - Math.sin(ry) * u;
+    put(c, g, mat, M(px, y0 + h / 2, pz, ry), false);
+  };
+  if (!gap) return at(0, len - 0.1, y, H);
+  const [dw, dh] = gap, side = (len - dw) / 2;
+  at(-len / 2 + side / 2, side - 0.05, y, H);
+  at(len / 2 - side / 2, side - 0.05, y, H);
+  at(0, dw, y + dh, H - dh);
+}
+
+// dark lining with glowing lattice windows in a room's own colour
+const _skins = new Map<number, THREE.Material>();
+function roomSkin(a: number) {
+  if (_skins.has(a)) return _skins.get(a)!;
+  const col = new THREE.Color(a);
+  const css = (k: number) => "#" + col.clone().multiplyScalar(k).getHexString();
+  const tex = canvasTex(256, 256, (x, w, h) => {
+    x.fillStyle = "#141218";
+    x.fillRect(0, 0, w, h);
+    x.fillStyle = css(0.35);
+    x.fillRect(0, 0, 18, h);
+    x.fillRect(w - 18, 0, 18, h);
+    const px = 40, pw = w - 80, py = h * 0.18, ph = h * 0.5;
+    const g = x.createLinearGradient(0, py, 0, py + ph);
+    g.addColorStop(0, css(0.25));
+    g.addColorStop(1, css(0.55));
+    x.fillStyle = g;
+    x.fillRect(px, py, pw, ph);
+    x.strokeStyle = css(1);
+    x.lineWidth = 3;
+    for (let gx = px + 14; gx < px + pw; gx += 14) { x.beginPath(); x.moveTo(gx, py); x.lineTo(gx, py + ph); x.stroke(); }
+    for (let gy = py + 14; gy < py + ph; gy += 14) { x.beginPath(); x.moveTo(px, gy); x.lineTo(px + pw, gy); x.stroke(); }
+    x.fillStyle = css(0.9);
+    x.fillRect(0, h * 0.82, w, 4); // a lit rail along the wall
+  });
+  tex.wrapS = THREE.RepeatWrapping;
+  const m = toon(0x222222, tex, { emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.85 });
+  _skins.set(a, m);
+  return m;
+}
+
 function wallPanel(c: ACtx, len: number, h: number, x: number, y: number, z: number, ry = 0) {
   const g = new THREE.BoxGeometry(len, h, 0.4);
   const uv = g.attributes.uv;
@@ -572,12 +627,54 @@ function brazier(c: ACtx, x: number, y: number, z: number, fires: THREE.Vector3[
   fires.push(new THREE.Vector3(x, y + 3.6, z));
 }
 
+// a tall pole carrying a vertical neon sign screen (glowing on both sides), in place of a cloth banner
 function bannerPole(c: ACtx, x: number, y: number, z: number, h: number, ry = 0) {
   box(c, 0.35, h, 0.35, c.m.iron, x, y, z);
   put(c, new THREE.ConeGeometry(0.3, 1.2, 4), c.m.iron, M(x, y + h + 0.6, z), false);
   const s = sub(c, M(x, y, z, ry)) as ACtx;
   box(s, 3, 0.2, 0.2, s.m.iron, 1.4, h - 0.7, 0, 0, false);
-  put(s, new THREE.PlaneGeometry(2.6, 9), s.m.banner, M(1.4, h - 5.3, 0), false);
+  neonScreen(s, 2.4, 8.4, 1.4, h - 5.2, 0, 0, true);
+}
+
+// Vertical cyberpunk sign screens, like the stacked neon signs of a night market: a dark panel,
+// a glowing frame and big stacked letters. Each new screen takes the next word and colour.
+const SIGN_WORDS = ["ARASAKA", "STORM", "PUSH", "RESPECT", "THUNDER", "RANK UP", "STRONG", "NO REST", "DOJO", "RAMEN", "ELITE", "LEGEND"];
+const SIGN_COLORS = ["#00e5ff", "#ff2fa0", "#3dff9a", "#ffd23a", "#ff3b3b", "#a66bff", "#ff8a2a", "#2fd0ff"];
+let _sign = 0;
+const _signMats = new Map<string, THREE.Material>();
+function signMat(word: string, color: string) {
+  const k = word + color;
+  if (_signMats.has(k)) return _signMats.get(k)!;
+  const tex = canvasTex(128, 512, (x, w, h) => {
+    x.fillStyle = "#07060b";
+    x.fillRect(0, 0, w, h);
+    x.strokeStyle = color;
+    x.lineWidth = 8;
+    x.shadowColor = color;
+    x.shadowBlur = 18;
+    x.strokeRect(8, 8, w - 16, h - 16);
+    const letters = [...word.replace(/ /g, "")];
+    const step = Math.min(70, (h - 60) / letters.length);
+    x.font = `bold ${Math.round(step * 0.9)}px Inter, Arial, sans-serif`;
+    x.textAlign = "center";
+    x.textBaseline = "middle";
+    x.fillStyle = "#fff";
+    const top = h / 2 - (step * (letters.length - 1)) / 2;
+    letters.forEach((ch, i) => { x.shadowBlur = 22; x.fillStyle = color; x.fillText(ch, w / 2, top + i * step); x.shadowBlur = 0; x.fillStyle = "rgba(255,255,255,0.85)"; x.fillText(ch, w / 2, top + i * step); });
+  });
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false });
+  _signMats.set(k, m);
+  return m;
+}
+function neonScreen(c: ACtx, w: number, h: number, x: number, y: number, z: number, ry: number, twoSided: boolean) {
+  const word = SIGN_WORDS[_sign % SIGN_WORDS.length], color = SIGN_COLORS[(_sign * 3) % SIGN_COLORS.length];
+  _sign++;
+  const s = sub(c, M(x, y, z, ry)) as ACtx;
+  box(s, w + 0.2, h + 0.2, 0.25, s.m.iron, 0, -h / 2 - 0.1, 0, 0, false);
+  const mat = signMat(word, color);
+  put(s, new THREE.PlaneGeometry(w, h), mat, M(0, 0, 0.14), false);
+  if (twoSided) put(s, new THREE.PlaneGeometry(w, h), mat, M(0, 0, -0.14, Math.PI), false);
 }
 
 // jagged basalt crags (vertex coloured, merged)
@@ -654,7 +751,7 @@ function greatHall(kc: ACtx, keep: KeepInfo, fires: THREE.Vector3[], extras: THR
     for (const dy of [-0.85, 0.85]) put(kc, new THREE.CylinderGeometry(0.42, 0.42, 0.14, 10), m.wood, M(0, y0 + H - 1.7 + dy, z), false);
   }
   // war banners down the side walls
-  for (const sx of [-1, 1]) for (const z of [-4, 4]) put(kc, new THREE.PlaneGeometry(2.2, 4.4), m.banner, M(sx * (W / 2 - 0.25), y0 + H - 2.7, z, -sx * Math.PI / 2), false);
+  for (const sx of [-1, 1]) for (const z of [-4, 4]) neonScreen(kc, 1.6, 4.2, sx * (W / 2 - 0.62), y0 + H - 3, z, -sx * Math.PI / 2, false);
   // one warm light for the hall
   const l = new THREE.PointLight(0xff8a4a, 3, 30, 1.2);
   l.position.copy(new THREE.Vector3(0, y0 + H - 1.2, 0).applyMatrix4(kc.T));
@@ -714,7 +811,7 @@ function keepFloors(kc: ACtx, keep: KeepInfo) {
     box(kc, 6, 0.08, 3.4, glowOrange, -4, y + 0.05, 2.2, 0, false);
     solidBox(kc, 6.4, 1, 3.8, -4, y, 2.2);
     for (const [dx, dz] of [[-2.2, -2.6], [0, -2.6], [2.2, -2.6], [-2.2, 4.4], [0, 4.4]]) box(kc, 0.7, 0.5, 0.7, m.pillar, -4 + dx, y, 2.2 + dz + (dz < 0 ? 1.4 : -1.4) * 0, 0, false);
-    put(kc, new THREE.PlaneGeometry(2.6, 3.2), new THREE.MeshBasicMaterial({ map: boardTex("CLAN CHALLENGES", ["Soraran Gate", "Sat 8 pm", "sleepBuilders", "Sun 9 pm", "Be there or", "lose respect"]) }), M(-W / 2 + 0.25, y + 2.6, 2, Math.PI / 2), false);
+    put(kc, new THREE.PlaneGeometry(2.6, 3.2), new THREE.MeshBasicMaterial({ map: boardTex("CLAN CHALLENGES", ["Soraran Gate", "Sat 8 pm", "sleepBuilders", "Sun 9 pm", "Be there or", "lose respect"]) }), M(-W / 2 + 0.47, y + 2.6, 2, Math.PI / 2), false);
   }
 
   // F3 Hall of Records + library: champion plaques flanking the bridge doorways, bookshelves along
@@ -723,8 +820,8 @@ function keepFloors(kc: ACtx, keep: KeepInfo) {
     const { y, W, D } = room(2);
     const plaque = toon(0x3a2a18), brass = toon(0xc9a24f, undefined, { emissive: 0x6a4a10, emissiveIntensity: 0.4 });
     for (const sx of [-1, 1]) for (const z of [-4.5, -3, 3, 4.5]) {
-      box(kc, 0.15, 1.1, 0.9, plaque, sx * (W / 2 - 0.3), y + 1.6, z, 0, false);
-      box(kc, 0.17, 0.5, 0.6, brass, sx * (W / 2 - 0.32), y + 1.95, z, 0, false);
+      box(kc, 0.15, 1.1, 0.9, plaque, sx * (W / 2 - 0.52), y + 1.6, z, 0, false);
+      box(kc, 0.17, 0.5, 0.6, brass, sx * (W / 2 - 0.55), y + 1.95, z, 0, false);
     }
     // the library: tall shelves either side of the front doorway
     const books = [toon(0x6e1a14), toon(0x2a3b4a), toon(0x4a3a1a), toon(0x2e4a2a)];
@@ -751,7 +848,7 @@ function keepFloors(kc: ACtx, keep: KeepInfo) {
     tat.wrapS = tat.wrapT = THREE.RepeatWrapping;
     tat.repeat.set(W / 2, D / 2);
     put(kc, new THREE.PlaneGeometry(W - 0.8, D - 0.8).rotateX(-Math.PI / 2), toon(0, tat), M(0, y + 0.02, 0), false);
-    put(kc, new THREE.PlaneGeometry(D - 4, H - 1.2), new THREE.MeshBasicMaterial({ color: 0x8b9aa8, transparent: true, opacity: 0.35 }), M(-W / 2 + 0.25, y + (H - 1.2) / 2 + 0.3, 0, Math.PI / 2), false);
+    put(kc, new THREE.PlaneGeometry(D - 4, H - 1.2), new THREE.MeshBasicMaterial({ color: 0x8b9aa8, transparent: true, opacity: 0.35 }), M(-W / 2 + 0.47, y + (H - 1.2) / 2 + 0.3, 0, Math.PI / 2), false);
     for (const [x, z] of [[-4, 3], [-1, 3]]) {
       put(kc, new THREE.CylinderGeometry(0.3, 0.35, 2.2, 8), m.wood, M(x, y + 1.1, z));
       put(kc, new THREE.BoxGeometry(1.4, 0.15, 0.15), m.wood, M(x, y + 1.6, z), false);
@@ -785,6 +882,40 @@ function keepFloors(kc: ACtx, keep: KeepInfo) {
     box(kc, 1.5, 0.25, 0.3, gold, -2.4, y + 4, 1.6, 0.4, false);
     box(kc, 0.18, 1.2, 0.18, m.wood, -2.4, y + 4.2, 1.6, 0.4, false);
   }
+}
+
+// Each floor of the Keep has its own colours: neon coves along the ceiling, glowing corner strips,
+// and two lights (Explore moves a single pair of lights into whichever room you stand in, so the
+// light count never changes and phones don't recompile shaders).
+export type Room = { name: string; box: Box; a: number; b: number; pa: THREE.Vector3; pb: THREE.Vector3 };
+const ROOM_COLORS: [string, number, number][] = [
+  ["Great Hall", 0xff3b5c, 0xffb347], // crimson + gold
+  ["War Room", 0x00e5ff, 0x3d7bff], // cyan + blue
+  ["Hall of Records", 0xffc94a, 0x3dff9a], // amber + jade
+  ["Dojo", 0xff7ad9, 0xfff1d6], // sakura pink + paper white
+  ["Storm Shrine", 0x6a5cff, 0x2fd0ff], // violet + electric blue
+  ["Summit", 0xc04bff, 0xff2fa0], // purple + magenta
+];
+function roomGlow(kc: ACtx, keep: KeepInfo): Room[] {
+  return keep.floors.map((y, f) => {
+    const { w: W, d: D, h: H } = keep.sizes[f];
+    const [name, a, b] = ROOM_COLORS[f % ROOM_COLORS.length];
+    const ma = new THREE.MeshBasicMaterial({ color: a }), mb = new THREE.MeshBasicMaterial({ color: b });
+    const top = y + H - 0.32;
+    // ceiling coves on all four walls, colour a, with a thinner second line under them in colour b
+    for (const sx of [-1, 1]) {
+      box(kc, 0.08, 0.1, D - 0.8, ma, sx * (W / 2 - 0.5), top, 0, 0, false);
+      box(kc, 0.08, 0.04, D - 0.8, mb, sx * (W / 2 - 0.5), top - 0.3, 0, 0, false);
+    }
+    for (const sz of [-1, 1]) {
+      box(kc, W - 0.8, 0.1, 0.08, ma, 0, top, sz * (D / 2 - 0.5), 0, false);
+      box(kc, W - 0.8, 0.04, 0.08, mb, 0, top - 0.3, sz * (D / 2 - 0.5), 0, false);
+    }
+    // glowing strips up the four corners
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(kc, 0.1, H - 0.6, 0.1, sx * sz > 0 ? ma : mb, sx * (W / 2 - 0.5), y + 0.1, sz * (D / 2 - 0.5), 0, false);
+    const at = (x: number, yy: number, z: number) => new THREE.Vector3(x, yy, z).applyMatrix4(kc.T);
+    return { name, box: aabb(kc, W, H, D, 0, y, 0), a, b, pa: at(-W / 4, y + H - 1, -D / 6), pb: at(W / 4, y + H - 1.2, D / 4) };
+  });
 }
 
 // The Thunder Lift: an iron cage up through every floor, a platform that rides it on a fixed timetable
@@ -903,6 +1034,7 @@ export function groundAt(x: number, z: number) {
 export const ARASAKA_SPAWN = new THREE.Vector3(0, 0, FRONT + 34);
 
 export function buildArasaka(env: Env, { bare = false } = {}) {
+  _sign = 0;
   const rand = rngFrom("arasaka-citadel");
   const root = new THREE.Group();
   const b = new Builder();
@@ -1006,7 +1138,7 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   steps(c, 8, 5, 6, 0, T3, kz + 19 + 6);
   const KW = 30, KS = 0.85;
   const kc = sub(c, M(0, T3 + 5, kz)) as ACtx;
-  const keep = building(kc, KW, 25, { floors: 6, wallH: 5.4, shrink: KS, veranda: 1.6, spire: 14, shaft: SHAFT, openings: [{ floor: 2, side: "x+", w: 6.2 }, { floor: 2, side: "x-", w: 6.2 }] });
+  const keep = building(kc, KW, 25, { floors: 6, wallH: 5.4, shrink: KS, veranda: 1.6, spire: 14, shaft: SHAFT, openings: [{ floor: 2, side: "x+", w: 6.2 }, { floor: 2, side: "x-", w: 6.2 }], skin: (f) => roomSkin(ROOM_COLORS[f][1]) });
   for (const sx of [-1, 1]) {
     const tx = sx * 38, tz = kz - 4;
     // the stone base reaches forward past the tower's own front steps, and a stair climbs to it from the terrace
@@ -1018,12 +1150,13 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
     const kw = (KW * KS * KS) / 2 + 1.6 + 0.3;
     // the bridge lands right on the tower's balcony slab (no gap)
     stoneBridge(c, new THREE.Vector3(tx - sx * (tower.sizes[2].w / 2 + 1.6), fy, tz), new THREE.Vector3(sx * kw, ky, tz), 6);
-    // long war banners down the keep's face
-    put(c, new THREE.PlaneGeometry(3, 16), m.banner, M(sx * 7.5, T3 + 5 + keep.floors[1] + 2, kz + 12.5 + 1.6 + 0.35), false);
+    // tall neon sign screens down the keep's face
+    neonScreen(c, 3, 14, sx * 7.5, T3 + 5 + keep.floors[1] + 2, kz + 12.5 + 1.6 + 0.4, 0, false);
   }
   for (const sx of [-1, 1]) brazier(c, sx * 17, T3 + 5, kz + 16, fires);
   const keepLights = greatHall(kc, keep, fires, extras);
   keepFloors(kc, keep);
+  const rooms = roomGlow(kc, keep);
   const lift = thunderLift(kc, keep, col);
   // the emblem high on the keep's top storey, facing the gate
   const topF = keep.sizes.length - 1, topS = keep.sizes[topF];
@@ -1088,5 +1221,5 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
       d.pivot.quaternion.copy(d.base).multiply(q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), d.sign * k * Math.PI * 0.5));
     }
   };
-  return { root, tick, col };
+  return { root, tick, col, rooms };
 }

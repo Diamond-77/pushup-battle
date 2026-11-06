@@ -10,6 +10,8 @@ import { Hero } from "./hero";
 import { Billboard } from "./billboard";
 import { buildNeon } from "./neon";
 import { buildAura } from "./aura";
+import { skyNow, type SkyNow } from "./sky";
+import { buildWeatherBoard } from "./weatherBoard";
 import { buildBenches, type Seat } from "./benches";
 import { playChime, unlockChime } from "./chime";
 import { Online, lookFor } from "./players";
@@ -122,6 +124,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
   const label0 = (k: string) => roster.find((r) => r.key === k)?.label ?? k;
   const [more, setMore] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [, setSkyUi] = useState({ rain: false, wday: 0, hour: 12 });
   // dev pins: only the developer's account (or ?pins in local dev) can drop notes on spots that need fixing
   const isDev = account?.email?.toLowerCase() === CONTACT_EMAIL || (import.meta.env.DEV && new URLSearchParams(location.search).has("pins"));
   const [pins, setPins] = useState<Pin[]>([]);
@@ -163,13 +166,36 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     host.prepend(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.background = skyTexture(env.sky);
     scene.fog = new THREE.Fog(env.fog, 40, 320);
     const hemi = new THREE.HemisphereLight(env.hemiSky, env.hemiGround, env.hemi + 0.35);
     scene.add(hemi);
     const sun = new THREE.DirectionalLight(env.sun, env.sunI + 0.4);
     sun.position.set(...env.sunPos);
     scene.add(sun);
+    // the sky follows the real clock (and the rain days); checked again every 20 s
+    let sky: SkyNow = skyNow(), skyKey = "";
+    const applySky = () => {
+      sky = skyNow();
+      const key = sky.sky.join();
+      if (key !== skyKey) {
+        skyKey = key;
+        (scene.background as THREE.Texture | null)?.dispose?.();
+        scene.background = skyTexture(sky.sky);
+      }
+      (scene.fog as THREE.Fog).color.setHex(sky.fog);
+      (scene.fog as THREE.Fog).far = sky.rain ? 320 : 420 - sky.night * 80;
+      hemi.color.setHex(sky.hemiSky);
+      hemi.groundColor.setHex(sky.hemiGround);
+      sun.color.setHex(sky.sun);
+      sun.intensity = sky.sunI + 0.4;
+      setSkyUi({ rain: sky.rain, wday: sky.wday, hour: sky.hour });
+    };
+    // the little weather screen by the sand-yard arena's south gate
+    const wx = buildWeatherBoard(new THREE.Vector3(6.5, 9.25, 11.5), 0);
+    scene.add(wx.root);
+    const applySkyAll = () => { applySky(); wx.update(sky); };
+    applySkyAll();
+    const skyTimer = setInterval(applySkyAll, 20000);
 
     const citadel = buildArasaka(env);
     scene.add(citadel.root);
@@ -197,6 +223,10 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     scene.add(neon.root);
     const aura = buildAura();
     scene.add(aura.root);
+    // two lights that follow you into whichever Keep room you're in, in that room's colours
+    const roomA = new THREE.PointLight(0xffffff, 0, 22, 1.1), roomB = new THREE.PointLight(0xffffff, 0, 22, 1.1);
+    scene.add(roomA, roomB);
+    let inRoom: (typeof citadel.rooms)[number] | null = null;
     const markers = pinMarkers();
     scene.add(markers.root);
     api.current.showPins = markers.set;
@@ -205,6 +235,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     const board = new Billboard(host, BOARD_AT, BOARD_RY, BOARD_SIZE);
     scene.add(board.root);
     board.solid.forEach((b) => add(b, "solid"));
+    wx.solid.forEach((b) => add(b, "solid"));
     const benches = buildBenches(BOARD_AT, BOARD_RY);
     scene.add(benches.root);
     benches.walk.forEach((b) => add(b, "walk"));
@@ -650,7 +681,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       const t = clock.elapsedTime;
       const S = settingsRef.current;
       applyQuality();
-      rain.visible = S.quality !== "low";
+      rain.visible = S.quality !== "low" && sky.rain;
 
       // hold the big button to run
       if (pressAt >= 0 && performance.now() - pressAt >= 220 && !running) { running = true; jumpRef.current?.classList.add("running"); }
@@ -794,8 +825,15 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       hero.animate(speed, dt, t, !grounded, !!seat);
       online?.send(pos.x, pos.y, pos.z, facing, speed, !grounded, seat ? seat.i : -1);
       citadel.tick(t, dt);
+      const room = citadel.rooms.find((r) => pos.x > r.box.x0 && pos.x < r.box.x1 && pos.z > r.box.z0 && pos.z < r.box.z1 && pos.y > r.box.y0 - 0.5 && pos.y < r.box.y1 - 0.5) ?? null;
+      if (room !== inRoom) {
+        inRoom = room;
+        if (room) { roomA.color.setHex(room.a); roomB.color.setHex(room.b); roomA.position.copy(room.pa); roomB.position.copy(room.pb); }
+      }
+      roomA.intensity = room ? 6 : 0;
+      roomB.intensity = room ? 4.5 : 0;
       neon.tick(t, dt, pos);
-      aura.tick(t, dt);
+      aura.tick(t, dt, sky.night);
 
       // third-person camera behind the hero, pulled in if a wall is in the way.
       // Below zero pitch the camera drops low behind you so you can look up at the sky.
@@ -859,7 +897,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       }
 
       nextFlash -= dt;
-      if (nextFlash <= 0) { flashT = 0; nextFlash = 5 + Math.random() * 8; }
+      if (nextFlash <= 0) { if (sky.rain) flashT = 0; nextFlash = 5 + Math.random() * 8; }
       let f = 0;
       if (flashT >= 0) {
         flashT += dt;
@@ -869,7 +907,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       // indoors you only catch a little of the flash through the windows
       const inside = indoors(pos);
       inAir += ((inside ? 0 : 1) - inAir) * Math.min(1, dt * 3);
-      hemi.intensity = env.hemi + 0.35 + f * 2.5 * (0.15 + 0.85 * inAir);
+      hemi.intensity = sky.hemi + 0.35 + f * 2.5 * (0.15 + 0.85 * inAir);
       if (flashRef.current) flashRef.current.style.opacity = String(f * 0.4 * inAir);
 
       renderer.render(scene, camera);
@@ -877,6 +915,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     });
 
     return () => {
+      clearInterval(skyTimer);
       renderer.setAnimationLoop(null);
       ro.disconnect();
       unsub();
