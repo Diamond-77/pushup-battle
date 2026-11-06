@@ -1029,7 +1029,9 @@ const HW = 76, FRONT = 80, BACK = -100;
 // the land around the walls: flat inside, rolling hills outside
 export function groundAt(x: number, z: number) {
   const d = Math.max(Math.abs(x) - HW, z - FRONT, BACK - z);
-  return d > 8 ? Math.sin(x * 0.03) * Math.cos(z * 0.025) * 10 * Math.min(1, (d - 8) / 60) : 0;
+  // flat along Neon Bamboo Row (the street out of the front gate) and its bamboo groves
+  const street = z > FRONT ? Math.min(1, Math.max(0, (Math.abs(x) - 40) / 20)) : 1;
+  return d > 8 ? Math.sin(x * 0.03) * Math.cos(z * 0.025) * 10 * Math.min(1, (d - 8) / 60) * street : 0;
 }
 export const ARASAKA_SPAWN = new THREE.Vector3(0, 0, FRONT + 34);
 
@@ -1200,7 +1202,7 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
     for (let i = 0; i < 80; i++) {
       const a = rand() * Math.PI * 2, r = 120 + rand() * 90;
       const x = Math.cos(a) * r, z = Math.sin(a) * r * 0.9;
-      if (z < BACK - 10) continue;
+      if (z < BACK - 10 || (z > FRONT && Math.abs(x) < 52)) continue; // not on the bamboo street
       spots.push({ p: new THREE.Vector3(x, 0, z), kind: rand() < 0.8 ? "pine" : "green" });
     }
   for (const [x, z] of [[-30, 66], [30, 66], [-62, 30], [62, 30], [-62, 70], [62, 70]]) spots.push({ p: new THREE.Vector3(x, 0.3, z), kind: "pine" });

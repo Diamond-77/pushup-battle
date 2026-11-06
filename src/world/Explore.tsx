@@ -12,6 +12,8 @@ import { buildNeon } from "./neon";
 import { buildAura } from "./aura";
 import { skyNow, type SkyNow } from "./sky";
 import { buildWeatherBoard } from "./weatherBoard";
+import { buildSpeakers } from "./speakers";
+import { buildStreet } from "./street";
 import { buildBenches, type Seat } from "./benches";
 import { playChime, unlockChime } from "./chime";
 import { Online, lookFor } from "./players";
@@ -40,10 +42,11 @@ const BOARD_RY = 0.35;
 const BOARD_SIZE = 2.2; // a 35 x 20 m screen
 // the citadel's walls: the music fills everything inside and fades out past them
 const CITADEL = { x: 80, front: 88, back: -104 };
-const loudness = (p: THREE.Vector3, screen: THREE.Vector3) => {
-  const near = THREE.MathUtils.clamp(1 - (Math.hypot(p.x - screen.x, p.z - screen.z) - 25) / 70, 0, 1);
+// near: how loud the nearest speaker is (1 right next to one). Anywhere in the citadel you still hear
+// it faintly, fading out past the walls.
+const loudness = (p: THREE.Vector3, near: number) => {
   const out = Math.max(Math.abs(p.x) - CITADEL.x, p.z - CITADEL.front, CITADEL.back - p.z, 0);
-  return Math.max(near, 0.6 * THREE.MathUtils.clamp(1 - out / 60, 0, 1));
+  return Math.max(near, 0.18 * THREE.MathUtils.clamp(1 - out / 60, 0, 1));
 };
 
 const MODES = [
@@ -66,8 +69,8 @@ const GUEST_NAME = new URLSearchParams(location.search).get("name") || "Player";
 export type Me = { id: string; name: string; email?: string | null };
 
 /* ----- settings, kept on this phone ----- */
-type Settings = { speed: number; look: number; stick: "smooth" | "snappy"; follow: boolean; quality: "low" | "medium" | "high"; invert: boolean };
-const DEFAULTS: Settings = { speed: 1, look: 1, stick: "smooth", follow: false, quality: "medium", invert: false };
+type Settings = { speed: number; look: number; stick: "smooth" | "snappy"; follow: boolean; quality: "low" | "medium" | "high"; invert: boolean; view: "first" | "third" };
+const DEFAULTS: Settings = { speed: 1, look: 1, stick: "smooth", follow: false, quality: "medium", invert: false, view: "first" };
 const SETTINGS_KEY = "pb_explore_settings_v1";
 function loadSettings(): Settings {
   try {
@@ -236,6 +239,13 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     scene.add(board.root);
     board.solid.forEach((b) => add(b, "solid"));
     wx.solid.forEach((b) => add(b, "solid"));
+    const street = buildStreet();
+    scene.add(street.root);
+    street.solid.forEach((b) => add(b, "solid"));
+    street.walk.forEach((b) => add(b, "walk"));
+    const speakers = buildSpeakers(BOARD_AT, BOARD_RY);
+    scene.add(speakers.root);
+    speakers.solid.forEach((b) => add(b, "solid"));
     const benches = buildBenches(BOARD_AT, BOARD_RY);
     scene.add(benches.root);
     benches.walk.forEach((b) => add(b, "walk"));
@@ -404,7 +414,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     if (import.meta.env.DEV) (window as unknown as { __ex: unknown }).__ex = { pos, floor: floorAt, lifts: col.lifts, face: (a: number) => (facing = a), yaw: (a: number) => (yaw = a, pitch = 0.15), doors: () => col.doors.map((d) => d.open) };
 
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1500);
-    let yaw = 0, pitch = 0.3; // camera sits behind (at +z of) the hero to start
+    let yaw = 0, pitch = settingsRef.current.view === "first" ? 0.02 : 0.3; // camera sits behind (at +z of) the hero to start
     api.current.here = () => ({ x: pos.x, y: pos.y, z: pos.z, yaw, pitch });
     api.current.goTo = (p) => { if (seat) return; pos.set(p.x, p.y + 0.05, p.z); vy = 0; yaw = p.yaw; pitch = p.pitch; facing = p.yaw + Math.PI; };
     const camPos = new THREE.Vector3();
@@ -556,6 +566,8 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     let seat: Seat | null = null, nearSeat: Seat | null = null;
     const sitDown = (st: Seat) => {
       seat = st;
+      yaw = st.facing - Math.PI; // look the way the seat faces (at the big screen)
+      pitch = -0.05;
       speed = 0;
       uiKey = "";
       setChatMsgs([]);
@@ -627,7 +639,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       const r = host.getBoundingClientRect();
       ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
-      if (ray.intersectObject(hero.root, true).length) call();
+      if (hero.root.visible && ray.intersectObject(hero.root, true).length) call();
     };
 
     const kd = (e: KeyboardEvent) => {
@@ -703,7 +715,10 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       if (seat && amt > 0.3) standUp(); // push the stick to get up
       const wantSpeed = amt === 0 || seat ? 0 : (run ? RUN : WALK * (0.35 + 0.65 * amt)) * S.speed;
       speed += (wantSpeed - speed) * Math.min(1, dt * (grounded ? 10 : 2.5));
-      if (amt > 0 && !seat) {
+      const fp = S.view === "first";
+      if (fp && !seat) facing = yaw + Math.PI; // in first person your body turns with your eyes
+      const heading = fp && amt > 0 ? Math.atan2(move.x, move.z) : facing;
+      if (amt > 0 && !seat && !fp) {
         let d = Math.atan2(move.x, move.z) - facing;
         d = Math.atan2(Math.sin(d), Math.cos(d));
         facing += d * Math.min(1, dt * (S.stick === "snappy" ? 20 : 13));
@@ -711,8 +726,8 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       // move in small sub-steps so fast running never skips through a wall
       const total = speed * dt, n = Math.max(1, Math.ceil(total / (R * 0.7)));
       for (let i = 0; i < n; i++) {
-        pos.x += (Math.sin(facing) * total) / n;
-        pos.z += (Math.cos(facing) * total) / n;
+        pos.x += (Math.sin(heading) * total) / n;
+        pos.z += (Math.cos(heading) * total) / n;
         collide(pos);
         for (const p of people) {
           if (!p.hero.root.visible) continue;
@@ -811,7 +826,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       else if (nearSeat) actions.push("sit");
       if (boardD < RADIO_RANGE) actions.push("music");
       if (near.length) actions.push("more");
-      const loud = loudness(pos, board.center);
+      const loud = loudness(pos, speakers.loudAt(pos));
       const hear = loud > 0.05;
       const row = seat ? seat.row : -1;
       const key = actions.join() + (nearDoor && nearDoor.target > 0.5 ? "o" : "") + near.map((p) => p.name).join() + "|" + target + hear + row;
@@ -838,21 +853,24 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       // third-person camera behind the hero, pulled in if a wall is in the way.
       // Below zero pitch the camera drops low behind you so you can look up at the sky.
       head.set(pos.x, pos.y + 1.55, pos.z);
-      const dist = 5.4;
+      const dist = fp ? 0 : 5.4;
       dir.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+      hero.root.visible = !fp;
+      // first person: eyes at head height (lower when sitting), a little forward of the neck
+      if (fp) head.set(pos.x - dir.x * 0.15, pos.y + (seat ? 1.2 : 1.6), pos.z - dir.z * 0.15);
       let reach = dist;
       for (let s = 0.4; s <= dist; s += 0.3) {
         probe.copy(head).addScaledVector(dir, s);
         if (insideSolid(probe)) { reach = Math.max(0.6, s - 0.4); break; }
       }
       camPos.copy(head).addScaledVector(dir, reach);
-      camPos.y = Math.max(camPos.y, floorAt(camPos.x, camPos.z, pos.y + 1) + 0.3);
-      if (first) { camera.position.copy(camPos); first = false; } // no swoop in from the middle of the citadel
+      if (!fp) camPos.y = Math.max(camPos.y, floorAt(camPos.x, camPos.z, pos.y + 1) + 0.3);
+      if (first || fp) { camera.position.copy(camPos); first = false; } // no swoop in from the middle of the citadel
       else camera.position.lerp(camPos, Math.min(1, dt * 16));
       look3.copy(camPos).addScaledVector(dir, -20);
       camera.lookAt(look3);
 
-      tag(youRef.current, pos, seat ? 1.7 : 2.05);
+      if (fp) { if (youRef.current) youRef.current.style.opacity = "0"; } else tag(youRef.current, pos, seat ? 1.7 : 2.05);
       for (const p of people) tag(tagRefs.current[p.name], p.pos, (online?.peers.get(p.name)?.seat ?? -1) >= 0 ? 1.7 : 2.05);
 
       // call pings: where the caller is, shown through walls, pinned to the screen edge when out of view
@@ -911,7 +929,9 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       if (flashRef.current) flashRef.current.style.opacity = String(f * 0.4 * inAir);
 
       renderer.render(scene, camera);
-      board.tick(camera, host.clientWidth, host.clientHeight, loudness(pos, board.center), radio.elapsed(), dt);
+      speakers.tick(t, !!radio.state.now);
+      street.tick(t);
+      board.tick(camera, host.clientWidth, host.clientHeight, loudness(pos, speakers.loudAt(pos)), radio.elapsed(), dt);
     });
 
     return () => {
@@ -1361,6 +1381,13 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
               <div className="ex-seg">
                 <button className={settings.stick === "smooth" ? "on" : ""} onClick={() => set("stick", "smooth")}>Smooth</button>
                 <button className={settings.stick === "snappy" ? "on" : ""} onClick={() => set("stick", "snappy")}>Snappy</button>
+              </div>
+            </div>
+            <div className="ex-row">
+              <span>Camera</span>
+              <div className="ex-seg">
+                <button className={settings.view === "first" ? "on" : ""} onClick={() => set("view", "first")}>First person</button>
+                <button className={settings.view === "third" ? "on" : ""} onClick={() => set("view", "third")}>Third person</button>
               </div>
             </div>
             <div className="ex-row">
