@@ -13,6 +13,8 @@ import { buildAura } from "./aura";
 import { buildBenches, type Seat } from "./benches";
 import { playChime, unlockChime } from "./chime";
 import { Online, lookFor } from "./players";
+import { pinMarkers, loadPins, addPin, deletePin, updatePin, pinsText, type Pin } from "./pins";
+import { CONTACT_EMAIL } from "../config";
 import { Radio, videoId, videoTitle, thumb, playlistId, playlistSongs, search, canSearch, type RadioState, type Found } from "./music";
 
 // Walk around the Arasaka citadel in third person (landscape, MLBB-style controls):
@@ -59,7 +61,7 @@ const PEOPLE = [
 // short display name over your head, like "DIAMON (you)". Signed in it's your username; without, ?name=Diamond sets it.
 const shortName = (full: string) => full.trim().split(/\s+/)[0].slice(0, 6).toUpperCase();
 const GUEST_NAME = new URLSearchParams(location.search).get("name") || "Player";
-export type Me = { id: string; name: string };
+export type Me = { id: string; name: string; email?: string | null };
 
 /* ----- settings, kept on this phone ----- */
 type Settings = { speed: number; look: number; stick: "smooth" | "snappy"; follow: boolean; quality: "low" | "medium" | "high"; invert: boolean };
@@ -77,7 +79,7 @@ type Action = "door" | "battle" | "music" | "sit" | "chat" | "more";
 type Ui = { actions: Action[]; doorOpen: boolean; near: string[]; target: string | null; hear: boolean; row: number };
 type ChatMsg = { key: string; name: string; text: string; mine: boolean; at: number };
 // what the buttons call inside the 3D loop
-type Api = { jumpDown: () => void; jumpUp: () => void; act: (a: Action) => void; lock: (name: string) => void; challenged: (name: string | null) => void; wave: () => void; listen: (on: boolean) => void; progress: () => { t: number; d: number }; challenge: (key: string, mode: string) => boolean; answer: (key: string, mode: string, ok: boolean) => boolean; chat: (text: string) => void };
+type Api = { jumpDown: () => void; jumpUp: () => void; act: (a: Action) => void; lock: (name: string) => void; challenged: (name: string | null) => void; wave: () => void; listen: (on: boolean) => void; progress: () => { t: number; d: number }; challenge: (key: string, mode: string) => boolean; answer: (key: string, mode: string, ok: boolean) => boolean; chat: (text: string) => void; here: () => { x: number; y: number; z: number; yaw: number; pitch: number }; goTo: (p: Pin) => void; showPins: (p: Pin[]) => void };
 
 export default function Explore({ onBack, me: account }: { onBack: () => void; me?: Me | null }) {
   const myName = shortName(account?.name || GUEST_NAME);
@@ -89,7 +91,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
   const flashRef = useRef<HTMLDivElement>(null);
   const youRef = useRef<HTMLDivElement>(null);
   const tagRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const api = useRef<Api>({ jumpDown: () => {}, jumpUp: () => {}, act: () => {}, lock: () => {}, challenged: () => {}, wave: () => {}, listen: () => {}, progress: () => ({ t: 0, d: 0 }), challenge: () => false, answer: () => false, chat: () => {} });
+  const api = useRef<Api>({ jumpDown: () => {}, jumpUp: () => {}, act: () => {}, lock: () => {}, challenged: () => {}, wave: () => {}, listen: () => {}, progress: () => ({ t: 0, d: 0 }), challenge: () => false, answer: () => false, chat: () => {}, here: () => ({ x: 0, y: 0, z: 0, yaw: 0, pitch: 0 }), goTo: () => {}, showPins: () => {} });
   const radioRef = useRef<Radio | null>(null);
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const settingsRef = useRef(settings);
@@ -120,6 +122,14 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
   const label0 = (k: string) => roster.find((r) => r.key === k)?.label ?? k;
   const [more, setMore] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // dev pins: only the developer's account (or ?pins in local dev) can drop notes on spots that need fixing
+  const isDev = account?.email?.toLowerCase() === CONTACT_EMAIL || (import.meta.env.DEV && new URLSearchParams(location.search).has("pins"));
+  const [pins, setPins] = useState<Pin[]>([]);
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pinNote, setPinNote] = useState("");
+  const [pinBusy, setPinBusy] = useState(false);
+  useEffect(() => { if (isDev) loadPins().then(setPins); }, [isDev]);
+  useEffect(() => { api.current.showPins(isDev ? pins : []); }, [pins, isDev]);
   const clan = clanById("arasaka")!;
 
   useEffect(() => {
@@ -187,6 +197,9 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     scene.add(neon.root);
     const aura = buildAura();
     scene.add(aura.root);
+    const markers = pinMarkers();
+    scene.add(markers.root);
+    api.current.showPins = markers.set;
 
     /* ----- the giant screen and its radio ----- */
     const board = new Billboard(host, BOARD_AT, BOARD_RY, BOARD_SIZE);
@@ -361,6 +374,8 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
 
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1500);
     let yaw = 0, pitch = 0.3; // camera sits behind (at +z of) the hero to start
+    api.current.here = () => ({ x: pos.x, y: pos.y, z: pos.z, yaw, pitch });
+    api.current.goTo = (p) => { if (seat) return; pos.set(p.x, p.y + 0.05, p.z); vy = 0; yaw = p.yaw; pitch = p.pitch; facing = p.yaw + Math.PI; };
     const camPos = new THREE.Vector3();
 
     let quality = "";
@@ -964,6 +979,24 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       setAdding(false);
     }
   };
+  const dropPin = async () => {
+    const note = pinNote.trim();
+    if (!note || pinBusy) return;
+    setPinBusy(true);
+    const p = await addPin({ ...api.current.here(), note });
+    setPins((l) => [...l, p]);
+    setPinNote("");
+    setPinBusy(false);
+    setToast(p.id.startsWith("local-") ? "Pinned on this phone only. Run world-pins.sql in Supabase so pins are saved for good." : `Pin #${pins.length + 1} saved.`);
+  };
+  const copyPins = async () => {
+    try {
+      await navigator.clipboard.writeText(pinsText(pins));
+      setToast("All pins copied. Paste them to Claude.");
+    } catch {
+      setToast("Couldn't copy here. Long-press the list to select it instead.");
+    }
+  };
   const isLink = !!(videoId(link) || playlistId(link));
   const pointed = incoming ?? ui.target; // who the red triangle points at
 
@@ -996,6 +1029,12 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
           <ClanLogo clan={clan} size={30} />
           <span>Arasaka</span>
         </div>
+        {isDev && (
+          <button className="wm-round ex-pin-btn" onClick={() => setPinOpen((o) => !o)} aria-label="Dev pins">
+            <svg viewBox="0 0 24 24"><path d="M12 22s-7-7.2-7-12a7 7 0 1 1 14 0c0 4.8-7 12-7 12Z" /><circle cx="12" cy="10" r="2.6" /></svg>
+            {pins.filter((p) => !p.done).length > 0 && <i>{pins.filter((p) => !p.done).length}</i>}
+          </button>
+        )}
         <button className="wm-round ex-gear" onClick={() => setShowSettings(true)} aria-label="Settings">
           <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" /></svg>
         </button>
@@ -1079,6 +1118,33 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
           </div>
         )}
       </div>
+
+      {pinOpen && (
+        <div className="ex-pins" onPointerDown={(e) => e.stopPropagation()}>
+          <div className="ex-pins-head">
+            <b>Dev pins</b>
+            <button onClick={() => setPinOpen(false)} aria-label="Close">✕</button>
+          </div>
+          <p className="ex-pins-tip">Stand where the problem is, look at it, write what's wrong and tap Pin here.</p>
+          <textarea value={pinNote} onChange={(e) => setPinNote(e.target.value)} placeholder="e.g. stair floats, room too dark, sword looks bad" rows={2} />
+          <div className="ex-pins-row">
+            <button className="ex-pins-go" disabled={!pinNote.trim() || pinBusy} onClick={dropPin}>Pin here</button>
+            <button className="ex-pins-copy" disabled={!pins.length} onClick={copyPins}>Copy all</button>
+          </div>
+          <ol className="ex-pins-list">
+            {pins.map((p, i) => (
+              <li key={p.id} className={p.done ? "done" : ""}>
+                <span className="n">{i + 1}</span>
+                <span className="t">{p.note}</span>
+                <button onClick={() => { api.current.goTo(p); setPinOpen(false); }}>Go</button>
+                <button onClick={() => { updatePin(p.id, { done: !p.done }); setPins((l) => l.map((q) => (q.id === p.id ? { ...q, done: !q.done } : q))); }}>{p.done ? "Undo" : "Fixed"}</button>
+                <button onClick={() => { if (confirm("Delete this pin?")) { deletePin(p.id); setPins((l) => l.filter((q) => q.id !== p.id)); } }}>✕</button>
+              </li>
+            ))}
+            {!pins.length && <li className="empty">No pins yet.</li>}
+          </ol>
+        </div>
+      )}
 
       {more && (
         <div className="ex-modes small">

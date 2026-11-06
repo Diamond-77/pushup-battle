@@ -418,3 +418,28 @@
 .yt-like.on { background: #f1f1f1; color: #0f0f0f; }
 .yt-add { width: 34px; height: 34px; padding: 0; justify-content: center; font-size: 1.2rem; border-radius: 50%; }
 .yt-add.on { background: #f1f1f1; color: #0f0f0f; font-size: 0.9rem; }
+
+/* dev pins (developer account only) */
+.ex-pin-btn { margin-left: auto; width: 40px; height: 40px; position: relative; }
+.ex-pin-btn + .ex-gear { margin-left: 8px; }
+.ex-pin-btn svg { width: 20px; height: 20px; fill: none; stroke: #ff5b78; stroke-width: 2; }
+.ex-pin-btn i { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; background: #ff2d55; color: #fff; font: 700 11px/18px Inter, sans-serif; font-style: normal; text-align: center; padding: 0 4px; }
+.ex-pins { position: absolute; top: 64px; right: 10px; left: 10px; max-width: 420px; margin-left: auto; max-height: calc(100% - 140px); display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: #15121a; border: 2px solid #6b4429; color: #f3ead8; z-index: 40; font: 15px/1.35 Inter, sans-serif; }
+.ex-pins-head { display: flex; align-items: center; justify-content: space-between; font-size: 17px; }
+.ex-pins-head button { background: none; border: 0; color: #f3ead8; font-size: 20px; padding: 4px 8px; }
+.ex-pins-tip { margin: 0; opacity: 0.75; font-size: 13px; }
+.ex-pins textarea { width: 100%; box-sizing: border-box; border-radius: 10px; border: 1px solid #4a3a2a; background: #0c0a0f; color: #fff; padding: 8px 10px; font: 16px Inter, sans-serif; resize: none; }
+.ex-pins-row { display: flex; gap: 8px; }
+.ex-pins-row button { flex: 1; height: 42px; border-radius: 10px; border: 0; font: 700 15px Inter, sans-serif; }
+.ex-pins-go { background: #ff2d55; color: #fff; }
+.ex-pins-copy { background: #2b2433; color: #f3ead8; }
+.ex-pins-row button:disabled { opacity: 0.4; }
+.ex-pins-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; user-select: text; -webkit-user-select: text; }
+.ex-pins-list li { display: flex; align-items: center; gap: 6px; background: #201a26; border-radius: 10px; padding: 6px 8px; }
+.ex-pins-list li.done { opacity: 0.55; }
+.ex-pins-list li.done .n { background: #2fbf71; }
+.ex-pins-list .n { flex: none; width: 24px; height: 24px; border-radius: 12px; background: #ff2d55; color: #fff; font-weight: 700; font-size: 13px; display: grid; place-items: center; }
+.ex-pins-list .t { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.ex-pins-list li button { flex: none; height: 32px; padding: 0 9px; border-radius: 8px; border: 0; background: #33293d; color: #f3ead8; font: 600 13px Inter, sans-serif; }
+.ex-pins-list .empty { opacity: 0.6; justify-content: center; }
+@media (max-height: 460px) { .ex-pins { top: 58px; max-height: calc(100% - 66px); } .ex-pins-tip { display: none; } }

@@ -16,7 +16,7 @@ function World() {
   if (recovering) return <main className="app"><NewPasswordScreen onDone={doneRecovering} /></main>;
   if (!session) return <main className="app"><div className="screen"><AuthScreen /></div></main>;
   if (!profile) return <main className="app"><ProfileSetup userId={session.user.id} onDone={setProfile} /></main>;
-  return <WorldMap me={{ id: profile.id, name: profile.username }} />;
+  return <WorldMap me={{ id: profile.id, name: profile.username, email: session.user.email }} />;
 }
 
 createRoot(document.getElementById("root")!).render(
