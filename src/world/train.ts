@@ -135,14 +135,14 @@ export function buildTrain(groundY: (x: number, z: number, top: number) => numbe
   const body = new THREE.MeshPhongMaterial({ color: 0x23262e, shininess: 120, specular: 0x8a98aa, emissive: 0x0a0b0e });
   const red = new THREE.MeshBasicMaterial({ color: 0xff2a3a, toneMapped: false });
   const white = new THREE.MeshBasicMaterial({ color: 0xfff2e0, toneMapped: false });
-  const glass = new THREE.MeshBasicMaterial({ color: 0x5a86b0, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide });
+  const glass = new THREE.MeshBasicMaterial({ color: 0x5a86b0, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide });
   // the car windows: "liquid glass". A faint clear tint you can see straight through, plus a layer that
   // adds a live reflection of the world on top (a small cube snapshot taken near the train every few
   // frames), so neon, sky and walls slide across the glass as it moves
-  const mirrorRT = new THREE.WebGLCubeRenderTarget(128, { type: THREE.HalfFloatType });
+  const mirrorRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType });
   const mirrorCam = new THREE.CubeCamera(0.5, 500, mirrorRT);
-  const carGlass = new THREE.MeshBasicMaterial({ color: 0xbfe2ff, transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide });
-  const carShine = new THREE.MeshBasicMaterial({ color: 0x000000, envMap: mirrorRT.texture, combine: THREE.MixOperation, reflectivity: 0.35, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const carGlass = new THREE.MeshBasicMaterial({ color: 0xbfe2ff, transparent: true, opacity: 0.035, depthWrite: false, side: THREE.DoubleSide });
+  const carShine = new THREE.MeshBasicMaterial({ color: 0x000000, envMap: mirrorRT.texture, combine: THREE.MixOperation, reflectivity: 0.1, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
   const floorM = new THREE.MeshLambertMaterial({ color: 0x3a3d46, emissive: 0x2a2d36 });
   const seatM = new THREE.MeshLambertMaterial({ color: 0x7e1c17, emissive: 0x4a0e0a });
   const lining = new THREE.MeshBasicMaterial({ color: 0x3a4252 });
@@ -591,22 +591,33 @@ export function buildTrain(groundY: (x: number, z: number, top: number) => numbe
       return;
     }
   }
-  // refresh the window reflections from the middle of the car nearest the viewer (the train itself
-  // is hidden for the snapshot, so it doesn't reflect its own insides)
-  function reflect(renderer: THREE.WebGLRenderer, scene: THREE.Scene, eye: THREE.Vector3) {
-    let best = cars[0].state, bd = Infinity;
-    for (const { state: c } of cars) { const d = c.pos.distanceToSquared(eye); if (d < bd) { bd = d; best = c; } }
-    if (bd > 120 * 120) return;
-    mirrorCam.position.set(best.pos.x, best.pos.y + 1.6, best.pos.z);
+  // the window reflections: one snapshot of the surroundings from a fixed spot high over the citadel
+  // (the train hidden), refreshed now and then for the sky. Fixed, so the reflection only slides
+  // smoothly as you turn, never jumps
+  function reflect(renderer: THREE.WebGLRenderer, scene: THREE.Scene) {
+    mirrorCam.position.set(0, 30, 30);
     mirrorCam.updateMatrixWorld();
-    const vis = cars.map((c) => c.g.visible);
-    cars.forEach((c) => (c.g.visible = false));
+    root.visible = false;
     mirrorCam.update(renderer, scene);
-    cars.forEach((c, i) => (c.g.visible = vis[i]));
+    root.visible = true;
+  }
+  // third person in a car: keep the camera inside the car the player stands or sits in
+  function keepCam(p: THREE.Vector3, cam: THREE.Vector3) {
+    for (const { state: c } of cars) {
+      const q = inCar(c, p.x, p.z, p.y);
+      if (!q) continue;
+      const k = local(c, cam.x, cam.z);
+      const lx = THREE.MathUtils.clamp(k.lx, -(CAR_W / 2 - 0.3), CAR_W / 2 - 0.3), lz = THREE.MathUtils.clamp(k.lz, -(CAR_L / 2 - 0.3), CAR_L / 2 - 0.3);
+      world(c, lx, lz, cam);
+      const fy = floorY(c, lz);
+      cam.y = THREE.MathUtils.clamp(cam.y, fy + 0.5, fy + 2.4);
+      return true;
+    }
+    return false;
   }
   // screen doors are shut unless the train stands at that platform with its doors open
   const shut = (st: number) => !(st === current && openNow > 0.5);
 
-  return { debug: { events, passes, P, stations: stations.map((x) => x.name) }, root, solid, walk, ramps, lifts, gates, shut, update, floorAt, carry, confine, remember, riding: () => rider !== null, drop: () => { rider = null; }, cars: () => cars.map((c) => c.state), seats, reflect };
+  return { debug: { events, passes, P, stations: stations.map((x) => x.name) }, root, solid, walk, ramps, lifts, gates, shut, update, floorAt, carry, confine, remember, riding: () => rider !== null, drop: () => { rider = null; }, cars: () => cars.map((c) => c.state), seats, reflect, keepCam };
 }
 const liftMeshes: { lift: Lift; plat: THREE.Mesh }[] = [];

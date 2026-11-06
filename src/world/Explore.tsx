@@ -924,7 +924,10 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       }
       camPos.copy(head).addScaledVector(dir, reach);
       if (!fp) camPos.y = Math.max(camPos.y, floorAt(camPos.x, camPos.z, pos.y + 1) + 0.3);
-      if (first || fp) { camera.position.copy(camPos); first = false; } // no swoop in from the middle of the citadel
+      // in a train car the camera stays inside the car, and moves with it (no lag that leaves it outside)
+      const inCar = !fp && train.keepCam(pos, camPos);
+      if (inCar && camPos.distanceTo(head) < 1.1) hero.root.visible = false; // squeezed against the hero: look past them
+      if (first || fp || inCar) { camera.position.copy(camPos); first = false; } // no swoop in from the middle of the citadel
       else camera.position.lerp(camPos, Math.min(1, dt * 16));
       look3.copy(camPos).addScaledVector(dir, -20);
       camera.lookAt(look3);
@@ -989,8 +992,8 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       if (flashRef.current) flashRef.current.style.opacity = String(f * 0.4 * inAir);
 
       if (++stencilTick % 90 === 0) wipeStencil(); // characters and players that arrived since
-      // the train's glass reflections: a fresh snapshot every few frames (not on low graphics)
-      if (S.quality !== "low" && stencilTick % (S.quality === "high" ? 6 : 15) === 0) train.reflect(renderer, scene, camera.position);
+      // the train's glass reflections: a snapshot once loaded, refreshed about every 20 s (not on low graphics)
+      if (S.quality !== "low" && stencilTick % 1200 === 30) train.reflect(renderer, scene);
       renderer.render(scene, camera);
       speakers.tick(t, !!radio.state.now);
       street.tick();
