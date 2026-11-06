@@ -354,6 +354,9 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
       const n = Math.max(1, Math.round(len / BAY));
       for (let i = 0; i <= n; i++) {
         const q = -len / 2 + (i * len) / n;
+        // no pillar in the way of a big opening (the train runs through those)
+        const side: Side = along === "x" ? (fixed > 0 ? "z+" : "z-") : fixed > 0 ? "x+" : "x-", big = spec(side);
+        if (big?.h && Math.abs(q - (big.at ?? 0)) < big.w / 2 + 0.6) continue;
         put(c, new THREE.CylinderGeometry(0.28, 0.32, H, 8), c.m.pillar, M(along === "x" ? q : fixed, y + H / 2, along === "x" ? fixed : q), false);
         if (f === 0) solidBox(c, 0.6, H, 0.6, along === "x" ? q : fixed, y, along === "x" ? fixed : q);
       }
@@ -1313,7 +1316,7 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
       const a = rand() * Math.PI * 2, r = 120 + rand() * 90;
       const x = Math.cos(a) * r, z = Math.sin(a) * r * 0.9;
       if (z < BACK - 10 || (z > FRONT && Math.abs(x) < 52)) continue; // not on the bamboo street
-      if ((z > FRONT - 4 && z < FRONT + 22) || (Math.abs(Math.abs(x) - 92) < 14 && z < FRONT + 22)) continue; // nor on the Thunder Line
+      if ((z > FRONT - 4 && z < FRONT + 30) || (Math.abs(Math.abs(x) - 92) < 14 && z < FRONT + 22)) continue; // nor on the Thunder Line
       spots.push({ p: new THREE.Vector3(x, 0, z), kind: rand() < 0.75 ? "pine" : "maple" });
     }
   for (const [x, z, m] of [[-30, 66, 1], [30, 66, 1], [-62, 30, 0], [62, 30, 0], [-62, 70, 0], [62, 70, 0]]) spots.push({ p: new THREE.Vector3(x, 0.3, z), kind: m ? "maple" : "pine" });

@@ -12,10 +12,11 @@ import type { Box, Lift, Ramp } from "../palace/arasaka";
 const CAR_L = 7.6, CAR_W = 3, GAP = 0.5, PITCH = CAR_L + GAP, CARS = 7, TRAIN_L = CARS * PITCH - GAP;
 const CRUISE = 15, PASS = 8, ACC = 1.3, DWELL = 15, DT = 0.1;
 const DOOR_Z = 1.9, DOOR_W = 1.6, DOOR_H = 2.3; // two doors a side, each 1.9 m from the car's middle
-const FRONT_Z = 88, SIDE_X = 92, BACK_Z = -70, R = 10;
+const FRONT_Z = 95, SIDE_X = 92, BACK_Z = -70, R = 10;
 const LOW = 12, HIGH = 34.29, KEEP_Y = 36.22, KEEP_HALF = 14.65, TOWER = [31.8, 44.2];
 
 type Station = { name: string; s: number; side: -1 | 1 | 0; lift: boolean; laps: number[] }; // side: which side of the train the platform is on (-1 left, 0 both)
+export type TrainSeat = { i: number; row: number; pos: THREE.Vector3; facing: number; car: number; lx: number; lz: number; face: number };
 export type TrainCar = { pos: THREE.Vector3; yaw: number; pitch: number; open: number; i: number };
 
 /* ----- the line: a rounded rectangle, run clockwise seen from above (front +x, east side -z, back -x, west side +z) ----- */
@@ -135,9 +136,16 @@ export function buildTrain(groundY: (x: number, z: number, top: number) => numbe
   const red = new THREE.MeshBasicMaterial({ color: 0xff2a3a, toneMapped: false });
   const white = new THREE.MeshBasicMaterial({ color: 0xfff2e0, toneMapped: false });
   const glass = new THREE.MeshBasicMaterial({ color: 0x5a86b0, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide });
-  const floorM = new THREE.MeshLambertMaterial({ color: 0x3a3d46, emissive: 0x1a1c22 });
-  const seatM = new THREE.MeshLambertMaterial({ color: 0x7e1c17, emissive: 0x2a0806 });
-  const lining = new THREE.MeshBasicMaterial({ color: 0x2a2f3a });
+  // the car windows: "liquid glass". A faint clear tint you can see straight through, plus a layer that
+  // adds a live reflection of the world on top (a small cube snapshot taken near the train every few
+  // frames), so neon, sky and walls slide across the glass as it moves
+  const mirrorRT = new THREE.WebGLCubeRenderTarget(128, { type: THREE.HalfFloatType });
+  const mirrorCam = new THREE.CubeCamera(0.5, 500, mirrorRT);
+  const carGlass = new THREE.MeshBasicMaterial({ color: 0xbfe2ff, transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide });
+  const carShine = new THREE.MeshBasicMaterial({ color: 0x000000, envMap: mirrorRT.texture, combine: THREE.MixOperation, reflectivity: 0.35, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const floorM = new THREE.MeshLambertMaterial({ color: 0x3a3d46, emissive: 0x2a2d36 });
+  const seatM = new THREE.MeshLambertMaterial({ color: 0x7e1c17, emissive: 0x4a0e0a });
+  const lining = new THREE.MeshBasicMaterial({ color: 0x3a4252 });
   const stone = new THREE.MeshLambertMaterial({ color: 0x2c2b31 });
   const steel = new THREE.MeshPhongMaterial({ color: 0x1a1c22, shininess: 60 });
 
@@ -193,7 +201,7 @@ export function buildTrain(groundY: (x: number, z: number, top: number) => numbe
     // roof: flat ceiling plus a low rounded top, a light strip inside
     bx("body", W, 0.12, L, 0, 2.7, 0);
     parts.body.push(new THREE.CylinderGeometry(hw, hw, L, 16, 1, false, -Math.PI / 2, Math.PI).rotateX(Math.PI / 2).scale(1, 0.3, 1).translate(0, 2.8, 0));
-    bx("white", 0.5, 0.04, L - 1, 0, 2.64, 0);
+    bx("white", 0.8, 0.04, L - 1, 0, 2.64, 0);
     // a lit lining inside, under the windows
     for (const sx of [-1, 1]) for (const [z0, z1] of segs) bx("lining", 0.02, 0.9, z1 - z0 - 0.2, sx * (hw - 0.12), 0.05, (z0 + z1) / 2);
     for (const sx of [-1, 1]) bx("red", 0.06, 0.06, L, sx * (hw - 0.15), 3.0, 0);
@@ -203,10 +211,13 @@ export function buildTrain(groundY: (x: number, z: number, top: number) => numbe
       bx("body", (W - 1.2) / 2, 2.7, 0.1, hw - (W - 1.2) / 4, 0, sz * (L / 2 - 0.05));
       bx("body", 1.2, 0.5, 0.1, 0, 2.2, sz * (L / 2 - 0.05));
     }
-    // seats along the walls in the middle section
+    // seats along the walls in the middle section (three places a side, see SEATS), with a cushion
+    // split per place and a backrest against the wall
     for (const sx of [-1, 1]) {
-      bx("seat", 0.55, 0.45, 2, sx * (hw - 0.4), 0, 0);
-      bx("seat", 0.12, 0.6, 2, sx * (hw - 0.14), 0.45, 0);
+      bx("body", 0.55, 0.3, 2.1, sx * (hw - 0.4), 0, 0);
+      for (const lz of [-0.66, 0, 0.66]) bx("seat", 0.55, 0.14, 0.6, sx * (hw - 0.4), 0.3, lz);
+      bx("seat", 0.12, 0.62, 2.1, sx * (hw - 0.16), 0.44, 0);
+      bx("red", 0.04, 0.04, 2.1, sx * (hw - 0.68), 0.43, 0);
     }
     // bogies, with glowing red hub rings
     for (const sz of [-1, 1]) {
@@ -228,8 +239,10 @@ export function buildTrain(groundY: (x: number, z: number, top: number) => numbe
       for (const sx of [-1, 1]) bx("white", 0.5, 0.18, 0.05, sx * 0.85, 0.2, L / 2 + 2.42);
       bx("red", W - 0.4, 0.08, 0.05, 0, 0.55, L / 2 + 2.42);
     }
-    const mats = { body, red, white, glass, floor: floorM, seat: seatM, lining };
-    return (Object.keys(parts) as (keyof typeof parts)[]).map((k) => ({ geo: mergeGeometries(parts[k]), mat: mats[k] }));
+    const mats = { body, red, white, glass: carGlass, floor: floorM, seat: seatM, lining };
+    const out = (Object.keys(parts) as (keyof typeof parts)[]).map((k) => ({ geo: mergeGeometries(parts[k]), mat: mats[k] as THREE.Material }));
+    out.push({ geo: out.find((o) => o.mat === carGlass)!.geo, mat: carShine });
+    return out;
   };
   const plain = carGeo(false), head = carGeo(true);
   const doorGeo = new THREE.BoxGeometry(0.06, DOOR_H, DOOR_W);
@@ -251,6 +264,12 @@ export function buildTrain(groundY: (x: number, z: number, top: number) => numbe
     root.add(g);
     cars.push({ g, doors, state: { pos: new THREE.Vector3(), yaw: 0, pitch: 0, open: 0, i } });
   }
+
+  /* ----- seats you can sit on: three a side in every car, facing across the aisle ----- */
+  const SEATS: { lx: number; lz: number; face: number }[] = [];
+  for (const sx of [-1, 1]) for (const lz of [-0.66, 0, 0.66]) SEATS.push({ lx: sx * (CAR_W / 2 - 0.62), lz, face: -sx * Math.PI / 2 });
+  const seats: TrainSeat[] = [];
+  for (let i = 0; i < CARS; i++) SEATS.forEach((q, k) => seats.push({ i: 1000 + i * SEATS.length + k, row: 100 + i, pos: new THREE.Vector3(), facing: 0, car: i, lx: q.lx, lz: q.lz, face: q.face }));
 
   /* ----- stations ----- */
   const boards: { st: number; tex: THREE.CanvasTexture; canvas: HTMLCanvasElement; last: string }[] = [];
@@ -467,6 +486,12 @@ export function buildTrain(groundY: (x: number, z: number, top: number) => numbe
         d.position.set(side * (CAR_W / 2 + 0.04 * o), DOOR_H / 2, (d.userData.dz as number) + Math.sign(d.userData.dz as number) * 1.65 * o);
       }
     }
+    for (const st of seats) {
+      const c = cars[st.car].state;
+      world(c, st.lx, st.lz, st.pos);
+      st.pos.y = floorY(c, st.lz);
+      st.facing = st.face + c.yaw;
+    }
     for (const sd of screenDoors) sd.mesh.visible = !(sd.st === current && openNow > 0.5);
     for (const lm of liftMeshes) { lm.lift.at = liftAt(lm.lift); lm.plat.position.y = lm.lift.at - 0.1; }
     // departure boards, once a second
@@ -566,9 +591,22 @@ export function buildTrain(groundY: (x: number, z: number, top: number) => numbe
       return;
     }
   }
+  // refresh the window reflections from the middle of the car nearest the viewer (the train itself
+  // is hidden for the snapshot, so it doesn't reflect its own insides)
+  function reflect(renderer: THREE.WebGLRenderer, scene: THREE.Scene, eye: THREE.Vector3) {
+    let best = cars[0].state, bd = Infinity;
+    for (const { state: c } of cars) { const d = c.pos.distanceToSquared(eye); if (d < bd) { bd = d; best = c; } }
+    if (bd > 120 * 120) return;
+    mirrorCam.position.set(best.pos.x, best.pos.y + 1.6, best.pos.z);
+    mirrorCam.updateMatrixWorld();
+    const vis = cars.map((c) => c.g.visible);
+    cars.forEach((c) => (c.g.visible = false));
+    mirrorCam.update(renderer, scene);
+    cars.forEach((c, i) => (c.g.visible = vis[i]));
+  }
   // screen doors are shut unless the train stands at that platform with its doors open
   const shut = (st: number) => !(st === current && openNow > 0.5);
 
-  return { debug: { events, passes, P, stations: stations.map((x) => x.name) }, root, solid, walk, ramps, lifts, gates, shut, update, floorAt, carry, confine, remember, riding: () => rider !== null, drop: () => { rider = null; }, cars: () => cars.map((c) => c.state) };
+  return { debug: { events, passes, P, stations: stations.map((x) => x.name) }, root, solid, walk, ramps, lifts, gates, shut, update, floorAt, carry, confine, remember, riding: () => rider !== null, drop: () => { rider = null; }, cars: () => cars.map((c) => c.state), seats, reflect };
 }
 const liftMeshes: { lift: Lift; plat: THREE.Mesh }[] = [];

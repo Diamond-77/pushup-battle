@@ -431,7 +431,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     }
 
     // dev only: lets automated checks teleport the hero and turn him
-    if (import.meta.env.DEV) (window as unknown as { __ex: unknown }).__ex = { pos, train, cam: (a: number[] | null) => (camOverride = a), floor: floorAt, lifts: col.lifts, face: (a: number) => (facing = a), yaw: (a: number) => (yaw = a, pitch = 0.15), look: (a: number, b: number) => ((yaw = a), (pitch = b)), doors: () => col.doors.map((d) => d.open) };
+    if (import.meta.env.DEV) (window as unknown as { __ex: unknown }).__ex = { pos, train, cam: (a: number[] | null) => (camOverride = a), floor: floorAt, lifts: col.lifts, face: (a: number) => (facing = a), yaw: (a: number) => (yaw = a, pitch = 0.15), look: (a: number, b: number) => ((yaw = a), (pitch = b)), doors: () => col.doors.map((d) => d.open), act: (a: string) => api.current.act?.(a as never) };
 
     let camOverride: number[] | null = null; // dev: a fixed camera [x, y, z, lookX, lookY, lookZ]
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1500);
@@ -598,6 +598,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       // step off toward the screen, into the gap between rows
       pos.set(seat.pos.x + Math.sin(seat.facing) * 0.9, seat.pos.y, seat.pos.z + Math.cos(seat.facing) * 0.9);
       seat = null;
+      trainRef?.drop(); // a fresh start: the train picks you up again where you now stand
       uiKey = "";
       setChatOpen(false);
     };
@@ -709,6 +710,21 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     let speed = 0, first = true, uiKey = "";
     // get every shader and texture onto the GPU now, not the first time it comes into view: that
     // first-sight upload is what made the picture hitch while turning (and settle once you stopped)
+    // the road's puddle reflections only show where the road itself is the nearest thing you see:
+    // every other solid surface wipes the road's stencil mark, so a character or lamp standing in
+    // front of a reflection hides it (instead of the reflection painting over them)
+    const stencilDone = new WeakSet<THREE.Material>();
+    const wipeStencil = () => scene.traverse((o) => {
+      const m = (o as THREE.Mesh).isMesh ? ((o as THREE.Mesh).material as THREE.Material | THREE.Material[]) : null;
+      for (const mat of m ? (Array.isArray(m) ? m : [m]) : []) {
+        if (stencilDone.has(mat)) continue;
+        stencilDone.add(mat);
+        if (mat.stencilWrite || mat.transparent) continue;
+        mat.stencilWrite = true; mat.stencilRef = 0; mat.stencilFunc = THREE.AlwaysStencilFunc; mat.stencilZPass = THREE.ReplaceStencilOp;
+      }
+    });
+    wipeStencil();
+    let stencilTick = 0;
     renderer.compile(scene, camera);
     scene.traverse((o) => {
       const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
@@ -774,7 +790,13 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       pos.z = THREE.MathUtils.clamp(pos.z, -170, 240);
 
       // gravity, jumping, and standing on the highest floor within a step (sitting: stay put on the seat)
-      if (seat) { pos.copy(seat.pos); facing = seat.facing; vy = 0; grounded = true; }
+      if (seat) {
+        // a train seat turns with its car: turn the view with it
+        let d = seat.facing - facing;
+        d = Math.atan2(Math.sin(d), Math.cos(d));
+        if (Math.abs(d) < 0.5) yaw += d;
+        pos.copy(seat.pos); facing = seat.facing; vy = 0; grounded = true;
+      }
       else {
         // riding a lift: move with the platform, however far it went this frame
         if (riding && grounded && pos.x > riding.x0 && pos.x < riding.x1 && pos.z > riding.z0 && pos.z < riding.z1) pos.y = riding.at;
@@ -789,11 +811,12 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
 
       // the closest free seat within reach
       nearSeat = null;
-      if (!seat && Math.hypot(pos.x - board.center.x, pos.z - board.center.z) < 50) {
+      const nearBoard = Math.hypot(pos.x - board.center.x, pos.z - board.center.z) < 50, inTrain = train.riding();
+      if (!seat && (nearBoard || inTrain)) {
         const taken = new Set<number>();
         online?.peers.forEach((p) => { if (p.seat >= 0) taken.add(p.seat); });
-        let bd = 1.7;
-        for (const st of benches.seats) {
+        let bd = inTrain ? 1.3 : 1.7;
+        for (const st of inTrain ? train.seats : benches.seats) {
           const d = Math.hypot(st.pos.x - pos.x, st.pos.z - pos.z);
           if (d < bd && !taken.has(st.i) && Math.abs(st.pos.y - pos.y) < 1) { bd = d; nearSeat = st; }
         }
@@ -965,6 +988,9 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       hemi.intensity = sky.hemi + 0.35 + f * 2.5 * (0.15 + 0.85 * inAir);
       if (flashRef.current) flashRef.current.style.opacity = String(f * 0.4 * inAir);
 
+      if (++stencilTick % 90 === 0) wipeStencil(); // characters and players that arrived since
+      // the train's glass reflections: a fresh snapshot every few frames (not on low graphics)
+      if (S.quality !== "low" && stencilTick % (S.quality === "high" ? 6 : 15) === 0) train.reflect(renderer, scene, camera.position);
       renderer.render(scene, camera);
       speakers.tick(t, !!radio.state.now);
       street.tick();

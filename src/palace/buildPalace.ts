@@ -195,13 +195,22 @@ export class Builder {
     if (outline) this.lines.push(new THREE.EdgesGeometry(geo, 32));
   }
   finish(root: THREE.Group) {
-    for (const [mat, geos] of this.parts) {
+    for (const [mat, list] of this.parts) {
+      // pieces must match to merge: all indexed or none, and the same attributes. One odd piece
+      // (an extruded shape, a custom ribbon) used to make the whole material vanish
+      let geos = list;
+      if (geos.some((g) => !g.index) && geos.some((g) => g.index)) geos = geos.map((g) => (g.index ? g.toNonIndexed() : g));
+      const names = Object.keys(geos[0].attributes).filter((n) => geos.every((g) => g.attributes[n]));
+      for (const g of geos) for (const n of Object.keys(g.attributes)) if (!names.includes(n)) g.deleteAttribute(n);
       const merged = mergeGeometries(geos, false);
+      const meshes = merged ? [merged] : geos.map((g) => g.clone());
+      list.forEach((g) => g.dispose());
       geos.forEach((g) => g.dispose());
-      if (!merged) continue;
-      const mesh = new THREE.Mesh(merged, mat);
-      mesh.castShadow = mesh.receiveShadow = true;
-      root.add(mesh);
+      for (const g of meshes) {
+        const mesh = new THREE.Mesh(g, mat);
+        mesh.castShadow = mesh.receiveShadow = true;
+        root.add(mesh);
+      }
     }
     if (this.lines.length) {
       const merged = mergeGeometries(this.lines, false);
