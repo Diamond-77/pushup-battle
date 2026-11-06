@@ -181,7 +181,7 @@ export function buildStreet() {
   const spots: [number, number, number][] = [];
   for (let i = 0; i < 900; i++) {
     const s = rand() < 0.5 ? -1 : 1;
-    const z = z0 + 4 + rand() * (L - 8);
+    const z = z0 + 10 + rand() * (L - 14); // (clear of the train platforms at the street's end)
     // behind the shops, or in the 3 m gaps between them
     const gap = (((z - z0 - 20) % 15) + 15) % 15 < 3;
     const x = s * (gap ? HX + 0.8 + rand() * 9 : HX + 9.5 + rand() * 14);

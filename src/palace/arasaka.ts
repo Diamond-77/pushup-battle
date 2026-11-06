@@ -294,7 +294,7 @@ function roof(c: ACtx, W: number, D: number, iw: number, id: number, y: number, 
 /* ---------- buildings ---------- */
 
 type Side = "x+" | "x-" | "z+" | "z-";
-type BOpts = { shaft?: Rect; spiral?: boolean; openings?: { floor: number; side: Side; w: number }[]; floors: number; wallH?: number; shrink?: number; veranda?: number; door?: boolean; spire?: number; topRatio?: number; banners?: boolean; skin?: (f: number) => THREE.Material };
+type BOpts = { shaft?: Rect; spiral?: boolean; openings?: { floor: number; side: Side; w: number; h?: number; at?: number }[]; noStair?: number[]; floors: number; wallH?: number; shrink?: number; veranda?: number; door?: boolean; spire?: number; topRatio?: number; banners?: boolean; skin?: (f: number) => THREE.Material };
 
 // A multi-storey hall or tower. Returns the height of each floor's walking surface (slab top), and the top.
 // Buildings you can walk into get a stair to every floor (a straight flight along the back wall, or a
@@ -321,12 +321,17 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
     // wall shell: four thin walls. The ground floor has the front door; upper floors have open
     // doorways onto the balcony (front, plus any side a sky bridge lands on)
     const T = 0.4;
-    const opens = (side: Side) => inside && f > 0 && (side === "z+" || (o.openings ?? []).some((q) => q.floor === f && q.side === side));
+    const spec = (side: Side) => (o.openings ?? []).find((q) => q.floor === f && q.side === side);
+    const opens = (side: Side) => inside && f > 0 && (side === "z+" || !!spec(side));
     const ddw = Math.min(2.4, cw * 0.3), ddh = Math.min(3, H - 0.8);
     const sk = o.skin?.(f);
     const wall = (side: Side, len: number, x: number, z: number, ry: number) => {
-      if (sk) skin(c, len, H, x, y, z, T, sk, opens(side) ? [ddw, ddh] : null);
-      return opens(side) ? doorway(c, len, H, x, y, z, ry, ddw, ddh) : wallPanel(c, len, H, x, y, z, ry);
+      // an opening may be taller and wider than a doorway (the train goes through), and off centre (at = local z or x)
+      const q = spec(side), big = !!q?.h;
+      const dw = big ? q!.w : ddw, dh = big ? Math.min(q!.h!, H - 0.4) : ddh;
+      const gx = side[0] === "x" ? x : (q?.at ?? 0), gz = side[0] === "x" ? (q?.at ?? 0) : z;
+      if (sk) skin(c, len, H, x, y, z, T, sk, opens(side) ? [dw, dh, gx, gz] : null);
+      return opens(side) ? doorway(c, len, H, x, y, z, ry, dw, dh, gx, gz) : wallPanel(c, len, H, x, y, z, ry);
     };
     wall("z-", cw, 0, -cd / 2 + T / 2, 0);
     wall("x-", cd, -cw / 2 + T / 2, 0, Math.PI / 2);
@@ -357,8 +362,10 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
       // rect() goes (-x,+z) -> (+x,+z) -> (+x,-z) -> (-x,-z): sides z+, x+, z-, x-
       const order: Side[] = ["z+", "x+", "z-", "x-"], gaps: Record<number, [number, number][]> = {};
       for (const o2 of o.openings ?? []) if (o2.floor === f) {
-        const i = order.indexOf(o2.side), len = i % 2 ? 2 * hz : 2 * hx;
-        (gaps[i] ??= []).push([len / 2, o2.w]);
+        const i = order.indexOf(o2.side), len = i % 2 ? 2 * hz : 2 * hx, a = o2.at ?? 0;
+        // distance along the side, as rect() walks it: z+ goes +x, x+ goes -z, z- goes -x, x- goes +z
+        const along = [hx + a, hz - a, hx - a, hz + a][i];
+        (gaps[i] ??= []).push([o2.at === undefined ? len / 2 : along, o2.w]);
       }
       fence(c, rect(hx, hz, y), 1.0, c.m.rail, true, gaps);
     }
@@ -369,7 +376,7 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
     const iw = nw / 2 + ver + 0.3, id = nd / 2 + ver + 0.3;
     const rise = Math.max(1.6, (W - iw) * 0.6);
     const next = y + H + 0.8 + rise - 0.4 + 0.6; // the next slab's top
-    hole = !last && inside ? (o.spiral ? spiralStair(c, nw, nd, y, next) : straightStair(c, nw, nd, y, next, f % 2 ? 1 : -1)) : null;
+    hole = !last && inside && !o.noStair?.includes(f) ? (o.spiral ? spiralStair(c, nw, nd, y, next) : straightStair(c, nw, nd, y, next, f % 2 ? 1 : -1)) : null;
     // beam band: a solid ring over the pillars and the wall tops (the ceiling), open over the stairwell
     holedSlab(c, 2 * hx + 0.7, 0.8, 2 * hz + 0.7, y + H, last ? hole : [hole, o.shaft ?? null], c.m.wood, false);
     c.col.roofs.push(aabb(c, 2 * hx + 0.7, 0.8, 2 * hz + 0.7, 0, y + H, 0));
@@ -432,14 +439,17 @@ function holedSlab(c: ACtx, w: number, h: number, d: number, y: number, holes: H
 }
 
 // a wall with an open doorway in the middle (no door leaf), red posts and a lintel
-function doorway(c: ACtx, len: number, H: number, x: number, y: number, z: number, ry: number, dw: number, dh: number) {
-  const s = sub(c, M(x, 0, z, ry)) as ACtx, side = (len - dw) / 2;
-  wallPanel(s, side, H, -len / 2 + side / 2, y, 0);
-  wallPanel(s, side, H, len / 2 - side / 2, y, 0);
-  box(s, dw, H - dh, 0.4, s.m.wallPlain, 0, y + dh, 0);
-  solidBox(s, dw, H - dh, 0.4, 0, y + dh, 0);
-  box(s, dw + 0.8, 0.5, 0.7, s.m.pillar, 0, y + dh, 0);
-  for (const sx of [-1, 1]) box(s, 0.45, dh, 0.7, s.m.pillar, sx * (dw / 2 + 0.2), y, 0, 0, false);
+// (gx, gz: where the opening's middle is, in the building's coordinates; the wall's middle by default)
+function doorway(c: ACtx, len: number, H: number, x: number, y: number, z: number, ry: number, dw: number, dh: number, gx = x, gz = z) {
+  const s = sub(c, M(x, 0, z, ry)) as ACtx;
+  const u = (gx - x) * Math.cos(ry) - (gz - z) * Math.sin(ry); // along the wall
+  const left = len / 2 + u - dw / 2, right = len / 2 - u - dw / 2;
+  if (left > 0.05) wallPanel(s, left, H, -len / 2 + left / 2, y, 0);
+  if (right > 0.05) wallPanel(s, right, H, len / 2 - right / 2, y, 0);
+  box(s, dw, H - dh, 0.4, s.m.wallPlain, u, y + dh, 0);
+  solidBox(s, dw, H - dh, 0.4, u, y + dh, 0);
+  box(s, dw + 0.8, 0.5, 0.7, s.m.pillar, u, y + dh, 0);
+  for (const sx of [-1, 1]) box(s, 0.45, dh, 0.7, s.m.pillar, u + sx * (dw / 2 + 0.2), y, 0, 0, false);
 }
 
 // a straight flight along the back wall of the room above (nw x nd), from y0 up to y1.
@@ -489,7 +499,7 @@ function spiralStair(c: ACtx, nw: number, nd: number, y0: number, y1: number): H
 
 // an inner lining on a wall (len long, standing at x, z, thickness T), facing the room's centre,
 // with a gap for a doorway (dw wide, dh high) in the middle
-function skin(c: ACtx, len: number, H: number, x: number, y: number, z: number, T: number, mat: THREE.Material, gap: [number, number] | null) {
+function skin(c: ACtx, len: number, H: number, x: number, y: number, z: number, T: number, mat: THREE.Material, gap: [number, number, number?, number?] | null) {
   const ry = Math.atan2(-x, -z), nx = Math.sin(ry), nz = Math.cos(ry);
   const at = (u: number, w: number, y0: number, h: number) => {
     const g = new THREE.PlaneGeometry(w, h);
@@ -500,10 +510,12 @@ function skin(c: ACtx, len: number, H: number, x: number, y: number, z: number, 
     put(c, g, mat, M(px, y0 + h / 2, pz, ry), false);
   };
   if (!gap) return at(0, len - 0.1, y, H);
-  const [dw, dh] = gap, side = (len - dw) / 2;
-  at(-len / 2 + side / 2, side - 0.05, y, H);
-  at(len / 2 - side / 2, side - 0.05, y, H);
-  at(0, dw, y + dh, H - dh);
+  const [dw, dh, gx = x, gz = z] = gap;
+  const u = (gx - x) * Math.cos(ry) - (gz - z) * Math.sin(ry);
+  const left = len / 2 + u - dw / 2, right = len / 2 - u - dw / 2;
+  if (left > 0.1) at(-len / 2 + left / 2, left - 0.05, y, H);
+  if (right > 0.1) at(len / 2 - right / 2, right - 0.05, y, H);
+  at(u, dw, y + dh, H - dh);
 }
 
 // dark lining with glowing lattice windows in a room's own colour
@@ -1106,7 +1118,7 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   door(c, 20, 10.7, 0, 0.3, FRONT + 6, m.pillar, true);
   const extras: THREE.Object3D[] = [emblem(c, 6, 0, 14.6, FRONT + 8.05)];
   building(sub(c, M(0, 18, FRONT)) as ACtx, 14, 8, { floors: 2, wallH: 4, door: false, shrink: 0.8 });
-  for (const sx of [-1, 1]) bannerPole(c, sx * 26, 0.3, FRONT + 10, 16, sx > 0 ? 0 : Math.PI);
+  for (const sx of [-1, 1]) bannerPole(c, sx * 30, 0.3, FRONT + 18, 16, sx > 0 ? 0 : Math.PI);
 
   // lower court: armory and forge on either side, banners down the processional way
   building(sub(c, M(-48, 0.3, 52, Math.PI / 2)) as ACtx, 22, 11, { floors: 2, wallH: 4.2 });
@@ -1140,13 +1152,13 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   steps(c, 8, 5, 6, 0, T3, kz + 19 + 6);
   const KW = 30, KS = 0.85;
   const kc = sub(c, M(0, T3 + 5, kz)) as ACtx;
-  const keep = building(kc, KW, 25, { floors: 6, wallH: 5.4, shrink: KS, veranda: 1.6, spire: 14, shaft: SHAFT, openings: [{ floor: 2, side: "x+", w: 6.2 }, { floor: 2, side: "x-", w: 6.2 }], skin: (f) => roomSkin(ROOM_COLORS[f][1]) });
+  const keep = building(kc, KW, 25, { floors: 6, wallH: 5.4, shrink: KS, veranda: 1.6, spire: 14, shaft: SHAFT, openings: [{ floor: 2, side: "x+", w: 6.2 }, { floor: 2, side: "x-", w: 6.2 }, { floor: 1, side: "x+", w: 4.4, h: 4.6, at: -4 }, { floor: 1, side: "x-", w: 4.4, h: 4.6, at: -4 }], skin: (f) => roomSkin(ROOM_COLORS[f][1]) });
   for (const sx of [-1, 1]) {
     const tx = sx * 38, tz = kz - 4;
     // the stone base reaches forward past the tower's own front steps, and a stair climbs to it from the terrace
     stone(c, 17, 5, 22, tx, T3, tz + 2.5, 0.8);
     steps(c, 6, 5, 7, tx, T3, tz + 2.5 + 11 + 7);
-    const tower = building(sub(c, M(tx, T3 + 5, tz)) as ACtx, 10, 10, { floors: 5, wallH: 4.6, shrink: 0.92, spiral: true, openings: [{ floor: 2, side: sx > 0 ? "x-" : "x+", w: 6.2 }] });
+    const tower = building(sub(c, M(tx, T3 + 5, tz)) as ACtx, 10, 10, { floors: 5, wallH: 4.6, shrink: 0.92, spiral: true, noStair: [0, 1], openings: [{ floor: 2, side: sx > 0 ? "x-" : "x+", w: 6.2 }, { floor: 1, side: "x-", w: 4.4, h: 4.4 }, { floor: 1, side: "x+", w: 4.4, h: 4.4 }] });
     // bridge from the tower's 3rd floor to the keep's 3rd floor
     const fy = T3 + 5 + tower.floors[2], ky = T3 + 5 + keep.floors[2];
     const kw = (KW * KS * KS) / 2 + 1.6 + 0.3;
@@ -1203,6 +1215,7 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
       const a = rand() * Math.PI * 2, r = 120 + rand() * 90;
       const x = Math.cos(a) * r, z = Math.sin(a) * r * 0.9;
       if (z < BACK - 10 || (z > FRONT && Math.abs(x) < 52)) continue; // not on the bamboo street
+      if ((z > FRONT - 4 && z < FRONT + 22) || (Math.abs(Math.abs(x) - 92) < 14 && z < FRONT + 22)) continue; // nor on the Thunder Line
       spots.push({ p: new THREE.Vector3(x, 0, z), kind: rand() < 0.8 ? "pine" : "green" });
     }
   for (const [x, z] of [[-30, 66], [30, 66], [-62, 30], [62, 30], [-62, 70], [62, 70]]) spots.push({ p: new THREE.Vector3(x, 0.3, z), kind: "pine" });

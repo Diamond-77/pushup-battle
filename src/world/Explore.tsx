@@ -14,6 +14,7 @@ import { skyNow, type SkyNow } from "./sky";
 import { buildWeatherBoard } from "./weatherBoard";
 import { buildSpeakers } from "./speakers";
 import { buildStreet } from "./street";
+import { buildTrain } from "./train";
 import { buildBenches, type Seat } from "./benches";
 import { playChime, unlockChime } from "./chime";
 import { Online, lookFor } from "./players";
@@ -273,6 +274,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     const cellAt = (x: number, z: number) => grid.get(Math.floor(x / CELL) + "," + Math.floor(z / CELL)) ?? EMPTY;
     const doorOpen = new Set<Box>();
 
+    let trainRef: ReturnType<typeof buildTrain> | null = null;
     const floorAt = (x: number, z: number, y: number) => {
       let best = groundAt(x, z);
       for (const { b, kind } of cellAt(x, z)) if (kind === "walk" && x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1 && b.y1 <= y + STEP && b.y1 > best) best = b.y1;
@@ -287,8 +289,18 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       }
       // standing on a lift platform
       for (const l of col.lifts) if (x > l.x0 && x < l.x1 && z > l.z0 && z < l.z1 && l.at <= y + STEP && l.at > best) best = l.at;
+      // standing in a train car
+      if (trainRef) best = Math.max(best, trainRef.floorAt(x, z, y, STEP));
       return best;
     };
+    /* ----- the Thunder Line (built here, once the ground can be asked how high it is) ----- */
+    const train = buildTrain((x, z, top) => floorAt(x, z, top));
+    trainRef = train;
+    scene.add(train.root);
+    train.solid.forEach((b) => add(b, "solid"));
+    train.walk.forEach((b) => add(b, "walk"));
+    col.ramps.push(...train.ramps);
+    col.lifts.push(...train.lifts);
     const blocks = (b: Box, y: number) => y + TALL > b.y0 && y < b.y1;
     // push the body (a circle) out of every box it overlaps
     const collide = (p: THREE.Vector3) => {
@@ -308,6 +320,8 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       for (let pass = 0; pass < 2; pass++) {
         // lift gates are shut unless the platform stands at that floor
         for (const l of col.lifts) for (const g of l.gates) if (Math.abs(l.at - g.stop) > 0.3 && blocks(g.box, p.y)) test(g.box);
+        // platform screen doors stay shut unless the train stands there with its doors open
+        for (const g of train.gates) if (train.shut(g.station) && blocks(g.box, p.y)) test(g.box);
         for (const { b, kind } of cellAt(p.x, p.z)) {
           if (!blocks(b, p.y)) continue;
           if (kind === "solid" || (kind === "walk" && b.y1 > p.y + STEP) || (kind === "door" && !doorOpen.has(b))) test(b);
@@ -411,12 +425,13 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     }
 
     // dev only: lets automated checks teleport the hero and turn him
-    if (import.meta.env.DEV) (window as unknown as { __ex: unknown }).__ex = { pos, floor: floorAt, lifts: col.lifts, face: (a: number) => (facing = a), yaw: (a: number) => (yaw = a, pitch = 0.15), doors: () => col.doors.map((d) => d.open) };
+    if (import.meta.env.DEV) (window as unknown as { __ex: unknown }).__ex = { pos, train, cam: (a: number[] | null) => (camOverride = a), floor: floorAt, lifts: col.lifts, face: (a: number) => (facing = a), yaw: (a: number) => (yaw = a, pitch = 0.15), doors: () => col.doors.map((d) => d.open) };
 
+    let camOverride: number[] | null = null; // dev: a fixed camera [x, y, z, lookX, lookY, lookZ]
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1500);
     let yaw = 0, pitch = settingsRef.current.view === "first" ? 0.02 : 0.3; // camera sits behind (at +z of) the hero to start
     api.current.here = () => ({ x: pos.x, y: pos.y, z: pos.z, yaw, pitch });
-    api.current.goTo = (p) => { if (seat) return; pos.set(p.x, p.y + 0.05, p.z); vy = 0; yaw = p.yaw; pitch = p.pitch; facing = p.yaw + Math.PI; };
+    api.current.goTo = (p) => { if (seat) return; trainRef?.drop(); pos.set(p.x, p.y + 0.05, p.z); vy = 0; yaw = p.yaw; pitch = p.pitch; facing = p.yaw + Math.PI; };
     const camPos = new THREE.Vector3();
 
     let quality = "";
@@ -723,12 +738,16 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
         d = Math.atan2(Math.sin(d), Math.cos(d));
         facing += d * Math.min(1, dt * (S.stick === "snappy" ? 20 : 13));
       }
+      // a train car you stand in carries you (and turns your view with it)
+      train.update();
+      if (!seat) yaw += train.carry(pos);
       // move in small sub-steps so fast running never skips through a wall
       const total = speed * dt, n = Math.max(1, Math.ceil(total / (R * 0.7)));
       for (let i = 0; i < n; i++) {
         pos.x += (Math.sin(heading) * total) / n;
         pos.z += (Math.cos(heading) * total) / n;
         collide(pos);
+        train.confine(pos);
         for (const p of people) {
           if (!p.hero.root.visible) continue;
           const rx = pos.x - p.pos.x, rz = pos.z - p.pos.z, rd = Math.hypot(rx, rz);
@@ -749,6 +768,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
         if (pos.y <= floor + 0.02 || (grounded && pos.y - floor < STEP && vy <= 0)) { pos.y = floor; vy = 0; grounded = true; }
         else grounded = false;
         riding = grounded ? col.lifts.find((l) => Math.abs(l.at - pos.y) < 0.01 && pos.x > l.x0 && pos.x < l.x1 && pos.z > l.z0 && pos.z < l.z1) ?? null : null;
+      train.remember(pos, grounded);
       }
 
       // the closest free seat within reach
@@ -869,6 +889,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
       else camera.position.lerp(camPos, Math.min(1, dt * 16));
       look3.copy(camPos).addScaledVector(dir, -20);
       camera.lookAt(look3);
+      if (camOverride) { camera.position.set(camOverride[0], camOverride[1], camOverride[2]); camera.lookAt(camOverride[3], camOverride[4], camOverride[5]); }
 
       if (fp) { if (youRef.current) youRef.current.style.opacity = "0"; } else tag(youRef.current, pos, seat ? 1.7 : 2.05);
       for (const p of people) tag(tagRefs.current[p.name], p.pos, (online?.peers.get(p.name)?.seat ?? -1) >= 0 ? 1.7 : 2.05);
