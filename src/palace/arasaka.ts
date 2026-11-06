@@ -1,7 +1,8 @@
+import { forest, type TreeSpot } from "./trees2";
 import * as THREE from "three";
 import {
   Builder, M, put, sub, box, stairs, beam, railing, rect, materials, styleFor, rngFrom, canvasTex, css,
-  roofTexture, roofFromFaces, toon, trees, mountains, softTexture, type Ctx, type TreeKind,
+  roofTexture, roofFromFaces, toon, mountains, softTexture, type Ctx,
 } from "./buildPalace";
 import type { Env } from "./weather";
 
@@ -376,7 +377,9 @@ export function building(c: ACtx, w: number, d: number, o: BOpts) {
     const iw = nw / 2 + ver + 0.3, id = nd / 2 + ver + 0.3;
     const rise = Math.max(1.6, (W - iw) * 0.6);
     const next = y + H + 0.8 + rise - 0.4 + 0.6; // the next slab's top
-    hole = !last && inside && !o.noStair?.includes(f) ? (o.spiral ? spiralStair(c, nw, nd, y, next) : straightStair(c, nw, nd, y, next, f % 2 ? 1 : -1)) : null;
+    hole = !last && inside && !o.noStair?.includes(f) ? (o.spiral ? spiralStair(c, nw, nd, y, next) : straightStair(c, nw, nd, y, next, f % 2 ? 1 : -1, y + H)) : null;
+    // line the well from the ceiling up to the next floor, so the climb never looks into the roof space
+    if (hole) well(c, hole, y + H, next - 0.02, c.m.wallPlain, o.spiral ? ["z+"] : []);
     // beam band: a solid ring over the pillars and the wall tops (the ceiling), open over the stairwell
     holedSlab(c, 2 * hx + 0.7, 0.8, 2 * hz + 0.7, y + H, last ? hole : [hole, o.shaft ?? null], c.m.wood, false);
     c.col.roofs.push(aabb(c, 2 * hx + 0.7, 0.8, 2 * hz + 0.7, 0, y + H, 0));
@@ -454,42 +457,137 @@ function doorway(c: ACtx, len: number, H: number, x: number, y: number, z: numbe
 
 // a straight flight along the back wall of the room above (nw x nd), from y0 up to y1.
 // dir: which way it climbs along x (floors alternate, so each flight starts where the last one ended).
-// Returns the stairwell to cut out of the floor above.
-function straightStair(c: ACtx, nw: number, nd: number, y0: number, y1: number, dir: number): Hole {
-  const SW = 1.6, rise = y1 - y0, L = Math.min(nw - 2, rise * 1.35), zc = -nd / 2 + 0.55 + SW / 2;
-  const bottom = -dir * (L / 2), n = Math.max(4, Math.round(rise / 0.28));
-  for (let k = 0; k < n; k++)
-    box(c, L / n, ((k + 1) * rise) / n, SW, k % 2 ? c.m.marbleShade : c.m.marble, bottom + dir * (k + 0.5) * (L / n), y0, zc, 0, k === 0 || k === n - 1);
-  // a handrail along the open side; it's solid past the first steps so you can't walk in under the flight
-  const ra = new THREE.Vector3(bottom, y0 + 1, zc + SW / 2 + 0.1), rb = new THREE.Vector3(-bottom, y1 + 1, zc + SW / 2 + 0.1);
-  beam(c, ra, rb, 0.14, 0.14, c.m.rail);
-  for (let k = 1; k <= 3; k++) {
-    const p = ra.clone().lerp(rb, k / 4);
-    box(c, 0.1, 1, 0.1, c.m.rail, p.x, p.y - 1, p.z, 0, false);
+// ceil: the underside of the ceiling over this floor, so the stairwell opens before your head reaches it.
+// Returns the stairwell to cut out of the floor above (and the ceiling below it).
+function straightStair(c: ACtx, nw: number, nd: number, y0: number, y1: number, dir: number, ceil: number): Hole {
+  const SW = 1.8, rise = y1 - y0, L = Math.min(nw - 2, rise * 1.5), zc = -nd / 2 + 0.55 + SW / 2;
+  const bottom = -dir * (L / 2), n = Math.max(4, Math.round(rise / 0.24)), run = L / n, zo = zc + SW / 2;
+  const nosing = toon(0x7e1c17), gold = toon(0xb08a3e);
+  for (let k = 0; k < n; k++) {
+    const x = bottom + dir * (k + 0.5) * run, top = y0 + ((k + 1) * rise) / n;
+    // the masonry under each step, a tread on top with a red lacquered nose
+    box(c, run, top - y0 - 0.08, SW - 0.04, c.m.marbleShade, x, y0, zc - 0.02, 0, false);
+    box(c, run + 0.04, 0.08, SW + 0.04, c.m.wood, x + dir * 0.02, top - 0.08, zc, 0, false);
+    box(c, 0.08, 0.1, SW + 0.06, nosing, x + dir * (run / 2), top - 0.1, zc, 0, false);
   }
-  solidBox(c, L - 1.2, rise, 0.25, dir * 0.6, y0, zc + SW / 2 + 0.1);
+  // the open side is closed by one smooth panel (no stack of blocks showing), with a sloped stringer
+  // on top, so the flight reads as one clean piece
+  const tri = new THREE.Shape([new THREE.Vector2(bottom, 0), new THREE.Vector2(-bottom, 0), new THREE.Vector2(-bottom, rise), new THREE.Vector2(bottom, rise / n)]);
+  const side = new THREE.ExtrudeGeometry(tri, { depth: 0.12, bevelEnabled: false });
+  put(c, side, c.m.wood, M(0, y0, zo - 0.04), true);
+  // lacquered panels let into it
+  for (let k = 0; k < 3; k++) {
+    const x = bottom + dir * (k + 0.5) * (L / 3), h = (rise * (k + 0.5)) / 3;
+    box(c, L / 3 - 0.8, Math.max(0.4, h - 1.0 - rise / 6), 0.04, c.m.pillar, x, y0 + 0.5, zo + 0.1, 0, false);
+  }
+  const sa = new THREE.Vector3(bottom, y0 + 0.1, zo + 0.08), sb = new THREE.Vector3(-bottom, y1 + 0.1, zo + 0.08);
+  for (let k = 0; k < 2; k++) beam(c, sa.clone().setY(sa.y - k * 0.5), sb.clone().setY(sb.y - k * 0.5), 0.16, 0.55, c.m.pillar, k === 0);
+  // the handrail: newel posts at both ends, balusters on every other step, a gold cap rail
+  const ra = new THREE.Vector3(bottom - dir * 0.2, y0 + 1.05, zo + 0.12), rb = new THREE.Vector3(-bottom, y1 + 1.05, zo + 0.12);
+  beam(c, ra, rb, 0.14, 0.12, c.m.rail);
+  beam(c, ra.clone().setY(ra.y + 0.08), rb.clone().setY(rb.y + 0.08), 0.18, 0.05, gold, false);
+  for (let k = 1; k < n; k += 2) {
+    const p = ra.clone().lerp(rb, k / n);
+    box(c, 0.07, 1.0, 0.07, c.m.rail, p.x, p.y - 1.02, p.z, 0, false);
+  }
+  for (const [p, h] of [[ra, y0], [rb, y1]] as const) {
+    box(c, 0.3, 1.35, 0.3, c.m.pillar, p.x, h, p.z);
+    box(c, 0.38, 0.14, 0.38, gold, p.x, h + 1.35, p.z, 0, false);
+  }
+  // it's solid past the first steps so you can't walk in under the flight
+  solidBox(c, L - 1.2, rise, 0.25, dir * 0.6, y0, zo + 0.1);
   const a = new THREE.Vector3(bottom - dir * 0.3, y0, zc).applyMatrix4(c.T), b = new THREE.Vector3(-bottom + dir * 0.6, y1, zc).applyMatrix4(c.T);
   c.col.ramps.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, w: SW, ya: a.y, yb: b.y });
-  // only the upper part needs head room through the floor above
-  const t0 = Math.max(0, 1 - 2.6 / rise), xa = bottom + dir * t0 * L, xb = -bottom + dir * 0.05;
-  return { x0: Math.min(xa, xb), x1: Math.max(xa, xb), z0: zc - SW / 2 - 0.15, z1: zc + SW / 2 + 0.15 };
+  // the well opens where your head would meet the ceiling (2.5 m clear above the steps)
+  const t0 = THREE.MathUtils.clamp((ceil - 2.5 - y0) / rise, 0, 0.9), xa = bottom + dir * t0 * L, xb = -bottom + dir * 0.05;
+  const hole = { x0: Math.min(xa, xb), x1: Math.max(xa, xb), z0: zc - SW / 2 - 0.15, z1: zo + 0.25 };
+  // up on the next floor: a balustrade round the open sides of the well, so nobody walks into it
+  const ya = y1, ea = new THREE.Vector3(xa, ya, hole.z1 + 0.05), eb = new THREE.Vector3(xb - dir * 0.2, ya, hole.z1 + 0.05);
+  const back = new THREE.Vector3(xa, ya, hole.z0 + 0.2);
+  for (const [p, q] of [[back, ea], [ea, eb]] as const) {
+    beam(c, p.clone().setY(ya + 1.05), q.clone().setY(ya + 1.05), 0.14, 0.12, c.m.rail);
+    beam(c, p.clone().setY(ya + 1.13), q.clone().setY(ya + 1.13), 0.18, 0.05, gold, false);
+    beam(c, p.clone().setY(ya + 0.12), q.clone().setY(ya + 0.12), 0.16, 0.24, c.m.pillar, false);
+    const len = p.distanceTo(q), m = Math.max(1, Math.round(len / 0.45));
+    for (let k = 1; k < m; k++) {
+      const v = p.clone().lerp(q, k / m);
+      box(c, 0.07, 0.95, 0.07, c.m.rail, v.x, ya + 0.12, v.z, 0, false);
+    }
+    const mid = p.clone().add(q).multiplyScalar(0.5), horiz = Math.abs(p.x - q.x) > Math.abs(p.z - q.z);
+    solidBox(c, horiz ? len : 0.25, 1.2, horiz ? 0.25 : len, mid.x, ya, mid.z);
+  }
+  for (const p of [back, ea, eb]) {
+    box(c, 0.3, 1.3, 0.3, c.m.pillar, p.x, ya, p.z);
+    box(c, 0.38, 0.14, 0.38, gold, p.x, ya + 1.3, p.z, 0, false);
+  }
+  return hole;
 }
 
-// a spiral stair round a post in the middle of a small tower: one full turn per floor, starting and
-// ending at the front, so you step off it straight out of the doorway. Returns the stairwell.
+// the walls of a stairwell between a ceiling and the floor above (so you don't look into the roof
+// space as you climb), on every side but the ones listed in open
+function well(c: ACtx, h: Rect, y0: number, y1: number, mat: THREE.Material, open: Side[] = []) {
+  const H = y1 - y0, w = h.x1 - h.x0, d = h.z1 - h.z0, cx = (h.x0 + h.x1) / 2, cz = (h.z0 + h.z1) / 2;
+  if (!open.includes("z-")) box(c, w + 0.2, H, 0.1, mat, cx, y0, h.z0 - 0.05, 0, false);
+  if (!open.includes("z+")) box(c, w + 0.2, H, 0.1, mat, cx, y0, h.z1 + 0.05, 0, false);
+  if (!open.includes("x-")) box(c, 0.1, H, d + 0.2, mat, h.x0 - 0.05, y0, cz, 0, false);
+  if (!open.includes("x+")) box(c, 0.1, H, d + 0.2, mat, h.x1 + 0.05, y0, cz, 0, false);
+}
+
+// a helical ribbon round the y axis: from radius r0 to r1, k steps of a turn (a0..a1 radians), at
+// heights y(t) on the inner and outer edge
+function helix(a0: number, a1: number, r0: number, r1: number, y0: (t: number) => number, y1: (t: number) => number, n: number) {
+  const pos: number[] = [], idx: number[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, a = a0 + (a1 - a0) * t;
+    pos.push(Math.sin(a) * r0, y0(t), Math.cos(a) * r0, Math.sin(a) * r1, y1(t), Math.cos(a) * r1);
+    if (i < n) idx.push(2 * i, 2 * i + 2, 2 * i + 1, 2 * i + 1, 2 * i + 2, 2 * i + 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+// a spiral stair round a stone column in the middle of a small tower: one full turn per floor,
+// starting and ending at the front, so you step off it straight out of the doorway. Thin treads on a
+// smooth helical underside, a curved outer stringer and a handrail. Returns the stairwell.
 function spiralStair(c: ACtx, nw: number, nd: number, y0: number, y1: number): Hole {
-  const r = Math.min(nw, nd) / 2 - 0.8, rm = r * 0.58, N = 20, rise = y1 - y0;
-  put(c, new THREE.CylinderGeometry(0.3, 0.3, rise + 0.6, 8), c.m.pillar, M(0, y0 + rise / 2, 0), false);
-  solidBox(c, 0.5, rise, 0.5, 0, y0, 0);
-  const at = (k: number, rad: number) => new THREE.Vector3(Math.sin((2 * Math.PI * k) / N) * rad, y0 + (rise * k) / N, Math.cos((2 * Math.PI * k) / N) * rad);
+  const r = Math.min(nw, nd) / 2 - 0.8, rm = r * 0.58, N = 32, rise = y1 - y0, TURN = Math.PI * 2;
+  const gold = toon(0xb08a3e), dbl = (mat: THREE.MeshToonMaterial) => { const m2 = mat.clone(); m2.side = THREE.DoubleSide; return m2; };
+  // the column, with a base and a cap
+  put(c, new THREE.CylinderGeometry(0.38, 0.38, rise + 0.6, 16), c.m.pillar, M(0, y0 + rise / 2, 0), false);
+  put(c, new THREE.CylinderGeometry(0.55, 0.6, 0.4, 16), c.m.stoneDark, M(0, y0 + 0.2, 0), false);
+  solidBox(c, 0.7, rise, 0.7, 0, y0, 0);
+  const at = (k: number, rad: number) => new THREE.Vector3(Math.sin((TURN * k) / N) * rad, y0 + (rise * k) / N, Math.cos((TURN * k) / N) * rad);
+  const yAt = (t: number) => y0 + rise * t;
   for (let k = 0; k < N; k++) {
-    const p = at(k, rm), q = at(k + 1, rm);
-    // a proper pie-slice step (a slice of a cylinder), chunky enough that the flight looks solid from below
-    const top = y0 + (rise * (k + 1)) / N, thick = 0.5;
-    put(c, new THREE.CylinderGeometry(r + 0.05, r + 0.05, thick, 4, 1, false, (2 * Math.PI * k) / N, ((2 * Math.PI) / N) * 1.04), k % 2 ? c.m.marbleShade : c.m.marble, M(0, top - thick / 2, 0), k % 4 === 0);
+    // a wedge tread: a slice of a ring (smooth outer edge), with a red nose along its leading edge
+    const top = y0 + (rise * (k + 1)) / N, a = (TURN * k) / N, da = TURN / N;
+    const tread = new THREE.CylinderGeometry(r, r, 0.12, 6, 1, false, a, da * 1.02);
+    put(c, tread, k % 2 ? c.m.marbleShade : c.m.marble, M(0, top - 0.06, 0), false);
+    const nose = new THREE.BoxGeometry(r - 0.35, 0.1, 0.07);
+    nose.translate((r + 0.35) / 2, 0, 0);
+    put(c, nose, c.m.pillar, M(0, top - 0.07, 0, a + da - Math.PI / 2), false);
+    // a riser block under the tread back to the step below, so it looks solid from the side
+    const riser = new THREE.CylinderGeometry(r * 0.98, r * 0.98, rise / N, 6, 1, false, a, da * 1.02);
+    put(c, riser, c.m.stoneDark, M(0, top - 0.12 - rise / N / 2, 0), false);
     // each piece reaches a quarter past both ends, so there are no slivers between pieces to fall through
-    const a = p.clone().lerp(q, -0.25).applyMatrix4(c.T), b = p.clone().lerp(q, 1.25).applyMatrix4(c.T);
-    c.col.ramps.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, w: r * 0.95, ya: a.y, yb: b.y });
+    const p = at(k, rm), q = at(k + 1, rm);
+    const pa = p.clone().lerp(q, -0.25).applyMatrix4(c.T), pb = p.clone().lerp(q, 1.25).applyMatrix4(c.T);
+    c.col.ramps.push({ ax: pa.x, az: pa.z, bx: pb.x, bz: pb.z, w: r * 0.95, ya: pa.y, yb: pb.y });
+  }
+  // the smooth underside and the curved stringer on the outer edge
+  const under = (t: number) => yAt(t) - 0.12 - (rise / N) * 1.2;
+  put(c, helix(0, TURN, 0.36, r, under, under, 96), dbl(c.m.stoneDark), new THREE.Matrix4(), false);
+  put(c, helix(0, TURN, r + 0.02, r + 0.02, under, (t) => yAt(t) + rise / N + 0.05, 96), dbl(c.m.pillar), new THREE.Matrix4(), false);
+  // the handrail along the outer edge, with a baluster on every other step
+  const pts: THREE.Vector3[] = [];
+  for (let i = 0; i <= 64; i++) pts.push(at((i / 64) * N, r - 0.12).add(new THREE.Vector3(0, rise / N + 0.95, 0)));
+  put(c, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 96, 0.07, 6), gold, new THREE.Matrix4(), false);
+  for (let k = 1; k < N; k += 2) {
+    const p = at(k + 0.5, r - 0.12);
+    box(c, 0.06, 0.95, 0.06, c.m.rail, p.x, p.y + rise / N, p.z, 0, false);
   }
   // off the top, onto the floor in front of the stairwell
   const a = new THREE.Vector3(0, y1, rm).applyMatrix4(c.T), b = new THREE.Vector3(0, y1, r + 0.9).applyMatrix4(c.T);
@@ -1209,17 +1307,17 @@ export function buildArasaka(env: Env, { bare = false } = {}) {
   }
 
   // dark pines outside the walls (and a few in the lower court)
-  const spots: { p: THREE.Vector3; kind: TreeKind }[] = [];
+  const spots: TreeSpot[] = [];
   if (!bare)
     for (let i = 0; i < 80; i++) {
       const a = rand() * Math.PI * 2, r = 120 + rand() * 90;
       const x = Math.cos(a) * r, z = Math.sin(a) * r * 0.9;
       if (z < BACK - 10 || (z > FRONT && Math.abs(x) < 52)) continue; // not on the bamboo street
       if ((z > FRONT - 4 && z < FRONT + 22) || (Math.abs(Math.abs(x) - 92) < 14 && z < FRONT + 22)) continue; // nor on the Thunder Line
-      spots.push({ p: new THREE.Vector3(x, 0, z), kind: rand() < 0.8 ? "pine" : "green" });
+      spots.push({ p: new THREE.Vector3(x, 0, z), kind: rand() < 0.75 ? "pine" : "maple" });
     }
-  for (const [x, z] of [[-30, 66], [30, 66], [-62, 30], [62, 30], [-62, 70], [62, 70]]) spots.push({ p: new THREE.Vector3(x, 0.3, z), kind: "pine" });
-  root.add(trees(rand, spots));
+  for (const [x, z, m] of [[-30, 66, 1], [30, 66, 1], [-62, 30, 0], [62, 30, 0], [-62, 70, 0], [62, 70, 0]]) spots.push({ p: new THREE.Vector3(x, 0.3, z), kind: m ? "maple" : "pine" });
+  root.add(forest(spots, rand));
   if (!bare) root.add(mountains(rand, env.mountainTint));
 
   const q = new THREE.Quaternion();

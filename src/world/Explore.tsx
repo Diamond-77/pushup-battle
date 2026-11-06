@@ -165,7 +165,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
   useEffect(() => {
     const host = hostRef.current!;
     const env = ENVS.storm;
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true, powerPreference: "high-performance" });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     host.prepend(renderer.domElement);
 
@@ -206,6 +206,12 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     const col = citadel.col;
     const outlines: THREE.Object3D[] = [];
     citadel.root.traverse((o) => { if ((o as THREE.LineSegments).isLineSegments) outlines.push(o); });
+    // the ink outlines sit exactly on the faces they trace, so the two fought over every pixel and
+    // flickered as the camera moved: push the faces a hair back so the lines always win
+    citadel.root.traverse((o) => {
+      const m = (o as THREE.Mesh).isMesh ? ((o as THREE.Mesh).material as THREE.Material | THREE.Material[]) : null;
+      for (const mat of m ? (Array.isArray(m) ? m : [m]) : []) if (!mat.transparent) { mat.polygonOffset = true; mat.polygonOffsetFactor = 1; mat.polygonOffsetUnits = 1; }
+    });
 
     /* ----- the world's shape, bucketed in a grid so each check only looks at nearby boxes ----- */
     const CELL = 10;
@@ -425,7 +431,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     }
 
     // dev only: lets automated checks teleport the hero and turn him
-    if (import.meta.env.DEV) (window as unknown as { __ex: unknown }).__ex = { pos, train, cam: (a: number[] | null) => (camOverride = a), floor: floorAt, lifts: col.lifts, face: (a: number) => (facing = a), yaw: (a: number) => (yaw = a, pitch = 0.15), doors: () => col.doors.map((d) => d.open) };
+    if (import.meta.env.DEV) (window as unknown as { __ex: unknown }).__ex = { pos, train, cam: (a: number[] | null) => (camOverride = a), floor: floorAt, lifts: col.lifts, face: (a: number) => (facing = a), yaw: (a: number) => (yaw = a, pitch = 0.15), look: (a: number, b: number) => ((yaw = a), (pitch = b)), doors: () => col.doors.map((d) => d.open) };
 
     let camOverride: number[] | null = null; // dev: a fixed camera [x, y, z, lookX, lookY, lookZ]
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1500);
@@ -701,6 +707,16 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
     const clock = new THREE.Clock();
     const fwd = new THREE.Vector3(), right = new THREE.Vector3(), move = new THREE.Vector3(), head = new THREE.Vector3(), dir = new THREE.Vector3(), probe = new THREE.Vector3(), look3 = new THREE.Vector3();
     let speed = 0, first = true, uiKey = "";
+    // get every shader and texture onto the GPU now, not the first time it comes into view: that
+    // first-sight upload is what made the picture hitch while turning (and settle once you stopped)
+    renderer.compile(scene, camera);
+    scene.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      for (const mat of m ? (Array.isArray(m) ? m : [m]) : []) for (const k of ["map", "emissiveMap", "alphaMap"] as const) {
+        const t = (mat as THREE.MeshStandardMaterial)[k];
+        if (t) renderer.initTexture(t);
+      }
+    });
     renderer.setAnimationLoop(() => {
       // a slow frame moves you further instead of slowing the world down (up to a 10 fps hiccup)
       const dt = Math.min(0.1, clock.getDelta());
@@ -951,7 +967,7 @@ export default function Explore({ onBack, me: account }: { onBack: () => void; m
 
       renderer.render(scene, camera);
       speakers.tick(t, !!radio.state.now);
-      street.tick(t);
+      street.tick();
       board.tick(camera, host.clientWidth, host.clientHeight, loudness(pos, speakers.loudAt(pos)), radio.elapsed(), dt);
     });
 

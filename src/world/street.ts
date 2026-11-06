@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Box } from "../palace/arasaka";
 
 // Neon Bamboo Row: the street that runs from the citadel's front gate out into the hills.
@@ -22,7 +23,37 @@ const tex = (w: number, h: number, draw: (g: CanvasRenderingContext2D, w: number
   return t;
 };
 
-function signTex(text: string, color: string, vertical: boolean) {
+// a simple line-art logo for each kind of shop, drawn in the sign's neon colour
+function logo(g: CanvasRenderingContext2D, name: string, cx: number, cy: number, r: number) {
+  g.save();
+  g.translate(cx, cy);
+  g.lineWidth = r * 0.12;
+  g.lineCap = g.lineJoin = "round";
+  const P = (pts: number[][], close = false) => { g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x * r, y * r) : g.moveTo(x * r, y * r))); if (close) g.closePath(); g.stroke(); };
+  const C = (x: number, y: number, rr: number, a0 = 0, a1 = Math.PI * 2) => { g.beginPath(); g.arc(x * r, y * r, rr * r, a0, a1); g.stroke(); };
+  const bowl = () => { g.beginPath(); g.moveTo(-0.8 * r, 0); g.lineTo(0.8 * r, 0); g.arc(0, 0, 0.8 * r, 0, Math.PI); g.stroke(); P([[-0.35, 0.8], [0.35, 0.8]]); };
+  const cup = () => { P([[-0.45, -0.6], [-0.35, 0.8], [0.35, 0.8], [0.45, -0.6]], true); };
+  switch (name) {
+    case "RAMEN": case "NOODLES": bowl(); P([[-0.2, -0.9], [0.5, -0.1]]); P([[0.05, -0.95], [0.75, -0.15]]); for (const x of [-0.4, 0, 0.4]) P([[x, -0.05], [x, -0.4]]); break;
+    case "HOT POT": bowl(); for (const x of [-0.35, 0, 0.35]) P([[x, -0.2], [x + 0.12, -0.5], [x, -0.8]]); break;
+    case "IRON GYM": P([[-0.55, 0], [0.55, 0]]); for (const x of [-0.75, -0.55, 0.55, 0.75]) P([[x, -0.45], [x, 0.45]]); break;
+    case "STRENGTH": C(0, 0.25, 0.55); P([[-0.3, -0.3], [-0.3, -0.75], [0.3, -0.75], [0.3, -0.3]]); break;
+    case "TEA HOUSE": cup(); C(0.6, 0.05, 0.25, -Math.PI / 2, Math.PI / 2); P([[-0.15, -0.8], [0, -1], [-0.1, -1.15]]); break;
+    case "PROTEIN": P([[-0.4, -0.5], [-0.3, 0.85], [0.3, 0.85], [0.4, -0.5]], true); P([[-0.45, -0.5], [-0.45, -0.75], [0.45, -0.75], [0.45, -0.5]]); P([[-0.3, 0.1], [0.3, 0.1]]); break;
+    case "SMOOTHIES": case "BOBA": cup(); P([[0.1, -0.6], [0.35, -1.15]]); if (name === "BOBA") for (const x of [-0.18, 0, 0.18]) C(x, 0.55, 0.08); else P([[-0.4, -0.2], [0.4, -0.2]]); break;
+    case "ARCADE": g.strokeRect(-0.8 * r, -0.2 * r, 1.6 * r, 0.8 * r); P([[-0.4, -0.2], [-0.4, -0.8]]); C(-0.4, -0.85, 0.15); C(0.35, 0.2, 0.12); C(0.6, 0.2, 0.12); break;
+    case "DOJO SUPPLY": P([[-0.7, -0.4], [0.7, -0.4]]); P([[-0.5, -0.4], [-0.5, 0.9]]); P([[0.5, -0.4], [0.5, 0.9]]); P([[-0.85, -0.75], [0.85, -0.75]]); break;
+    case "BAMBOO BATH": for (const y of [-0.4, 0.05, 0.5]) P([[-0.8, y], [-0.4, y - 0.2], [0, y], [0.4, y - 0.2], [0.8, y]]); break;
+    case "DUMPLINGS": g.beginPath(); g.moveTo(-0.8 * r, 0.4 * r); g.quadraticCurveTo(0, -1.0 * r, 0.8 * r, 0.4 * r); g.closePath(); g.stroke(); for (const x of [-0.3, 0, 0.3]) P([[x, -0.25], [x + 0.08, 0.05]]); break;
+    case "MASSAGE": C(0, -0.45, 0.3); P([[-0.7, 0.3], [-0.2, 0], [0.2, 0], [0.7, 0.3]]); P([[-0.7, 0.75], [0.7, 0.75]]); break;
+    case "SUSHI": g.strokeRect(-0.75 * r, -0.15 * r, 1.5 * r, 0.6 * r); P([[-0.75, -0.15], [-0.5, -0.5], [0.5, -0.5], [0.75, -0.15]]); break;
+    case "RUN CLUB": P([[-0.8, 0.5], [0.7, 0.5], [0.8, 0.2], [0.2, 0.05], [-0.1, -0.5], [-0.6, -0.5], [-0.8, 0.5]]); for (const x of [-0.05, 0.15, 0.35]) P([[x, -0.05], [x + 0.12, 0.15]]); break;
+    default: C(0, 0, 0.7);
+  }
+  g.restore();
+}
+
+function signTex(text: string, color: string, vertical: boolean, withLogo = false) {
   return vertical
     ? tex(128, 512, (g, w, h) => {
         g.fillStyle = "#06070a"; g.fillRect(0, 0, w, h);
@@ -31,34 +62,37 @@ function signTex(text: string, color: string, vertical: boolean) {
         g.font = `bold ${Math.round(step * 0.88)}px Inter, Arial, sans-serif`; g.textAlign = "center"; g.textBaseline = "middle";
         ls.forEach((ch, i) => { const y = h / 2 - (step * (ls.length - 1)) / 2 + i * step; g.shadowBlur = 22; g.fillStyle = color; g.fillText(ch, w / 2, y); g.shadowBlur = 0; g.fillStyle = "rgba(255,255,255,0.85)"; g.fillText(ch, w / 2, y); });
       })
-    : tex(512, 128, (g, w, h) => {
-        g.fillStyle = "#06070a"; g.fillRect(0, 0, w, h);
-        g.strokeStyle = color; g.lineWidth = 7; g.shadowColor = color; g.shadowBlur = 16; g.strokeRect(8, 8, w - 16, h - 16);
-        g.font = "bold 64px Inter, Arial, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
-        g.shadowBlur = 24; g.fillStyle = color; g.fillText(text, w / 2, h / 2 + 2, w - 40);
-        g.shadowBlur = 0; g.fillStyle = "rgba(255,255,255,0.85)"; g.fillText(text, w / 2, h / 2 + 2, w - 40);
+    : tex(1024, 256, (g, w, h) => {
+        const bg = g.createLinearGradient(0, 0, 0, h);
+        bg.addColorStop(0, "#0b0d14"); bg.addColorStop(1, "#05060a");
+        g.fillStyle = bg; g.fillRect(0, 0, w, h);
+        g.strokeStyle = color; g.lineWidth = 10; g.shadowColor = color; g.shadowBlur = 24; g.strokeRect(12, 12, w - 24, h - 24);
+        g.lineWidth = 3; g.strokeRect(28, 28, w - 56, h - 56);
+        const tx = withLogo ? w / 2 + 90 : w / 2;
+        if (withLogo) {
+          // the logo in a ring at the left
+          g.strokeStyle = color; g.shadowBlur = 20; g.lineWidth = 6;
+          g.beginPath(); g.arc(150, h / 2, 82, 0, Math.PI * 2); g.stroke();
+          g.strokeStyle = "#fff"; g.shadowBlur = 14;
+          logo(g, text, 150, h / 2, 50);
+          g.strokeStyle = color;
+          logo(g, text, 150, h / 2, 50);
+        }
+        g.font = "bold 118px Inter, Arial, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+        g.shadowBlur = 30; g.fillStyle = color; g.fillText(text, tx, h / 2 + 4, w - (withLogo ? 300 : 80));
+        g.shadowBlur = 0; g.fillStyle = "rgba(255,255,255,0.9)"; g.fillText(text, tx, h / 2 + 4, w - (withLogo ? 300 : 80));
       });
 }
 
-// a soft streak of colour lying on the wet road, as if a sign above were reflected in it
-const streakTex = tex(64, 256, (g, w, h) => {
-  const gr = g.createLinearGradient(0, 0, 0, h);
-  gr.addColorStop(0, "rgba(255,255,255,0)");
-  gr.addColorStop(0.3, "rgba(255,255,255,0.55)");
-  gr.addColorStop(0.55, "rgba(255,255,255,0.8)");
-  gr.addColorStop(1, "rgba(255,255,255,0)");
-  g.fillStyle = gr;
-  g.fillRect(0, 0, w, h);
-  const side = g.createLinearGradient(0, 0, w, 0);
-  side.addColorStop(0, "rgba(0,0,0,1)");
-  side.addColorStop(0.5, "rgba(0,0,0,0)");
-  side.addColorStop(1, "rgba(0,0,0,1)");
-  g.globalCompositeOperation = "destination-out";
-  g.fillStyle = side;
-  g.fillRect(0, 0, w, h);
-  // broken up by ripples
-  for (let y = 0; y < h; y += 6) { g.fillStyle = `rgba(0,0,0,${0.25 + Math.random() * 0.4})`; g.fillRect(0, y, w, 2); }
-});
+// two-tone stripes for an awning
+function stripeTex(color: string) {
+  const t = tex(64, 64, (g, w, h) => {
+    for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? "#14121a" : color; g.fillRect(0, (i * h) / 8, w, h / 8); }
+  });
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(1, 3);
+  return t;
+}
 
 export function buildStreet() {
   const root = new THREE.Group();
@@ -85,7 +119,10 @@ export function buildStreet() {
   });
   roadTex.wrapT = THREE.RepeatWrapping;
   roadTex.repeat.set(1, L / 40);
-  const road = new THREE.MeshPhongMaterial({ map: roadTex, color: 0xffffff, shininess: 120, specular: 0x8899aa, emissive: 0x05070a });
+  const road = new THREE.MeshPhongMaterial({
+    map: roadTex, color: 0xb8c0cc, shininess: 140, specular: 0x9aaabb, emissive: 0x020304,
+    stencilWrite: true, stencilRef: 1, stencilFunc: THREE.AlwaysStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
+  });
   const rw = 2 * (HX - 4.5);
   add(new THREE.PlaneGeometry(rw, L).rotateX(-Math.PI / 2), road, 0, 0.04, zc);
   // pavements either side, a step up
@@ -107,49 +144,94 @@ export function buildStreet() {
   add(new THREE.PlaneGeometry(14, 1.8), new THREE.MeshBasicMaterial({ map: signTex("NEON BAMBOO ROW", "#3dff7a", false), toneMapped: false }), 0, 7.8, z0 + 6.75, Math.PI);
   add(new THREE.PlaneGeometry(14, 1.8), new THREE.MeshBasicMaterial({ map: signTex("NEON BAMBOO ROW", "#3dff7a", false), toneMapped: false }), 0, 7.8, z0 + 5.25);
 
-  // shophouses down both sides
-  const body = new THREE.MeshLambertMaterial({ color: 0x1a1517 });
-  const roofM = new THREE.MeshLambertMaterial({ color: 0x23262e });
-  const winWarm = basic("#ffb35a"), winGreen = basic("#9dffb8"), winPink = basic("#ff8ad0");
-  const streakMats = new Map<string, THREE.Material>();
-  const streak = (color: string) => {
-    if (!streakMats.has(color)) streakMats.set(color, new THREE.MeshBasicMaterial({ map: streakTex, color, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
-    return streakMats.get(color)!;
+  // shophouses down both sides: built in each shop's own frame (x out toward the road, z along it),
+  // then merged by material so the whole row costs a handful of draw calls; ink outlines on the edges
+  const body = new THREE.MeshLambertMaterial({ color: 0x1d181b });
+  const plaster = new THREE.MeshLambertMaterial({ color: 0x2b2427 });
+  const roofM = new THREE.MeshLambertMaterial({ color: 0x262a33 });
+  const frameM = new THREE.MeshLambertMaterial({ color: 0x0f0d10 });
+  const postM = new THREE.MeshLambertMaterial({ color: 0x7e1c17 });
+  const metal = new THREE.MeshLambertMaterial({ color: 0x4a4e57 });
+  const winWarm = basic("#ffb35a"), winGreen = basic("#9dffb8"), winPink = basic("#ff8ad0"), winCyan = basic("#8ef3ff"), winDark = basic("#14161c");
+  const awnings = COLORS.map((c) => new THREE.MeshLambertMaterial({ map: stripeTex(c), emissive: new THREE.Color(c).multiplyScalar(0.25) }));
+  const norenM = [basic("#2a1f5a"), basic("#5a1018"), basic("#0f3a2a")];
+  const parts = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  const lines: THREE.BufferGeometry[] = [];
+  const P = (mat: THREE.Material, geo: THREE.BufferGeometry, m: THREE.Matrix4, outline = false) => {
+    geo.applyMatrix4(m);
+    if (!parts.has(mat)) parts.set(mat, []);
+    parts.get(mat)!.push(geo);
+    if (outline) lines.push(new THREE.EdgesGeometry(geo, 30));
   };
-  const streakGeo = new THREE.PlaneGeometry(2.4, 12).rotateX(-Math.PI / 2).rotateY(Math.PI / 2);
+  const at = (base: THREE.Matrix4, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0) =>
+    base.clone().multiply(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(1, 1, 1)));
   let k = 0;
   for (const s of [-1, 1]) {
     for (let z = z0 + 14; z < z1 - 6; z += 15) {
       const W = 12, D = 9, floors = 2 + Math.floor(rand() * 2), fh = 3.6, H = floors * fh;
-      const x = s * (HX + D / 2), color = COLORS[k % COLORS.length];
-      const front = s * HX; // the face toward the road
-      const face = s > 0 ? -Math.PI / 2 : Math.PI / 2; // planes face the road
-      add(new THREE.BoxGeometry(D, H, W), body, x, H / 2, z);
-      solid.push({ x0: x - D / 2, x1: x + D / 2, z0: z - W / 2, z1: z + W / 2, y0: 0, y1: H });
-      // lit windows and a glowing shop front
-      add(new THREE.PlaneGeometry(W - 3, 2.4), [winWarm, winGreen, winPink][k % 3], front - s * 0.02, 1.4, z, face);
-      for (let f = 1; f < floors; f++) for (const dz of [-3, 0, 3]) if (rand() < 0.75) add(new THREE.PlaneGeometry(2, 1.6), rand() < 0.5 ? winWarm : winGreen, front - s * 0.02, f * fh + 1.6, z + dz, face);
-      // flared roofs, one per storey, with a neon edge
+      const color = COLORS[k % COLORS.length], name = SHOPS[k % SHOPS.length];
+      const front = s * HX;
+      const base = new THREE.Matrix4().compose(new THREE.Vector3(front, 0, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), s > 0 ? Math.PI : 0), new THREE.Vector3(1, 1, 1));
+      const B = (mat: THREE.Material, w: number, h: number, d: number, x: number, y: number, zz: number, outline = false, rz = 0) => P(mat, new THREE.BoxGeometry(d, h, w), at(base, x, y + h / 2, zz, 0, 0, rz), outline);
+      const face = (mat: THREE.Material, w: number, h: number, x: number, y: number, zz: number) => P(mat, new THREE.PlaneGeometry(w, h).rotateY(Math.PI / 2), at(base, x, y + h / 2, zz));
+      // the building and a plaster band between storeys
+      B(body, W, H, D, -D / 2, 0, 0, true);
+      solid.push({ x0: Math.min(front, front - s * D), x1: Math.max(front, front - s * D), z0: z - W / 2, z1: z + W / 2, y0: 0, y1: H });
+      for (let f = 1; f < floors; f++) B(plaster, W + 0.2, 0.35, 0.3, 0.05, f * fh - 0.2, 0, true);
+      // ground floor: a lit shop window between two red posts, mullions, a noren curtain over the door
+      face([winWarm, winGreen, winPink, winCyan][k % 4], W - 2.6, 2.6, 0.02, 0.25, 0);
+      for (let m = -2; m <= 2; m++) B(frameM, 0.1, 2.6, 0.12, 0.06, 0.25, m * ((W - 2.6) / 5));
+      B(frameM, W - 2.4, 0.18, 0.2, 0.06, 2.85, 0);
+      B(frameM, W - 2.4, 0.25, 0.25, 0.06, 0, 0);
+      for (const sz of [-1, 1]) B(postM, 0.42, 3.4, 0.42, 0.25, 0, sz * (W / 2 - 0.6), true);
+      for (let n = 0; n < 4; n++) face(norenM[k % 3], 0.55, 0.75, 0.3, 2.05, -0.9 + n * 0.6);
+      // a striped awning sloping out over the pavement
+      P(awnings[k % awnings.length], new THREE.BoxGeometry(1.8, 0.1, W - 0.6), at(base, 0.9, 3.3, 0, 0, 0, -0.32), true);
+      // the shop sign: a lit box with the shop's logo and name
+      B(frameM, 6.8, 1.7, 0.35, 0.18, 3.75, 0, true);
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(6.5, 1.5), new THREE.MeshBasicMaterial({ map: signTex(name, color, false, true), toneMapped: false }));
+      sign.applyMatrix4(at(base, 0.37, 3.85 + 0.75, 0, 0, Math.PI / 2));
+      root.add(sign);
+      // upper floors: framed windows with cross bars, the odd one dark, air conditioners, a balcony
+      for (let f = 1; f < floors; f++) for (const dz of [-3.6, 0, 3.6]) {
+        const y = f * fh + 0.9, lit = rand() < 0.8;
+        B(frameM, 2.3, 1.9, 0.16, 0.06, y - 0.15, dz, true);
+        face(lit ? (rand() < 0.5 ? winWarm : rand() < 0.5 ? winGreen : winCyan) : winDark, 2, 1.6, 0.15, y, dz);
+        B(frameM, 0.06, 1.6, 0.05, 0.16, y, dz);
+        B(frameM, 2, 0.06, 0.05, 0.16, y + 0.8, dz);
+        if (rand() < 0.4) { B(metal, 0.9, 0.6, 0.5, 0.3, y - 0.85, dz + 0.5, true); face(frameM, 0.5, 0.4, 0.56, y - 0.75, dz + 0.5); }
+      }
+      if (floors > 2 && rand() < 0.7) {
+        B(plaster, W - 2, 0.15, 1.1, 0.55, fh, 0, true);
+        for (let b = 0; b <= 12; b++) B(frameM, 0.05, 0.9, 0.05, 1.05, fh + 0.15, -(W - 2) / 2 + (b * (W - 2)) / 12);
+        B(postM, W - 2, 0.08, 0.08, 1.05, fh + 1.05, 0);
+      }
+      // a drainpipe and a neon line under each roof tier
+      P(metal, new THREE.CylinderGeometry(0.08, 0.08, H, 6), at(base, 0.12, H / 2, W / 2 - 0.3));
+      // flared roofs, one per storey
       for (let f = 1; f <= floors; f++) {
         const top = f === floors, r = (top ? 1.15 : 1.05) * Math.hypot(D, W) / 2;
-        const roof = add(new THREE.ConeGeometry(r, top ? 3 : 1.2, 4, 1, !top), roofM, x, f * fh + (top ? 1.5 : 0.2), z);
-        roof.rotation.y = Math.PI / 4;
-        roof.scale.set(D / Math.hypot(D, W) * 1.45, 1, W / Math.hypot(D, W) * 1.45);
-        add(new THREE.BoxGeometry(0.08, 0.08, W + 1.6), basic(color), front - s * 1.0, f * fh - 0.35, z);
+        const g = new THREE.ConeGeometry(r, top ? 3 : 1.2, 4, 1, !top).rotateY(Math.PI / 4).scale(D / Math.hypot(D, W) * 1.45, 1, W / Math.hypot(D, W) * 1.45);
+        P(roofM, g, at(base, -D / 2, f * fh + (top ? 1.5 : 0.2), 0), true);
+        P(basic(color), new THREE.BoxGeometry(0.08, 0.08, W + 0.4), at(base, 0.95, f * fh - 0.35, 0));
+        if (top) for (const sz of [-1, 1]) P(roofM, new THREE.ConeGeometry(0.25, 1.4, 4), at(base, -D / 2, f * fh + 3.2, sz * 2.2, 0, 0, sz * 0.4), true);
       }
-      // the shop's sign over the door, and a vertical neon screen sticking out over the pavement
-      add(new THREE.PlaneGeometry(6.5, 1.6), new THREE.MeshBasicMaterial({ map: signTex(SHOPS[k % SHOPS.length], color, false), toneMapped: false }), front - s * 0.05, 3.1, z, face);
+      // a pair of red lanterns by the door
+      for (const sz of [-1, 1]) P(basic("#ff3b4a"), new THREE.SphereGeometry(0.28, 10, 8).scale(1, 1.3, 1), at(base, 0.55, 2.6, sz * (W / 2 - 1.3)));
+      // a vertical neon screen sticking out over the pavement (two planes back to back)
       const vColor = COLORS[(k * 3 + 1) % COLORS.length];
-      const vMat = new THREE.MeshBasicMaterial({ map: signTex(VERT[k % VERT.length], vColor, true), toneMapped: false, side: THREE.DoubleSide });
-      add(new THREE.BoxGeometry(1.7, 6.2, 0.2), ironM, front - s * 1.0, 5.6, z + W / 2 - 1.2);
-      add(new THREE.PlaneGeometry(1.5, 6), vMat, front - s * 1.0, 5.6, z + W / 2 - 1.08);
-      add(new THREE.PlaneGeometry(1.5, 6), vMat, front - s * 1.0, 5.6, z + W / 2 - 1.32, Math.PI);
-      // their reflections in the wet road
-      add(streakGeo, streak(color), s * (rw / 2 - 2), 0.06, z);
-      add(streakGeo, streak(vColor), s * (rw / 2 - 2.4), 0.07, z + W / 2 - 1.2);
+      const vMat = new THREE.MeshBasicMaterial({ map: signTex(VERT[k % VERT.length], vColor, true), toneMapped: false });
+      B(frameM, 0.2, 6.2, 1.7, 1.0, 2.5, W / 2 - 1.2, true);
+      for (const back of [0, 1]) {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 6), vMat);
+        m.applyMatrix4(at(base, 1.0, 5.6, W / 2 - 1.2 + (back ? -0.11 : 0.11), 0, back ? Math.PI : 0));
+        root.add(m);
+      }
       k++;
     }
   }
+  for (const [mat, geos] of parts) root.add(new THREE.Mesh(mergeGeometries(geos), mat));
+  root.add(new THREE.LineSegments(mergeGeometries(lines), new THREE.LineBasicMaterial({ color: 0x050406 })));
 
   // street lamps along the kerbs, and strings of lanterns across the road
   const lampHead = basic("#d8fff0"), pole = new THREE.CylinderGeometry(0.08, 0.1, 6, 6);
@@ -159,7 +241,6 @@ export function buildStreet() {
     for (const s of [-1, 1]) {
       add(pole, ironM, s * (rw / 2 + 0.6), 3, z);
       add(new THREE.BoxGeometry(1.4, 0.15, 0.3), lampHead, s * (rw / 2 - 0.1), 6, z);
-      add(streakGeo, streak("#bfffe8"), s * (rw / 2 - 1.2), 0.065, z);
     }
     if (((z - z0) / 12) % 2 === 1) {
       const span = 2 * (HX + 0.5);
@@ -210,10 +291,30 @@ export function buildStreet() {
   const glowM = new THREE.MeshBasicMaterial({ map: glow, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
   for (let z = z0 + 10; z < z1; z += 16) for (const s of [-1, 1]) add(new THREE.PlaneGeometry(18, 18).rotateX(-Math.PI / 2), glowM, s * (HX + 16), 0.08, z);
 
-  // signs flicker now and then
-  const flick = [...streakMats.values()] as THREE.MeshBasicMaterial[];
-  function tick(t: number) {
-    flick.forEach((m, i) => { m.opacity = 0.8 + 0.1 * Math.sin(t * 2 + i) + (Math.sin(t * 31 + i * 7) > 0.995 ? -0.4 : 0); });
-  }
+  // the wet road: everything that glows is mirrored under it and seen through it where the road shows
+  // (a stencil the road writes), so the signs, windows and lanterns shine in the puddles
+  const mirror = new THREE.Group();
+  const mirrorMats = new Map<THREE.Material, THREE.Material>();
+  const flip = new THREE.Matrix4().makeTranslation(0, 2 * 0.04, 0).multiply(new THREE.Matrix4().makeScale(1, -1, 1));
+  root.updateMatrixWorld(true);
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || !(m.material instanceof THREE.MeshBasicMaterial) || m.material.transparent) return;
+    if (!mirrorMats.has(m.material)) {
+      const src = m.material;
+      mirrorMats.set(src, new THREE.MeshBasicMaterial({
+        color: src.color, map: src.map, transparent: true, opacity: 0.38, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
+        side: THREE.DoubleSide, toneMapped: false, stencilWrite: true, stencilRef: 1, stencilFunc: THREE.EqualStencilFunc, stencilWriteMask: 0,
+        stencilFail: THREE.KeepStencilOp, stencilZFail: THREE.KeepStencilOp, stencilZPass: THREE.KeepStencilOp,
+      }));
+    }
+    const r = new THREE.Mesh(m.geometry, mirrorMats.get(m.material)!);
+    r.matrixAutoUpdate = false;
+    r.matrix.copy(flip).multiply(m.matrixWorld);
+    r.renderOrder = 5;
+    mirror.add(r);
+  });
+  root.add(mirror);
+  function tick() {}
   return { root, solid, walk, tick };
 }
