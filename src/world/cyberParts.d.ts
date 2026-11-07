@@ -1,0 +1,13 @@
+import type * as THREE from "three";
+export const head: THREE.Group;
+export const hair: THREE.Group;
+export const chest: THREE.Group;
+export const shin: THREE.Group;
+export const shoe: THREE.Group;
+export const M: { glow: THREE.MeshBasicMaterial; halo: THREE.MeshBasicMaterial; [k: string]: THREE.Material };
+export const CM: { ink: THREE.MeshBasicMaterial; white: THREE.Material; vest: THREE.Material; [k: string]: THREE.Material };
+export const CYAN: THREE.Color;
+export const PANEL: THREE.MeshStandardMaterial;
+export const DARKP: THREE.MeshStandardMaterial;
+export const BASEK: THREE.MeshStandardMaterial;
+export { ConvexGeometry } from "three/examples/jsm/geometries/ConvexGeometry.js";
